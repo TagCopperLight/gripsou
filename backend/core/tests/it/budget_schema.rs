@@ -3,7 +3,7 @@ use sqlx::PgPool;
 
 /// Inserting a user must seed their category set — via the trigger, not via
 /// application code, so every creation path is covered including this one.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
 
@@ -50,7 +50,7 @@ async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
 }
 
 /// Two users own two independent taxonomies; names collide across users.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn categories_are_per_user(pool: PgPool) -> anyhow::Result<()> {
     let a = testkit::seed_user(&pool).await;
     let b = testkit::seed_user(&pool).await;
@@ -74,7 +74,7 @@ async fn categories_are_per_user(pool: PgPool) -> anyhow::Result<()> {
 
 /// Deleting a user must still work even though they own system categories —
 /// the protection lives in the repository, not in a delete trigger.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn deleting_a_user_cascades_through_categories(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
     sqlx::query("delete from users where id = $1")
@@ -95,7 +95,7 @@ async fn deleting_a_user_cascades_through_categories(pool: PgPool) -> anyhow::Re
 /// runs removed. A card mask is the adapter's to strip; one left in the
 /// wording keeps its letters but loses its digits, so the card number never
 /// splits a merchant in two.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn norm_description_strips_dates_and_digits(pool: PgPool) -> anyhow::Result<()> {
     let cases = [
         (

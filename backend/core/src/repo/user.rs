@@ -223,7 +223,7 @@ mod tests {
     use super::*;
     use sqlx::PgPool;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn lookup_update_roundtrip(pool: PgPool) -> anyhow::Result<()> {
         let id = crate::testkit::seed_user_as(&pool, "a@t.local", Role::Admin, "hash-1").await;
 
@@ -243,7 +243,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn profile_returns_default_prefs_for_empty_jsonb(pool: PgPool) -> anyhow::Result<()> {
         let id = crate::testkit::seed_user_as(&pool, "p@t.local", Role::User, "hash").await;
 
@@ -259,7 +259,7 @@ mod tests {
         Ok(())
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn update_profile_roundtrip_and_conflict(pool: PgPool) -> anyhow::Result<()> {
         let id = crate::testkit::seed_user_as(&pool, "a@t.local", Role::Admin, "hash").await;
         // A second user whose email we must not be able to collide with.

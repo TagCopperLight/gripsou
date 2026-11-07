@@ -2,7 +2,7 @@ use gripsou_core::repo::provider_config::{load, set_field};
 use gripsou_core::testkit;
 use sqlx::PgPool;
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn values_round_trip_encrypted(pool: PgPool) {
     let key = testkit::encryption_key();
     set_field(&pool, &key, "powens", "client_secret", Some("s3cret-value"))
@@ -29,7 +29,7 @@ async fn values_round_trip_encrypted(pool: PgPool) {
     assert!(loaded.unreadable.is_empty());
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn none_removes_the_field(pool: PgPool) {
     let key = testkit::encryption_key();
     set_field(&pool, &key, "jev", "api_key", Some("k"))
@@ -47,7 +47,7 @@ async fn none_removes_the_field(pool: PgPool) {
     assert_eq!(raw, "{}");
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_bundle_under_another_key_is_reported_not_fatal(pool: PgPool) {
     set_field(
         &pool,

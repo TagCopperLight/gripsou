@@ -14,24 +14,35 @@ concurrency:
   cancel-in-progress: true
 
 # The checks themselves live in ci.sh, so a local run is the same as this one.
+# A Rust cache is saved only under a new key: ci.sh's hash in it renews the
+# cache when a job starts building something else.
 jobs:
   backend:
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [lint, test-core, test-rest]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
+          components: ${{ matrix.part == 'lint' && 'clippy, rustfmt' || '' }}
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: backend
-      - run: ./ci.sh backend
+          key: ${{ matrix.part }}-${{ hashFiles('ci.sh') }}
+      - run: ./ci.sh backend-${{ matrix.part }}
 
   frontend:
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [lint, test/1/2, test/2/2]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version-file: frontend/package.json
-      - run: ./ci.sh frontend
+      - run: ./ci.sh frontend-${{ matrix.part }}

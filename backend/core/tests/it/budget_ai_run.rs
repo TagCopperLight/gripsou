@@ -144,7 +144,7 @@ async fn row(pool: &PgPool, id: Uuid) -> (Option<Uuid>, Option<String>, Option<D
         .bind(id).fetch_one(pool).await.unwrap()
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn guesses_are_written_as_ai_with_their_confidence(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = ledger(&pool, &[("LECLERC", -1200), ("SNCF", -4500)]).await?;
     let mock = Mock::new(50, vec![first_candidate(Decimal::new(91, 2))]);
@@ -171,7 +171,7 @@ async fn guesses_are_written_as_ai_with_their_confidence(pool: PgPool) -> anyhow
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn an_abstention_is_written_as_a_review_row(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = ledger(&pool, &[("???", -1200)]).await?;
     run_for_user(&pool, user_id, &Mock::new(50, vec![abstain_all()])).await?;
@@ -183,7 +183,7 @@ async fn an_abstention_is_written_as_a_review_row(pool: PgPool) -> anyhow::Resul
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn candidates_follow_the_sign_and_skip_archived(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _) = ledger(&pool, &[("OUT", -1200), ("IN", 5000)]).await?;
     let cats = list_categories(&pool, user_id).await?;
@@ -219,7 +219,7 @@ async fn candidates_follow_the_sign_and_skip_archived(pool: PgPool) -> anyhow::R
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn confirmed_rows_with_the_same_description_are_evidence(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = ledger(
         &pool,
@@ -258,7 +258,7 @@ async fn confirmed_rows_with_the_same_description_are_evidence(pool: PgPool) -> 
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_similar_confirmed_description_is_a_neighbour(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = ledger(
         &pool,
@@ -283,7 +283,7 @@ async fn a_similar_confirmed_description_is_a_neighbour(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_row_set_by_hand_during_the_call_is_not_overwritten(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = ledger(&pool, &[("LECLERC", -1200)]).await?;
     let groceries = list_categories(&pool, user_id)
@@ -303,7 +303,7 @@ async fn a_row_set_by_hand_during_the_call_is_not_overwritten(pool: PgPool) -> a
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_rate_limit_stops_as_partial_and_the_next_run_resumes(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -330,7 +330,7 @@ async fn a_rate_limit_stops_as_partial_and_the_next_run_resumes(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_failed_call_records_its_message_and_writes_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = ledger(&pool, &[("A", -100)]).await?;
     let boom: Script = Box::new(|_| Err(CategorizeError::Other("API key not valid".into())));
@@ -342,7 +342,7 @@ async fn a_failed_call_records_its_message_and_writes_nothing(pool: PgPool) -> a
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn nothing_to_do_writes_no_run_row(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _) = ledger(&pool, &[]).await?;
     let out = run_for_user(&pool, user_id, &Mock::new(50, vec![abstain_all()])).await?;
@@ -366,7 +366,7 @@ fn first_item_only() -> Script {
     })
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn an_item_the_model_skipped_is_sent_again_by_the_next_run(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -394,7 +394,7 @@ async fn an_item_the_model_skipped_is_sent_again_by_the_next_run(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn answers_received_before_an_interruption_are_kept(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = ledger(&pool, &[("A", -100), ("B", -200), ("C", -300)]).await?;
     let cut: Script = Box::new(|req| {
@@ -420,7 +420,7 @@ async fn answers_received_before_an_interruption_are_kept(pool: PgPool) -> anyho
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_database_failure_mid_run_keeps_the_spend_and_says_so(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -452,7 +452,7 @@ async fn a_database_failure_mid_run_keeps_the_spend_and_says_so(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn another_users_rows_are_never_written(pool: PgPool) -> anyhow::Result<()> {
     let (alice, ids) = ledger(&pool, &[("A", -100)]).await?;
     let (bob, _) = ledger(&pool, &[]).await?;
@@ -474,7 +474,7 @@ async fn another_users_rows_are_never_written(pool: PgPool) -> anyhow::Result<()
 
 /// The AI never sees a buy/sell: the list hides them, so a guess on one could
 /// never be reviewed. Same rule for the chunk and the "N left" count.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn the_work_set_skips_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = testkit::seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;

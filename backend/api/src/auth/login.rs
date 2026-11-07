@@ -157,7 +157,7 @@ mod tests {
         login_as(pool, throttles, local(), email, pw, false).await
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn sixth_attempt_after_five_failures_is_refused_with_retry_after(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         let throttle = throttles();
@@ -179,7 +179,7 @@ mod tests {
         assert!(resp.headers().contains_key(axum::http::header::RETRY_AFTER));
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_successful_login_clears_earlier_failures(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         let throttle = throttles();
@@ -199,7 +199,7 @@ mod tests {
         }
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn unknown_emails_are_throttled_like_real_ones(pool: PgPool) {
         let throttle = throttles();
         for _ in 0..5 {
@@ -215,7 +215,7 @@ mod tests {
 
     /// A burst sent all at once gets no more guesses than the same requests
     /// sent one by one: each attempt is counted before the password is checked.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_concurrent_burst_gets_only_the_free_attempts(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         let throttle = throttles();
@@ -237,7 +237,7 @@ mod tests {
 
     /// An oversized email is refused like a wrong one, before it can become a
     /// throttle key (or a log field).
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn an_oversized_email_is_refused_without_counting(pool: PgPool) {
         let throttle = throttles();
         let email = format!("{}@t.local", "a".repeat(292));
@@ -252,7 +252,7 @@ mod tests {
 
     /// The account's password counter follows the account, not the address
     /// typed: changing the email doesn't wipe the failures.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn an_email_change_keeps_the_failures(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         let throttle = throttles();
@@ -305,7 +305,7 @@ mod tests {
             .unwrap()
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn login_without_second_factor_gives_a_session(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         let out = login_outcome(&pool, &throttles(), "a@t.local", "hunter22", false).await;
@@ -325,7 +325,7 @@ mod tests {
         assert_eq!(sessions(&pool, uid).await, 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn login_with_totp_asks_for_a_code_and_makes_no_session(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         enable_totp(&pool, uid).await;
@@ -339,7 +339,7 @@ mod tests {
         assert_eq!(sessions(&pool, uid).await, 0);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn correct_totp_gives_a_session_that_keeps_remember(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         let (secret, _) = enable_totp(&pool, uid).await;
@@ -359,7 +359,7 @@ mod tests {
         assert_eq!(sessions(&pool, uid).await, 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_totp_code_works_once(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         let (secret, _) = enable_totp(&pool, uid).await;
@@ -376,7 +376,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_wrong_code_keeps_the_challenge(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         let (secret, _) = enable_totp(&pool, uid).await;
@@ -395,7 +395,7 @@ mod tests {
     }
 
     /// Once the password is past, a failure names the user, not the email.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_failed_second_step_is_saved_with_the_user_id(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);
         let uid = seed_admin(&pool, "a@t.local").await;
@@ -415,7 +415,7 @@ mod tests {
         assert!(fields.get("email").is_none());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn exactly_one_code_kind_is_required(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         enable_totp(&pool, uid).await;
@@ -432,7 +432,7 @@ mod tests {
         assert_eq!(both.message(), "code required");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_recovery_code_works_once(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         let (_, codes) = enable_totp(&pool, uid).await;
@@ -450,7 +450,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn unusable_challenges_are_refused(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         let (secret, _) = enable_totp(&pool, uid).await;
@@ -496,7 +496,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::GONE);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn wrong_codes_are_throttled(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         enable_totp(&pool, uid).await;
@@ -521,7 +521,7 @@ mod tests {
 
     /// Wrong codes wait on the second-factor limiter (logged once with that
     /// reason), while the password step of the same account is not slowed.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn wrong_codes_wait_on_the_second_factor_limiter(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);
         let uid = seed_admin(&pool, "a@t.local").await;
@@ -555,7 +555,7 @@ mod tests {
 
     /// A request that loses the challenge to a parallel one keeps its backup
     /// code unspent.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_lost_challenge_does_not_burn_a_backup_code(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         let (_, codes) = enable_totp(&pool, uid).await;
@@ -581,7 +581,7 @@ mod tests {
     }
 
     /// A wrong backup code leaves the challenge usable.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_wrong_backup_code_keeps_the_challenge(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         let (_, codes) = enable_totp(&pool, uid).await;
@@ -598,7 +598,7 @@ mod tests {
 
     /// Login (ok and failed) and invite creation are logged, and no saved line
     /// carries the password, the attempted password or the invite token.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn account_lines_are_saved_without_secrets(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);
 

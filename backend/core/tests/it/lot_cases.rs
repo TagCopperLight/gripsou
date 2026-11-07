@@ -53,7 +53,7 @@ fn reason(err: InvalidLot) -> &'static str {
     }
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn lot_cash_amount_matches_the_shared_cases(pool: PgPool) {
     for c in cases().cash_amount {
         let amount: Decimal = sqlx::query_scalar("select lot_cash_amount($1, $2, $3, $4)")

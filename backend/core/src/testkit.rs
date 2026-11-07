@@ -15,6 +15,14 @@ use crate::repo::budget::assign::{TransactionPatch, WriteOutcome, patch_transact
 use crate::repo::lot::{LotSide, LotSource};
 use crate::repo::user::Role;
 
+mod harness;
+
+pub use gripsou_test_macros::db_test;
+pub use harness::{Outcome, run_db_test};
+
+/// The migrations every [`db_test`] database gets.
+pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../migrations");
+
 /// The key every test encrypts with: `"a"` 64 times.
 pub fn encryption_key() -> EncryptionKey {
     EncryptionKey::parse(Some(&"a".repeat(64))).unwrap()

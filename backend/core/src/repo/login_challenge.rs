@@ -122,7 +122,7 @@ mod tests {
         .unwrap();
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn find_valid_checks_kind(pool: PgPool) {
         let user = seed_user(&pool).await;
         create(
@@ -155,7 +155,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn consume_is_single_use(pool: PgPool) {
         create(
             &pool,
@@ -187,7 +187,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn expired_is_invisible(pool: PgPool) {
         insert_expired(&pool, &[1], ChallengeKind::Mfa).await;
         assert!(
@@ -204,7 +204,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn delete_expired_removes_only_expired(pool: PgPool) {
         insert_expired(&pool, &[1], ChallengeKind::Mfa).await;
         create(&pool, &[2], None, ChallengeKind::Mfa, serde_json::json!({}))

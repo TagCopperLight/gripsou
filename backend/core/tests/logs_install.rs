@@ -7,7 +7,7 @@ use tracing::Instrument;
 /// Every line around a query is kept. sqlx checks whether its query log is
 /// enabled on every statement; with the `log` bridge installed, that check
 /// makes the next line vanish from both the terminal and the saved log.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn lines_around_a_query_are_all_saved(pool: PgPool) {
     let mut writer = gripsou_core::logs::install(tracing_subscriber::EnvFilter::new("info"));
 

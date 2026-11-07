@@ -75,7 +75,7 @@ fn review_filter(threshold: Decimal) -> TransactionFilters {
     }
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn the_queue_is_low_confidence_no_guess_and_neutral_whatever_its_confidence(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -103,7 +103,7 @@ async fn the_queue_is_low_confidence_no_guess_and_neutral_whatever_its_confidenc
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn moving_the_threshold_reshapes_the_queue(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _) = seed(&pool).await?;
     let n = transactions(&pool, user_id, &review_filter(Decimal::new(99, 2)))

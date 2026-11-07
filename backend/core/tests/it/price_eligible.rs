@@ -7,7 +7,7 @@ use gripsou_core::testkit::{cash_holding, checking_account, equity_holding, seed
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn returns_only_nonzero_noncash(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
@@ -36,7 +36,7 @@ async fn returns_only_nonzero_noncash(pool: PgPool) {
     assert!(rows[0].symbol.is_none(), "ISIN path stores symbol null");
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn foreign_cash_is_price_eligible_but_pivot_cash_is_not(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let mut cny = cash_holding("acct-1", Decimal::new(1000, 0));
@@ -67,7 +67,7 @@ async fn foreign_cash_is_price_eligible_but_pivot_cash_is_not(pool: PgPool) -> a
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn foreign_security_reaches_its_currencys_cash_instrument(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -119,7 +119,7 @@ async fn foreign_security_reaches_its_currencys_cash_instrument(
 /// The reporting currency is a divisor and nothing else — no holding,
 /// price or account carries it — so it would never become rate-eligible on its
 /// own, and every figure would stay left out for want of a rate.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn the_reporting_currency_is_price_eligible_even_when_nothing_is_held_in_it(
     pool: PgPool,
 ) -> anyhow::Result<()> {

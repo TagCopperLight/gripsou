@@ -268,7 +268,7 @@ mod tests {
         }
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn manage_connection_checks_ownership_before_provider_access(pool: PgPool) {
         let owner = seed_user(&pool, "owner@t.local").await;
         let other = seed_user(&pool, "other@t.local").await;
@@ -299,7 +299,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn sync_connection_is_404_unknown_and_409_busy(pool: PgPool) {
         let user = seed_user(&pool, "a@t.local").await;
         let conn = Uuid::new_v4();
@@ -346,7 +346,7 @@ mod tests {
         assert_eq!(busy.status(), StatusCode::CONFLICT);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn connections_returns_provider_tree(pool: PgPool) {
         let user = seed_user(&pool, "a@t.local").await;
         let conn = Uuid::new_v4();
@@ -392,7 +392,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn enabled_providers_returns_only_enabled(pool: PgPool) {
         let user = seed_user(&pool, "u@t.local").await;
         let listed = || async {
@@ -418,7 +418,7 @@ mod tests {
         assert!(!listed().await.contains(&"powens".to_string()));
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn init_connection_rejects_unknown_provider(pool: PgPool) {
         let user = seed_user(&pool, "u@t.local").await;
         let err = init_connection(
@@ -437,7 +437,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn init_connection_returns_redirect_url(pool: PgPool) {
         let user = seed_user(&pool, "u@t.local").await;
         let deps = crate::testkit::deps();
@@ -472,7 +472,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn delete_connection_guards_ownership(pool: PgPool) {
         let owner = seed_user(&pool, "owner@t.local").await;
         let other = seed_user(&pool, "other@t.local").await;
@@ -523,7 +523,7 @@ mod tests {
         assert_eq!(count, 0);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn complete_connection_unknown_id_is_not_found(pool: PgPool) {
         let user = seed_user(&pool, "u@t.local").await;
         let err = complete_connection(
@@ -543,7 +543,7 @@ mod tests {
         assert_eq!(err, ApiError::NotFound("connection not found"));
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_failed_complete_deletes_the_pending_connection_only(pool: PgPool) {
         use gripsou_core::repo::connection;
         let user = seed_user(&pool, "u@t.local").await;
@@ -586,7 +586,7 @@ mod tests {
 
     /// The provider's code is single-use: a replayed callback, or one naming
     /// another user's connection, is refused before the provider sees it.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_replayed_or_foreign_callback_never_reaches_the_provider(pool: PgPool) {
         use gripsou_core::repo::connection;
         let user = seed_user(&pool, "u@t.local").await;
@@ -632,7 +632,7 @@ mod tests {
         assert_eq!(bank.0.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn complete_connection_hands_the_provider_the_params_unchanged(pool: PgPool) {
         let user = seed_user(&pool, "u@t.local").await;
         let deps = crate::testkit::deps();

@@ -3,7 +3,7 @@ use gripsou_core::testkit;
 use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::PgPool;
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn today_uses_each_users_zone_and_dst(pool: PgPool) -> anyhow::Result<()> {
     let (user, _) = testkit::seed_user_and_connection(&pool).await;
     for (zone, instant, expected) in [
@@ -41,7 +41,7 @@ async fn today_uses_each_users_zone_and_dst(pool: PgPool) -> anyhow::Result<()> 
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::{
         dto::SyncResult,

@@ -8,7 +8,7 @@ fn dec(s: &str) -> Decimal {
     s.parse().unwrap()
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn lot_table_accepts_a_manual_buy(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await.unwrap();
@@ -39,7 +39,7 @@ async fn lot_table_accepts_a_manual_buy(pool: PgPool) {
     assert_eq!(fee, dec("1.05"));
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn lot_rejects_a_negative_quantity(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await.unwrap();
@@ -61,7 +61,7 @@ async fn lot_rejects_a_negative_quantity(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn lot_rejects_an_unknown_source(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await.unwrap();
@@ -105,7 +105,7 @@ async fn lot_count(pool: &PgPool, holding_id: uuid::Uuid) -> i64 {
         .unwrap()
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn save_then_list_round_trips_the_fee(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -126,7 +126,7 @@ async fn save_then_list_round_trips_the_fee(pool: PgPool) {
 
 /// The delete path's whole security model. A provider-owned lot must survive a
 /// delete request naming its id, even one without a stable `external_id`.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn delete_refuses_a_provider_lot(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -165,7 +165,7 @@ async fn delete_refuses_a_provider_lot(pool: PgPool) {
 }
 
 /// The same id twice is one delete, not a shortfall that rejects the batch.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_repeated_delete_id_is_one_delete(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -192,7 +192,7 @@ async fn a_repeated_delete_id_is_one_delete(pool: PgPool) {
 /// Every connection of a user starts its history on the same day, the day
 /// before the user's earliest evidence. A lot dated before it moves that day
 /// for the user's other connections too.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn saving_a_lot_rebuilds_every_connection_of_the_user(pool: PgPool) {
     let (user_id, conn_a) = testkit::seed_user_and_connection(&pool).await;
     let conn_b = testkit::seed_connection_for(&pool, user_id).await;
@@ -233,7 +233,7 @@ async fn saving_a_lot_rebuilds_every_connection_of_the_user(pool: PgPool) {
 
 /// The preview must leave nothing behind: it computes inside a rolled-back
 /// transaction so it cannot possibly diverge from the saved figure.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn preview_computes_without_writing(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -257,7 +257,7 @@ async fn preview_computes_without_writing(pool: PgPool) {
 
 /// A provider's lots are not the user's to replace: the preview keeps them, as
 /// saving does, so the figures while editing are the figures after saving.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn preview_keeps_the_provider_lots(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
@@ -288,7 +288,7 @@ async fn preview_keeps_the_provider_lots(pool: PgPool) {
 
 /// A holding that belongs to a different user reads as unknown, and nothing
 /// is written: neither the preview's rows nor a save's.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_foreign_holding_is_not_found(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
     let mut conn = pool.acquire().await.unwrap();

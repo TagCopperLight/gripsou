@@ -7,7 +7,7 @@ use gripsou_core::testkit::{cash_holding, checking_account, seed_connection};
 use rust_decimal::Decimal;
 use sqlx::PgPool;
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn stamps_and_overwrites_same_day(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
@@ -57,7 +57,7 @@ async fn stamps_and_overwrites_same_day(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn stamping_a_snapshot_removes_the_backfill_row_for_that_day(
     pool: PgPool,
 ) -> anyhow::Result<()> {

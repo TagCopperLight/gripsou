@@ -170,7 +170,7 @@ mod tests {
     use rust_decimal::Decimal;
     use sqlx::PgPool;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn investment_returns_lists_accounts_with_securities(pool: PgPool) {
         let user_id = seed_admin(&pool, "a@t.local").await;
         let conn_id = Uuid::new_v4();
@@ -256,7 +256,7 @@ mod tests {
         }
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn save_lots_writes_signed_amounts(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
 
@@ -295,7 +295,7 @@ mod tests {
         assert_eq!(rows[1].3, None);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn save_lots_deletes_a_manual_row(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
         save_lots(
@@ -338,7 +338,7 @@ mod tests {
 
     /// The whole point of the batch: a delete that cannot be honoured must take
     /// the adds down with it, or the user sees "saved" over a half-applied edit.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_bad_delete_rolls_back_the_adds(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
 
@@ -365,7 +365,7 @@ mod tests {
 
     /// A provider row resyncs, so deleting it is meaningless — and letting the
     /// request through would report success for a change that silently reverts.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_provider_row_cannot_be_deleted(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
         let id: Uuid = sqlx::query_scalar(
@@ -448,7 +448,7 @@ mod tests {
     /// delete is aimed at holding B. It must be refused, or a user could delete
     /// their own manual lot through the wrong holding's endpoint and silently
     /// corrupt that holding's cost basis.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_row_from_another_holding_of_the_same_user_cannot_be_deleted(pool: PgPool) {
         let (user_id, holding_a) = seed_holding(&pool, "owner@t.local").await;
         let holding_b = seed_second_holding(&pool, user_id).await;
@@ -502,7 +502,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn another_users_row_cannot_be_deleted(pool: PgPool) {
         let (owner, owner_holding) = seed_holding(&pool, "owner@t.local").await;
         let (attacker, _) = seed_holding(&pool, "attacker@t.local").await;
@@ -547,7 +547,7 @@ mod tests {
 
     /// A malformed row must be caught BEFORE anything is written, so a rejected
     /// batch leaves no trace at all.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_malformed_add_writes_nothing(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
 
@@ -577,7 +577,7 @@ mod tests {
 
     /// Manual entry is the main path for securities, so the derived history
     /// must move now — and ONCE, not per row.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn save_lots_rebuilds_the_derived_history(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
         let today = chrono::Utc::now().date_naive();
@@ -628,7 +628,7 @@ mod tests {
 
     /// The frontend disables Save in this state; rejecting it too would be a
     /// second rule for the same thing.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn an_empty_batch_is_a_no_op(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
         let status = save_lots(
@@ -646,7 +646,7 @@ mod tests {
     }
 
     /// Another user's holding is a 404, as on the other lot endpoints.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn holding_lots_refuse_another_users_holding(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
@@ -676,7 +676,7 @@ mod tests {
     }
 
     /// Another user's holding is a 404, as on the lot endpoints.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn holding_prices_refuse_another_users_holding(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
@@ -720,7 +720,7 @@ mod tests {
 
     /// Suggestions on another user's holding are a 404, never an empty list:
     /// the endpoint must not confirm the existence of ids the caller can't see.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn lot_suggestions_refuse_another_users_holding(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
@@ -741,7 +741,7 @@ mod tests {
     /// Previewing lots on another user's holding is a 404 (the preview writes
     /// and rolls back on that holding, so it must never get that far) and
     /// leaves the owner's lots intact.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn preview_lots_refuses_another_users_holding(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         let bob = seed_owned(&pool, "bob@t.local", "bob-txn").await;
@@ -779,7 +779,7 @@ mod tests {
     }
 
     /// The owner's preview computes the basis of the given rows without saving them.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn preview_lots_computes_without_writing(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
 
@@ -813,7 +813,7 @@ mod tests {
     /// A USD listing in a EUR account: the preview values the shares in euros
     /// before comparing them with what was paid, or the exchange rate reads as
     /// gain.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn preview_lots_values_a_foreign_listing_in_the_account_currency(pool: PgPool) {
         use gripsou_core::testkit::{rate_on, seed_cash_instrument};
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
@@ -859,7 +859,7 @@ mod tests {
 
     /// Before the listing's rate is known the preview has no unrealised
     /// figure, rather than valuing the shares at zero (a total loss).
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn preview_lots_leaves_unrealised_unknown_without_a_rate(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
         let instrument: Uuid =
@@ -899,7 +899,7 @@ mod tests {
 
     /// The figures also come in the reader's currency, converted from the
     /// account's, and are absent while that rate is unknown.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn preview_lots_also_gives_the_figures_in_the_readers_currency(pool: PgPool) {
         use gripsou_core::testkit::{rate_on, seed_cash_instrument};
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
@@ -941,7 +941,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn preview_lots_has_no_reporting_figures_without_a_rate(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
         sqlx::query("update account set currency = 'USD' where id = (select account_id from holding where id = $1)")
@@ -964,7 +964,7 @@ mod tests {
     }
 
     /// The holdings list shows only the caller's holdings.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn holdings_lists_only_own(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
         seed_owned(&pool, "bob@t.local", "bob-txn").await;

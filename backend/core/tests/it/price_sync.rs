@@ -53,7 +53,7 @@ fn price_count(
     })
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn resolves_inserts_then_guard_skips(pool: PgPool) {
     let conn_id = testkit::seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
@@ -95,7 +95,7 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
     assert_eq!(price_count(&pool).await, 1);
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn unresolved_marks_meta_and_inserts_nothing(pool: PgPool) {
     let conn_id = testkit::seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
@@ -121,7 +121,7 @@ async fn unresolved_marks_meta_and_inserts_nothing(pool: PgPool) {
     assert_eq!(meta["mock_resolution"].as_str(), Some("unresolved"));
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn stores_prices_in_the_listings_own_currency(pool: PgPool) {
     // equity_holding's instrument is labelled USD; a provider returning
     // EUR-quoted points must still store them, tagged EUR. unit_value_asof
@@ -153,7 +153,7 @@ async fn stores_prices_in_the_listings_own_currency(pool: PgPool) {
     );
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn drops_points_with_no_currency_at_all(pool: PgPool) {
     // An unlabelled point cannot be converted, so storing it would be a guess.
     let conn_id = testkit::seed_one_equity(&pool).await;

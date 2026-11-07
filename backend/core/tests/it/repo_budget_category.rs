@@ -11,7 +11,7 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn lists_seeded_categories_grouped_by_kind(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
 
@@ -26,7 +26,7 @@ async fn lists_seeded_categories_grouped_by_kind(pool: PgPool) -> anyhow::Result
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn counts_transactions_per_category(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -54,7 +54,7 @@ async fn counts_transactions_per_category(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn creates_updates_and_archives(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
 
@@ -101,7 +101,7 @@ async fn creates_updates_and_archives(pool: PgPool) -> anyhow::Result<()> {
 
 /// Renaming a seeded category drops its translation key: from then on the
 /// user's own wording is shown verbatim in every language.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn renaming_a_seeded_category_clears_its_default_key(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
     let groceries = list_categories(&pool, user_id)
@@ -149,7 +149,7 @@ async fn renaming_a_seeded_category_clears_its_default_key(pool: PgPool) -> anyh
 
 /// The pairing pass writes to the system row, so it cannot be deleted and its
 /// kind cannot move. Everything else about it is editable.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
     let system = list_categories(&pool, user_id)
@@ -191,7 +191,7 @@ async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> any
 
 /// Deleting returns the transactions to uncategorised rather than deleting
 /// them, and to nobody's choice: the AI has them to look at again.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -251,7 +251,7 @@ async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Re
 }
 
 /// Another user's category is invisible and untouchable.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn categories_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()> {
     let (owner, _c1) = seed_user_and_connection(&pool).await;
     let (stranger, _c2) = seed_user_and_connection(&pool).await;
@@ -300,7 +300,7 @@ async fn categories_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()
 /// The ids come in the order the user dragged them to; each kind is numbered
 /// `1..n` in that order, and another user's id is skipped so the caller can
 /// refuse the partial write.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
     let rows = list_categories(&pool, user_id).await?;
@@ -354,7 +354,7 @@ async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow
 }
 
 /// Created together, two categories still get distinct positions.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn concurrent_creates_get_distinct_positions(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
     let mut set = tokio::task::JoinSet::new();
@@ -391,7 +391,7 @@ async fn concurrent_creates_get_distinct_positions(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn chip_refs_cover_every_category(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
     let (stranger, _c) = seed_user_and_connection(&pool).await;

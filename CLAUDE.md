@@ -20,7 +20,7 @@ Never create tags or releases: a release goes with a manual production update.
 
 - **Backend** (`cd backend`, the binary is `gripsou` in `api`): `cargo run --bin gripsou` serves the SPA and API on :8080, runs migrations, and loads the root `.env`. Also `cargo test [-p gripsou-core <name>]`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt --all`.
 - **Frontend** (`cd frontend`, **bun**): `bun run dev` (:5173, proxies `/api` → :8080), `build`, `lint`, `test [pattern]`.
-- **`./ci.sh`** is CI: the workflow only runs `./ci.sh backend` and `./ci.sh frontend`, so a new check goes in `ci.sh`. Its backend tests use a throwaway Postgres container whose `template1` it migrates first, so each `#[sqlx::test]` starts migrated. Never migrate the dev server's `template1`: it would keep the old checksum of a migration you're still editing.
+- **`./ci.sh`** is CI: the workflow runs its jobs (`backend-lint`, `backend-test-core`, `backend-test-rest`, `frontend-lint`, `frontend-test/1/2`, `frontend-test/2/2`), so a new check goes in `ci.sh`. Its backend tests use a throwaway Postgres container whose `template1` it migrates first, so each `#[db_test]` starts migrated. Never migrate the dev server's `template1`: it would keep the old checksum of a migration you're still editing.
 - **Local stack:** `docker compose -f docker/docker-compose.yml up -d postgres` (or `scripts/build-image.sh` then `up -d`). Always pass `-f`: the host has an unrelated compose project `docker` whose `docker_pgdata` volume must never be touched.
 
 ### Database from the host
@@ -125,7 +125,7 @@ Categories are per user (`budget_category`, seeded by a trigger on `users` inser
 - **Translations:** every UI string is in both `src/i18n/en.json` and `fr.json`. Review added or changed text in both languages for natural phrasing and consistent terms. Keep placeholders, plural keys and rich-text tags. API key field labels are not translated: each provider declares them in its own words (`ConfigField.label`).
 - **Exports:** a component file exports only components (`react-refresh/only-export-components`). Put shared constants and types in a sibling `.ts`. Only `bun run lint` catches this, not `build`.
 - **Warnings:** to see a passing test's warnings (e.g. `act(...)`), run `bunx vitest run --reporter=verbose`.
-- **Tests:** adapters against recorded fixtures, integration against a real Postgres, Vitest for the frontend.
+- **Tests:** adapters against recorded fixtures, integration against a real Postgres, Vitest for the frontend. A DB test is `#[gripsou_core::testkit::db_test]` (`crate::testkit::db_test` inside core), never `#[sqlx::test]`, which compiles a copy of its harness into each test.
 - **Frontend tests pin behaviour, not code.** Write one only if it can fail for a reason a user would notice (an edge case, a computed figure, a regression, an exact request to the server). Not: props rendering, static strings, callbacks, URLs, CSS classes, constants, the same case twice (a `lib/` helper and its component), or the formula restated as the expected value.
 
 ## Logs

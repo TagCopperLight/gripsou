@@ -447,7 +447,7 @@ mod tests {
         (info, cred)
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn adding_a_passkey_names_it_lists_it_and_signs_out_other_sessions(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         let a = seed_session(&pool, u).await;
@@ -463,7 +463,7 @@ mod tests {
         assert!(!st.totp, "a passkey doesn't turn two-factor on");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn adding_needs_a_fresh_reauth_of_the_caller(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         let v = seed_user(&pool, "b@t.local").await;
@@ -494,7 +494,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_refused_credential_keeps_the_token_for_a_retry(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         let a = seed_session(&pool, u).await;
@@ -524,7 +524,7 @@ mod tests {
             .expect("retry works");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn rename_and_delete_are_scoped_to_the_owner(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         let v = seed_user(&pool, "b@t.local").await;
@@ -573,7 +573,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn options_require_what_passwordless_needs_and_exclude_existing(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         let a = seed_session(&pool, u).await;
@@ -600,7 +600,7 @@ mod tests {
         assert_eq!(excluded[0].as_ref(), cred.as_slice());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_credential_already_saved_is_a_conflict_and_keeps_the_token(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         let v = seed_user(&pool, "b@t.local").await;
@@ -672,7 +672,7 @@ mod tests {
         .map(|j| j.0)
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn passwordless_sign_in_makes_a_session_and_records_the_use(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         let a = seed_session(&pool, u).await;
@@ -695,7 +695,7 @@ mod tests {
             .expect("second sign-in");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn passwordless_refuses_a_deleted_passkey_a_wrong_user_and_a_reused_challenge(
         pool: PgPool,
     ) {
@@ -760,7 +760,7 @@ mod tests {
         assert_eq!(e.status(), StatusCode::BAD_REQUEST);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn passwordless_failures_are_throttled_per_ip(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         let v = seed_user(&pool, "b@t.local").await;
@@ -784,7 +784,7 @@ mod tests {
         assert_eq!(e.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn passwordless_options_alone_are_throttled_per_ip(pool: PgPool) {
         let t = throttles();
         for _ in 0..crate::auth::throttle::IP.free_failures {
@@ -806,7 +806,7 @@ mod tests {
         assert_eq!(stored, i64::from(crate::auth::throttle::IP.free_failures));
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_passwordless_success_gives_back_its_ip_attempt(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         let v = seed_user(&pool, "b@t.local").await;
@@ -871,7 +871,7 @@ mod tests {
         })
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn the_browser_librarys_json_is_accepted(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
         let a = seed_session(&pool, u).await;
@@ -920,7 +920,7 @@ mod tests {
 
     /// A passkey is not a second factor: without the authenticator, the
     /// password alone signs in; with it, the code is still asked.
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_passkey_never_turns_two_factor_on(pool: PgPool) {
         use crate::testkit::{enable_totp, login_outcome};
         let u = seed_user(&pool, "a@t.local").await;

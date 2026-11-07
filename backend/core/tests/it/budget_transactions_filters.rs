@@ -59,7 +59,7 @@ async fn fixture(pool: &PgPool) -> anyhow::Result<(Uuid, Vec<Uuid>)> {
     Ok((user_id, ids))
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn rows_carry_their_category(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     let groceries = list_categories(&pool, user_id)
@@ -89,7 +89,7 @@ async fn rows_carry_their_category(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn buckets_split_money_in_from_money_out(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _ids) = fixture(&pool).await?;
 
@@ -129,7 +129,7 @@ async fn buckets_split_money_in_from_money_out(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn category_filter_is_or_and_tag_filter_is_and(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     let cats = list_categories(&pool, user_id).await?;
@@ -176,7 +176,7 @@ async fn category_filter_is_or_and_tag_filter_is_and(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn uncategorized_and_needs_review_filters(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     let groceries = list_categories(&pool, user_id)
@@ -239,7 +239,7 @@ async fn uncategorized_and_needs_review_filters(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn counts_report_matching_total_and_uncategorized(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     let groceries = list_categories(&pool, user_id)
@@ -270,7 +270,7 @@ async fn counts_report_matching_total_and_uncategorized(pool: PgPool) -> anyhow:
 /// numbers visibly disagree even with no filter applied at all. Bulk actions
 /// stay a separate, lot-free contract (`matching_transaction_ids`), checked
 /// here too so the two never get confused for each other again.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn counts_include_lot_rows_the_list_actually_shows(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     let account_id: Uuid = sqlx::query_scalar("select account_id from transaction where id = $1")
@@ -350,7 +350,7 @@ fn pea_account(external_id: &str) -> gripsou_core::dto::CanonicalAccount {
 
 /// `transactions()` hides every `buy`/`sell` row (the lot is the record of the
 /// investment). The counts must agree with it, unfiltered.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn counts_hide_buy_and_sell_like_the_list(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _ids) = fixture(&pool).await?;
     let conn_id: Uuid = sqlx::query_scalar("select connection_id from account limit 1")
@@ -401,7 +401,7 @@ async fn counts_hide_buy_and_sell_like_the_list(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn matching_ids_drive_bulk_actions_and_exclude_lots(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
 
@@ -433,7 +433,7 @@ async fn matching_ids_drive_bulk_actions_and_exclude_lots(pool: PgPool) -> anyho
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn tags_come_back_grouped_by_transaction(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     let holiday = create_tag(&pool, user_id, "Holiday", Some("#5b9bf0"))
@@ -456,7 +456,7 @@ async fn tags_come_back_grouped_by_transaction(pool: PgPool) -> anyhow::Result<(
 /// a user correcting one half) still carries `Internal transfer` but
 /// nets against nothing. The list flags it so the reader can see the
 /// consequence rather than having to hunt for it.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_pair_categorised_row_with_no_pair_left_is_an_orphan(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     sqlx::query("update transaction set category_source = 'pair' where id = $1")
@@ -475,7 +475,7 @@ async fn a_pair_categorised_row_with_no_pair_left_is_an_orphan(pool: PgPool) -> 
 /// lose: pairing matches one currency only. Matching on the category would flag it
 /// forever; matching on `category_source = 'pair'` — which only the pairing
 /// pass writes, and which always comes with a link — does not.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_hand_categorised_unpaired_row_is_not_an_orphan(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     let internal = list_categories(&pool, user_id)
@@ -493,7 +493,7 @@ async fn a_hand_categorised_unpaired_row_is_not_an_orphan(pool: PgPool) -> anyho
 
 /// A live pair is not an orphan: the two states are mutually exclusive, so the
 /// reader never sees both notes at once.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_still_linked_pair_is_not_an_orphan(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     sqlx::query(
@@ -516,7 +516,7 @@ async fn a_still_linked_pair_is_not_an_orphan(pool: PgPool) -> anyhow::Result<()
 /// hide them too — all three read the same filter, so the count can never
 /// promise rows the list does not show, and a bulk action can never touch a
 /// row the user cannot see.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn internal_transfers_are_hidden_unless_asked_for(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     let internal = list_categories(&pool, user_id)
@@ -569,7 +569,7 @@ fn eur(units: i64) -> Decimal {
     Decimal::new(units * 100, 2)
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn the_matching_total_converts_each_row_at_its_own_date(pool: PgPool) -> anyhow::Result<()> {
     let usd = seed_cash_instrument(&pool, "USD").await;
     rate_on(&pool, usd, day(2026, 3, 1), Decimal::new(50, 2)).await;
@@ -605,7 +605,7 @@ async fn the_matching_total_converts_each_row_at_its_own_date(pool: PgPool) -> a
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn list_rows_carry_both_their_own_and_the_reporting_amount(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -633,7 +633,7 @@ async fn list_rows_carry_both_their_own_and_the_reporting_amount(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_row_without_a_rate_has_no_reporting_amount(pool: PgPool) -> anyhow::Result<()> {
     let usd = seed_cash_instrument(&pool, "USD").await;
     // The only USD rate is AFTER the row: nothing to convert it with.
@@ -657,7 +657,7 @@ async fn a_row_without_a_rate_has_no_reporting_amount(pool: PgPool) -> anyhow::R
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn no_reporting_amount_when_the_readers_currency_has_no_rate(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -686,7 +686,7 @@ async fn no_reporting_amount_when_the_readers_currency_has_no_rate(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn the_matching_total_respects_the_active_filters(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -726,7 +726,7 @@ async fn the_matching_total_respects_the_active_filters(pool: PgPool) -> anyhow:
 /// The list, its header count and the bulk target read one filter: under
 /// every combination here the count is the list's length and the bulk target
 /// is the list's cash rows, transfers included when asked for.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn list_count_and_bulk_target_agree_on_every_filter(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
     let internal = list_categories(&pool, user_id)
@@ -783,7 +783,7 @@ async fn list_count_and_bulk_target_agree_on_every_filter(pool: PgPool) -> anyho
 }
 
 /// Both edge days are in.
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn a_date_range_keeps_both_edge_days(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -821,7 +821,7 @@ async fn a_date_range_keeps_both_edge_days(pool: PgPool) -> anyhow::Result<()> {
 
 /// The header's total and flag agree with the rows it counts, across days
 /// where either leg has no rate (a zero reporting rate counts as none).
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn counts_fx_flag_and_total_agree_with_rows_across_rate_gaps(
     pool: PgPool,
 ) -> anyhow::Result<()> {

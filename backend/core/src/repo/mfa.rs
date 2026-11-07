@@ -304,7 +304,7 @@ mod tests {
 
     use crate::testkit::seed_user_email;
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn confirm_with_a_stale_secret_changes_nothing(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         upsert_unconfirmed_totp(&pool, u, "a").await.unwrap();
@@ -328,7 +328,7 @@ mod tests {
         .unwrap();
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn a_setup_older_than_ten_minutes_cannot_be_confirmed(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
@@ -343,7 +343,7 @@ mod tests {
         assert!(!totp(&pool, u).await.unwrap().unwrap().pending);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn the_sweep_drops_only_stale_unconfirmed_setups(pool: PgPool) {
         let stale = seed_user_email(&pool, "a@t.local").await;
         let fresh = seed_user_email(&pool, "b@t.local").await;
@@ -360,7 +360,7 @@ mod tests {
         assert!(totp(&pool, done).await.unwrap().is_some());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn delete_discards_a_pending_setup_but_reports_false(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         upsert_unconfirmed_totp(&pool, u, "a").await.unwrap();
@@ -384,7 +384,7 @@ mod tests {
         .unwrap();
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn upsert_replaces_unconfirmed_not_confirmed(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         assert!(upsert_unconfirmed_totp(&pool, u, "one").await.unwrap());
@@ -401,7 +401,7 @@ mod tests {
         assert_eq!(row.last_used_step, Some(5));
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn confirm_needs_unconfirmed_row(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         assert!(!confirm_totp(&pool, u, "s", 1, &codes(3)).await.unwrap());
@@ -410,7 +410,7 @@ mod tests {
         assert!(!confirm_totp(&pool, u, "s", 2, &codes(3)).await.unwrap());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn totp_step_only_moves_forward(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
@@ -425,7 +425,7 @@ mod tests {
         assert!(use_totp_step(&pool, u, 11).await.unwrap());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn recovery_code_is_single_use(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         replace_recovery_codes(&pool, u, &codes(10)).await.unwrap();
@@ -455,7 +455,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn replace_drops_old_codes(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         replace_recovery_codes(&pool, u, &codes(10)).await.unwrap();
@@ -476,7 +476,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn status_counts(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         let s = status(&pool, u).await.unwrap();
@@ -501,7 +501,7 @@ mod tests {
         assert!(!has_second_factor(&s), "a passkey alone is not two-factor");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn delete_totp_removes_codes(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         assert!(!delete_totp(&pool, u).await.unwrap());
@@ -512,7 +512,7 @@ mod tests {
         assert_eq!(status(&pool, u).await.unwrap().recovery_remaining, 0);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn clear_all_counts_and_isolates(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         let other = seed_user_email(&pool, "b@t.local").await;
@@ -542,7 +542,7 @@ mod tests {
         assert!(!clear_all(&mut conn, u).await.unwrap().any());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn reset_for_email_clears_and_signs_out(pool: PgPool) {
         let u = seed_user_email(&pool, "a@t.local").await;
         let other = seed_user_email(&pool, "b@t.local").await;
@@ -575,7 +575,7 @@ mod tests {
         assert_eq!(left, 1);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[crate::testkit::db_test]
     async fn reset_for_email_unknown_is_none(pool: PgPool) {
         assert!(
             reset_for_email(&pool, "nobody@t.local")

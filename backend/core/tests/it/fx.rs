@@ -9,14 +9,14 @@ fn day(y: i32, m: u32, d: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, d).unwrap()
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn base_currency_defaults_to_eur(pool: PgPool) -> anyhow::Result<()> {
     let pivot = gripsou_core::repo::settings::base_currency(&pool).await?;
     assert_eq!(pivot, "EUR");
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn fx_asof_is_one_for_the_pivot(pool: PgPool) -> anyhow::Result<()> {
     let rate: Option<Decimal> = sqlx::query_scalar("select fx_asof('EUR', $1)")
         .bind(day(2026, 8, 14))
@@ -26,7 +26,7 @@ async fn fx_asof_is_one_for_the_pivot(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn fx_asof_is_null_when_no_rate_is_known(pool: PgPool) -> anyhow::Result<()> {
     testkit::seed_cash_instrument(&pool, "CNY").await;
     let rate: Option<Decimal> = sqlx::query_scalar("select fx_asof('CNY', $1)")
@@ -37,7 +37,7 @@ async fn fx_asof_is_null_when_no_rate_is_known(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn fx_asof_takes_the_latest_rate_on_or_before_the_day(pool: PgPool) -> anyhow::Result<()> {
     let cny = testkit::seed_cash_instrument(&pool, "CNY").await;
     let mut conn = pool.acquire().await?;
@@ -71,7 +71,7 @@ async fn fx_asof_takes_the_latest_rate_on_or_before_the_day(pool: PgPool) -> any
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn unit_value_asof_of_cash_is_the_fx_rate(pool: PgPool) -> anyhow::Result<()> {
     let cny = testkit::seed_cash_instrument(&pool, "CNY").await;
     let mut conn = pool.acquire().await?;
@@ -93,7 +93,7 @@ async fn unit_value_asof_of_cash_is_the_fx_rate(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn unit_value_asof_converts_using_the_price_rows_own_currency(
     pool: PgPool,
 ) -> anyhow::Result<()> {
@@ -134,7 +134,7 @@ async fn unit_value_asof_converts_using_the_price_rows_own_currency(
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn unit_value_asof_is_null_when_the_rate_is_missing(pool: PgPool) -> anyhow::Result<()> {
     let equity: Uuid = sqlx::query_scalar(
         "insert into instrument (kind, symbol, name, currency) \
@@ -161,7 +161,7 @@ async fn unit_value_asof_is_null_when_the_rate_is_missing(pool: PgPool) -> anyho
     Ok(())
 }
 
-#[sqlx::test(migrations = "../migrations")]
+#[gripsou_core::testkit::db_test]
 async fn reporting_fx_asof_reads_the_users_currency_and_is_null_without_a_rate(
     pool: PgPool,
 ) -> anyhow::Result<()> {

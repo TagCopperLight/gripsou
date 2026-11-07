@@ -281,7 +281,7 @@ mod tests {
         .await
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn setup_then_confirm_enables_totp_and_drops_other_sessions(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -308,7 +308,7 @@ mod tests {
         assert_eq!(left, me.session_id);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn a_second_setup_replaces_the_first_secret(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -322,7 +322,7 @@ mod tests {
         assert!(confirm(&pool, &me, totp_now(&second)).await.is_ok());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn setup_needs_a_fresh_reauth_of_the_caller(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let other_uid = seed_user(&pool, "b@t.local").await;
@@ -347,7 +347,7 @@ mod tests {
         );
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn removal_with_only_a_pending_setup_is_not_found_and_keeps_sessions(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -364,7 +364,7 @@ mod tests {
         assert!(repo::totp(&pool, uid).await.unwrap().is_some());
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn setup_after_confirm_is_a_conflict_and_keeps_the_token(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -376,7 +376,7 @@ mod tests {
         assert!(reauth_valid(&pool, &token).await);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn wrong_confirm_codes_are_throttled_and_a_right_one_clears(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -398,7 +398,7 @@ mod tests {
         }
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn the_sixth_confirm_attempt_waits(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -420,7 +420,7 @@ mod tests {
         assert!(!repo::status(&pool, uid).await.unwrap().totp);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn an_abandoned_setup_cannot_be_confirmed(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -439,7 +439,7 @@ mod tests {
         assert!(!repo::status(&pool, uid).await.unwrap().totp);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn confirm_with_a_wrong_code_or_no_setup_fails(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -452,7 +452,7 @@ mod tests {
         assert!(!repo::status(&pool, uid).await.unwrap().totp);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn removal_needs_a_fresh_reauth_of_the_caller(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let other_uid = seed_user(&pool, "b@t.local").await;
@@ -487,7 +487,7 @@ mod tests {
         assert!(!reauth_valid(&pool, &fresh).await);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn removal_without_totp_is_not_found(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -499,7 +499,7 @@ mod tests {
         assert!(reauth_valid(&pool, &tok).await, "a refusal keeps the token");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn reauth_wrong_password_is_400_and_throttled(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -517,7 +517,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn regenerate_replaces_the_codes(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -554,7 +554,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::FORBIDDEN);
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn regenerate_needs_a_confirmed_totp(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
         let me = seed_session(&pool, uid).await;
@@ -564,7 +564,7 @@ mod tests {
         assert!(reauth_valid(&pool, &tok).await, "a refusal keeps the token");
     }
 
-    #[sqlx::test(migrations = "../migrations")]
+    #[gripsou_core::testkit::db_test]
     async fn status_is_scoped_to_the_caller(pool: PgPool) {
         let a = seed_user(&pool, "a@t.local").await;
         let b = seed_user(&pool, "b@t.local").await;
