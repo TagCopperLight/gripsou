@@ -46,6 +46,10 @@ function makeServer(initial: ServerState) {
     const path = url.replace(/^\/api/, "");
     const body = init?.body ? JSON.parse(init.body as string) : undefined;
 
+    if (path === "/budget/categorize/status") {
+      return jsonRes({ configured: true, enabled: false, running: false, remaining: 0, reviewCount: 0, threshold: 70, lastRun: null });
+    }
+
     const collectionMatch = path.match(/^\/budget\/(categories|tags)$/);
     const itemMatch = path.match(/^\/budget\/(categories|tags)\/(.+)$/);
 

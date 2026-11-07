@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
+import { CardState } from "../../../ui/CardState";
 import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { Toggle } from "../../../ui/Toggle";
 import { useAuth } from "../../../auth/context";
@@ -11,8 +12,22 @@ import { BUDGET_AI_THRESHOLD_MAX, BUDGET_AI_THRESHOLD_MIN } from "../../../api/w
  *  provider, model and key are the operator's (Settings → Server). */
 export function AiSurface() {
   const { t } = useTranslation();
+  const status = useAiStatus();
+  // Until the server answers, whether a provider is set up is unknown: no warning yet.
+  return (
+    <SettingsSurface title={t("settings.budget.ai.title")}>
+      {status.data !== undefined ? (
+        <AiControls configured={status.data.configured} />
+      ) : (
+        <CardState variant={status.isError ? "error" : "loading"} onRetry={() => void status.refetch()} className="h-28" />
+      )}
+    </SettingsSurface>
+  );
+}
+
+function AiControls({ configured }: { configured: boolean }) {
+  const { t } = useTranslation();
   const { prefs, updatePrefs } = useAuth();
-  const configured = useAiStatus().data?.configured ?? false;
   // Local while dragging; saved once on release, not on every tick.
   const [draft, setDraft] = useState<number | null>(null);
   const threshold = draft ?? prefs.budgetAiThreshold;
@@ -25,8 +40,8 @@ export function AiSurface() {
   };
 
   return (
-    <SettingsSurface title={t("settings.budget.ai.title")}>
-      {!configured && <p className="mb-4 text-sm text-amber">{t("settings.budget.ai.notConfigured")}</p>}
+    <>
+      {!configured && <p className="mb-4 text-sm text-fg-faint">{t("settings.budget.ai.notConfigured")}</p>}
       <div className="flex items-center justify-between gap-6">
         <div>
           <p className="text-sm font-medium text-fg">{t("settings.budget.ai.enable")}</p>
@@ -61,6 +76,6 @@ export function AiSurface() {
           <span className="w-10 text-right font-mono text-sm text-fg">{threshold}%</span>
         </div>
       </div>
-    </SettingsSurface>
+    </>
   );
 }

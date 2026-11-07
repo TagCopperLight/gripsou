@@ -38,4 +38,18 @@ describe("AiSurface", () => {
     expect(await screen.findByText("Ask your administrator to configure an AI provider.")).toBeVisible();
     expect(screen.getByRole("switch")).toBeDisabled();
   });
+
+  it("doesn't claim there is no provider before the server has answered", async () => {
+    stubFetch(() => new Promise<Response>(() => {}));
+    renderWithApp(<AiSurface />, { auth: authValue({ prefs: DEFAULT_PREFS }) });
+    expect(await screen.findByText("Loading…")).toBeVisible();
+    expect(screen.queryByText("Ask your administrator to configure an AI provider.")).toBeNull();
+  });
+
+  it("offers a retry, not the no-provider message, when the status can't be loaded", async () => {
+    stubFetch(async () => new Response(null, { status: 500 }));
+    renderWithApp(<AiSurface />, { auth: authValue({ prefs: DEFAULT_PREFS }) });
+    expect(await screen.findByRole("button", { name: "Retry" })).toBeVisible();
+    expect(screen.queryByText("Ask your administrator to configure an AI provider.")).toBeNull();
+  });
 });
