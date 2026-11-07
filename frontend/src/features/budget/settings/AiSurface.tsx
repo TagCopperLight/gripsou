@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "@tanstack/react-router";
+import { Sparkles } from "lucide-react";
 
+import { Button } from "../../../ui/Button";
 import { CardState } from "../../../ui/CardState";
 import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { Toggle } from "../../../ui/Toggle";
@@ -16,16 +19,44 @@ export function AiSurface() {
   // Until the server answers, whether a provider is set up is unknown: no warning yet.
   return (
     <SettingsSurface title={t("settings.budget.ai.title")}>
-      {status.data !== undefined ? (
-        <AiControls configured={status.data.configured} />
-      ) : (
+      {status.data === undefined ? (
         <CardState variant={status.isError ? "error" : "loading"} onRetry={() => void status.refetch()} className="h-28" />
+      ) : status.data.configured ? (
+        <AiControls />
+      ) : (
+        <NoProvider />
       )}
     </SettingsSurface>
   );
 }
 
-function AiControls({ configured }: { configured: boolean }) {
+/** Nothing in the card works without a provider, so it says only that. An admin
+ *  can set one up; anyone else has no way to, so gets no button. */
+function NoProvider() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const isAdmin = useAuth().user?.role === "admin";
+  return (
+    <div className="flex h-28 flex-col items-center justify-center gap-2.5 text-center">
+      <span className="flex size-10 items-center justify-center rounded-xl bg-surface-2 text-fg-faint">
+        <Sparkles className="size-4" aria-hidden />
+      </span>
+      <p className="text-sm font-medium text-fg">{t("settings.budget.ai.notConfigured")}</p>
+      {isAdmin && (
+        <Button
+          variant="outline"
+          padded={false}
+          className="mt-1 rounded-lg! px-2.75 py-1.5 text-xs"
+          onClick={() => void navigate({ to: "/settings/server" })}
+        >
+          {t("settings.budget.ai.setUp")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function AiControls() {
   const { t } = useTranslation();
   const { prefs, updatePrefs } = useAuth();
   // Local while dragging; saved once on release, not on every tick.
@@ -41,7 +72,6 @@ function AiControls({ configured }: { configured: boolean }) {
 
   return (
     <>
-      {!configured && <p className="mb-4 text-sm text-fg-faint">{t("settings.budget.ai.notConfigured")}</p>}
       <div className="flex items-center justify-between gap-6">
         <div>
           <p className="text-sm font-medium text-fg">{t("settings.budget.ai.enable")}</p>
@@ -49,12 +79,11 @@ function AiControls({ configured }: { configured: boolean }) {
         </div>
         <Toggle
           checked={prefs.budgetAiEnabled}
-          disabled={!configured}
           onChange={(v) => void updatePrefs({ budgetAiEnabled: v })}
           aria-label={t("settings.budget.ai.enable")}
         />
       </div>
-      <div className={`mt-6 flex items-center justify-between gap-6 ${configured ? "" : "opacity-40"}`}>
+      <div className="mt-6 flex items-center justify-between gap-6">
         <div>
           <p className="text-sm font-medium text-fg">{t("settings.budget.ai.threshold")}</p>
           <p className="text-xs text-fg-faint">{t("settings.budget.ai.thresholdHint")}</p>
@@ -66,7 +95,6 @@ function AiControls({ configured }: { configured: boolean }) {
             max={BUDGET_AI_THRESHOLD_MAX}
             step={5}
             value={threshold}
-            disabled={!configured}
             aria-label={t("settings.budget.ai.threshold")}
             onChange={(e) => setDraft(Number(e.target.value))}
             onPointerUp={commit}

@@ -603,7 +603,8 @@
         "enableHint": "New and past transactions are sent to the AI provider your administrator configured.",
         "threshold": "Review threshold",
         "thresholdHint": "Suggestions with a confidence score below this threshold are sent to you for review.",
-        "notConfigured": "Ask your administrator to configure an AI provider."
+        "notConfigured": "No AI provider set up",
+        "setUp": "Set up"
       }
     }
   },
