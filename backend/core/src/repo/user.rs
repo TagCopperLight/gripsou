@@ -46,6 +46,37 @@ pub async fn password_hash(
     Ok(row)
 }
 
+/// Whether anyone has an account: first-run setup stays open until then.
+pub async fn any_exists(pool: &sqlx::PgPool) -> Result<bool, CoreError> {
+    let exists = sqlx::query_scalar!(r#"select exists (select 1 from users) as "exists!""#)
+        .fetch_one(pool)
+        .await?;
+    Ok(exists)
+}
+
+/// Create the first account, as admin. `None` when any user exists already,
+/// one made by hand in SQL included.
+pub async fn create_first_admin(
+    pool: &sqlx::PgPool,
+    email: &str,
+    name: &str,
+    password_hash: &str,
+) -> Result<Option<Uuid>, CoreError> {
+    let id = sqlx::query_scalar!(
+        r#"insert into users (email, name, password_hash, role)
+           select $1, $2, $3, $4
+           where not exists (select 1 from users)
+           returning id"#,
+        email,
+        name,
+        password_hash,
+        Role::Admin as Role,
+    )
+    .fetch_optional(pool)
+    .await?;
+    Ok(id)
+}
+
 /// The current user's own profile, fetched by id for the /auth/me bootstrap.
 #[derive(Debug)]
 pub struct UserProfile {

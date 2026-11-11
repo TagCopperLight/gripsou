@@ -334,6 +334,16 @@ impl Throttles {
         })
     }
 
+    /// A first-run setup code. It names no account, and one shared counter
+    /// would let a stranger keep the operator out: only the IP counts.
+    pub fn setup(&self, ip: &str, now: Instant) -> Result<Attempt<'_>, Blocked> {
+        try_all(&[(&self.ips, ip)], now).inspect_err(|b| log_refusal(b, None, Some(ip)))?;
+        Ok(Attempt {
+            clear: Vec::new(),
+            refund_ip: Some((&self.ips, ip.to_string())),
+        })
+    }
+
     /// The start of a passwordless sign-in, which names no account yet: only
     /// the IP counts. It finishes in another request, which gives the failure
     /// back with [`Self::passkey_signed_in`].

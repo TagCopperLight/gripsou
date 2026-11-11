@@ -1,6 +1,6 @@
 //! What the admin endpoints send and accept.
 
-use gripsou_providers::registry::{About, AccountKind};
+use gripsou_providers::registry::{AccountKind, Context, Keyed, Providers};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -65,6 +65,16 @@ pub struct SetProviderReq {
     pub enabled: bool,
 }
 
+/// What a provider's keys are for: the first-run server setup shows one
+/// section per group.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum KeyGroup {
+    Bank,
+    Categorize,
+    Logos,
+}
+
 /// One provider's keys for Settings → Server. A secret's value never leaves
 /// the server: only whether it is set.
 #[derive(Debug, Serialize, TS)]
@@ -72,6 +82,12 @@ pub struct SetProviderReq {
 pub struct ApiKeyProvider {
     pub key: String,
     pub display_name: String,
+    pub group: KeyGroup,
+    /// Whether the saved keys are enough for what the group enables.
+    pub ready: bool,
+    /// For a bank provider, the address its console must allow, as the server
+    /// sends it: the browser's own address can differ.
+    pub return_address: Option<String>,
     pub fields: Vec<ApiKeyField>,
 }
 
@@ -96,7 +112,26 @@ pub enum ApiKeyField {
 }
 
 impl ApiKeyProvider {
-    pub fn new(k: &About, config: &gripsou_core::provider_config::ProviderConfig) -> Self {
+    pub fn new(keyed: Keyed, providers: &Providers, ctx: &Context) -> Self {
+        let config = providers.config();
+        let k = keyed.about();
+        let (group, ready, return_address) = match keyed {
+            // A webhook secret is optional: the adapter is built without one.
+            Keyed::Bank(kind) => (
+                KeyGroup::Bank,
+                providers.account(kind.about.key).is_some(),
+                Some(ctx.callback_url()),
+            ),
+            Keyed::Categorize(kind) => (KeyGroup::Categorize, (kind.configured)(config), None),
+            Keyed::Logos(about) => (
+                KeyGroup::Logos,
+                about
+                    .fields
+                    .iter()
+                    .all(|f| config.get(about.key, f.key).is_some()),
+                None,
+            ),
+        };
         let fields = k
             .fields
             .iter()
@@ -122,6 +157,9 @@ impl ApiKeyProvider {
         ApiKeyProvider {
             key: k.key.into(),
             display_name: k.display_name.into(),
+            group,
+            ready,
+            return_address,
             fields,
         }
     }

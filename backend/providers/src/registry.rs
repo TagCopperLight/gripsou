@@ -28,6 +28,17 @@ pub struct Context {
     pub public_url: String,
 }
 
+impl Context {
+    /// Where a bank provider sends the user back after they connect a bank:
+    /// the address its console must allow.
+    pub fn callback_url(&self) -> String {
+        format!(
+            "{}/connections/callback",
+            self.public_url.trim_end_matches('/')
+        )
+    }
+}
+
 /// An account provider: what the admin and the connect page show, and how its
 /// adapter is built.
 pub struct AccountKind {
@@ -62,19 +73,38 @@ pub fn categorizer_kind(key: &str) -> Option<&'static CategorizerKind> {
     CATEGORIZERS.iter().copied().find(|k| k.about.key == key)
 }
 
-/// Every provider with keys, in display order: the only names the API
-/// accepts a key for.
-pub fn keyed() -> impl Iterator<Item = &'static About> {
-    ACCOUNTS
-        .iter()
-        .map(|k| &k.about)
-        .chain(CATEGORIZERS.iter().map(|k| &k.about))
-        .chain([&brandfetch::ABOUT])
-        .filter(|a| !a.fields.is_empty())
+/// A provider with keys, named by the list it comes from: what its keys
+/// are for.
+#[derive(Clone, Copy)]
+pub enum Keyed {
+    Bank(&'static AccountKind),
+    Categorize(&'static CategorizerKind),
+    Logos(&'static About),
 }
 
-pub fn keyed_provider(key: &str) -> Option<&'static About> {
-    keyed().find(|a| a.key == key)
+impl Keyed {
+    pub fn about(self) -> &'static About {
+        match self {
+            Keyed::Bank(k) => &k.about,
+            Keyed::Categorize(k) => &k.about,
+            Keyed::Logos(a) => a,
+        }
+    }
+}
+
+/// Every provider with keys, in display order: the only names the API
+/// accepts a key for.
+pub fn keyed() -> impl Iterator<Item = Keyed> {
+    ACCOUNTS
+        .iter()
+        .map(|k| Keyed::Bank(k))
+        .chain(CATEGORIZERS.iter().map(|k| Keyed::Categorize(k)))
+        .chain([Keyed::Logos(&brandfetch::ABOUT)])
+        .filter(|k| !k.about().fields.is_empty())
+}
+
+pub fn keyed_provider(key: &str) -> Option<Keyed> {
+    keyed().find(|k| k.about().key == key)
 }
 
 /// The price adapters. `pivot` is the currency FX rates are stored in.

@@ -44,12 +44,16 @@ async fn main() -> anyhow::Result<()> {
     let jobs = std::sync::Arc::new(jobs);
     tokio::spawn(gripsou_jobs::run_scheduler(db.clone(), jobs.clone()));
 
+    // After the migrations, before listening: the banner sits just above the
+    // `listening` line.
+    let setup = gripsou_api::setup::start(&db).await?;
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());
     let app = gripsou_api::router(
         db.clone(),
         std::path::Path::new(&static_dir),
         jobs,
         passkeys,
+        setup,
     );
     // Hash the dummy password now so the first login isn't slower.
     std::sync::LazyLock::force(&gripsou_api::auth::password::DUMMY_HASH);

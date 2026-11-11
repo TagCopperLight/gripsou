@@ -36,6 +36,12 @@ pub fn hash_token(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
+/// Compares two secrets in a time that depends on their length only, so a
+/// guess learns nothing from how fast it is refused.
+pub(crate) fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
 /// [`hash_token`], base64url-encoded, for the `invite_token.token` text column.
 pub fn hash_token_str(token: &str) -> String {
     URL_SAFE_NO_PAD.encode(hash_token(token))

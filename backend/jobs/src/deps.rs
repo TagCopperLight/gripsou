@@ -75,6 +75,10 @@ impl Deps {
             .clone()
     }
 
+    pub fn context(&self) -> &Context {
+        &self.context
+    }
+
     /// Puts saved keys in effect: every adapter built from them is rebuilt.
     pub fn apply_config(&self, config: ProviderConfig) {
         let built = Arc::new(Providers::build(config, &self.context));
