@@ -17,6 +17,7 @@ import type { Period } from "../lib/period";
 // hand-write a key anywhere else; add it here instead.
 export const keys = {
   health: () => ["health"] as const,
+  setupStatus: () => ["setup-status"] as const,
 
   netWorth: (range?: string) =>
     (range === undefined ? ["net-worth"] : ["net-worth", range]) as readonly unknown[],

@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
 import { Fingerprint, LoaderCircle } from "lucide-react";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
+import { useNavigate } from "@tanstack/react-router";
 import { AuthPage } from "../../ui/AuthPage";
+import { CardState } from "../../ui/CardState";
 import { Button } from "../../ui/Button";
 import { CodeInput } from "../../ui/CodeInput";
 import { FieldError } from "../../ui/FieldError";
@@ -11,6 +13,7 @@ import { useAuth } from "../../auth/context";
 import { ApiError } from "../../api/client";
 import { throttledError } from "../../auth/throttle";
 import { TOTP_DIGITS } from "../../api/wire";
+import { useSetupStatus } from "../../api/setup";
 
 type Step = "password" | "passwordless" | "code" | "backup";
 
@@ -31,6 +34,14 @@ export function Login() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  // A server with no account yet is set up first. If the server doesn't
+  // answer, signing in can't work either, so this says so instead of the form.
+  const setup = useSetupStatus();
+  const navigate = useNavigate();
+  const setupNeeded = setup.data?.needed === true;
+  useEffect(() => {
+    if (setupNeeded) void navigate({ to: "/setup", replace: true });
+  }, [setupNeeded, navigate]);
 
   const backToPassword = (message: string | null = null) => {
     setStep("password");
@@ -169,7 +180,9 @@ export function Login() {
   );
 
   let card;
-  if (step === "code") {
+  if (setup.isError) {
+    card = <CardState variant="error" onRetry={() => void setup.refetch()} className="rounded-3xl bg-surface p-6" />;
+  } else if (step === "code") {
     card = (
       <div className="flex flex-col gap-4 rounded-3xl bg-surface p-6">
         <div className="pb-1 text-lg font-semibold text-fg">{t("auth.mfa.codeTitle")}</div>

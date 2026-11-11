@@ -1,4 +1,5 @@
 import { fail, reply, type Router } from "../router.ts";
+import { keysReady } from "../data/backend.ts";
 import type { Store } from "../store.ts";
 
 export function settingsRoutes(r: Router<Store>): void {
@@ -33,6 +34,7 @@ export function settingsRoutes(r: Router<Store>): void {
     if (!p || !f) return fail(404, "no such setting");
     if (f.secret) f.set = value !== null;
     else f.value = value;
+    p.ready = keysReady(p);
     if (p.key === "jev" && f.secret) {
       store.aiSettings.available = f.set ? ["jev"] : [];
       if (!f.set) store.aiSettings.provider = null;

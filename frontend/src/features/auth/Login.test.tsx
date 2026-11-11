@@ -5,17 +5,37 @@ import { useAuth, type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../api/wire";
 import { ApiError, getAuthToken, setAuthToken } from "../../api/client";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
-import { signedOut, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
+import { signedOut, renderWithApp, jsonResponse, stubFetch as stubAll, type FetchHandler } from "../../test/kit";
 
 vi.mock("@simplewebauthn/browser", () => ({
   startAuthentication: vi.fn(),
   WebAuthnAbortService: { cancelCeremony: vi.fn() },
 }));
 
-// Login itself doesn't navigate — the /login route guard redirects once auth
+const navigate = vi.fn();
+vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
+
+/** The server, with an account already made: the page asks it first. */
+function stubFetch(handler: FetchHandler = () => new Response(null, { status: 204 })) {
+  return stubAll((url, init) => (url === "/api/setup" ? jsonResponse({ needed: false }) : handler(url, init)));
+}
+
+beforeEach(() => {
+  navigate.mockClear();
+  stubFetch();
+});
+
+// Login navigates only to set up a fresh server; signing in, the /login route guard redirects once auth
 // flips (see router.test.tsx for that end-to-end flow). Here we only assert it
 // calls `login` correctly and surfaces credential errors.
 describe("Login", () => {
+  it("sends to the setup page while the server has no account", async () => {
+    stubAll(() => jsonResponse({ needed: true }));
+    renderWithApp(<Login />, { auth: signedOut() });
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith({ to: "/setup", replace: true }));
+  });
+
+
   it("logs in with the entered credentials on success", async () => {
     const fetchMock = stubFetch(async () =>
       jsonResponse({ token: "t", user: { id: "u1", name: "Ann", email: "a@t.local", role: "admin", prefs: DEFAULT_PREFS } }));

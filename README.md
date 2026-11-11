@@ -43,6 +43,16 @@ docker compose -f docker/docker-compose.yml up -d
 
 The backend binary serves both the built SPA and the JSON API, with Postgres alongside. It publishes no port: it joins the external Docker network `web` (`docker network create web`), where a reverse proxy forwards to `backend:8080`. `scripts/build-image.sh` stamps the image with `git describe` of your checkout, the version shown in the app; a plain `docker compose build` labels it `dev`.
 
+### First start
+
+On an empty database, the backend prints a setup code to its terminal just before it starts listening:
+
+```sh
+docker compose -f docker/docker-compose.yml logs backend
+```
+
+Open gripsou in a browser: the sign-in page sends you to the setup page, which asks for that code and creates the first account, as administrator. Each start prints a new code, so use the newest one in the log. Once any account exists, the setup page is closed for good. The code is never saved in the app's own log.
+
 ## Locked out of two-factor
 
 If you lose both your authenticator app and your backup codes, run this on the server:

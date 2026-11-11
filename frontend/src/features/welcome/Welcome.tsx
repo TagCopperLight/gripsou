@@ -14,6 +14,8 @@ import { useCurrencyChange } from "../../auth/useCurrencyChange";
 import { CurrencyChangeHint } from "../../auth/CurrencyChangeHint";
 import { authApi } from "../../api/auth";
 import { useConnections } from "../../api/connections";
+import { ServerSetup } from "./ServerSetup";
+import { BankKeysGate } from "./BankKeysGate";
 import { useAiStatus } from "../../api/budget";
 import type { SyncConnection, ConnectionStatus } from "../../api/wire";
 import { useStartConnection } from "../connections/useStartConnection";
@@ -29,13 +31,16 @@ type Step = 1 | 2 | 3;
 const route = getRouteApi("/signedIn/welcome");
 
 /** After an invite: preferences, a first bank, the AI opt-in. Shown until the
- *  user finishes or skips it (`welcomeDone`); the router sends them here. */
+ *  user finishes or skips it (`welcomeDone`); the router sends them here. An
+ *  admin (in practice the first account) sees the server setup first. */
 export function Welcome() {
   const { t, i18n } = useTranslation();
   const { user, prefs, updatePrefs, updateUser } = useAuth();
   const search = route.useSearch();
   const navigate = useNavigate();
   const backFromBank = search.step === "bank";
+  const isAdmin = user?.role === "admin";
+  const [serverShown, setServerShown] = useState(!isAdmin || backFromBank);
 
   // A failed save is rolled back by AuthProvider (the control shows the old
   // value again), and the user can retry here or later in Settings, so the
@@ -125,141 +130,165 @@ export function Welcome() {
   const hasBank = readyBanks.length > 0;
   const connectDisabled = connecting || flow.pending || providers === undefined;
 
+  const skipButton = (
+    <Button variant="ghost" padded={false} onClick={skipBank} disabled={!aiKnown || connecting}>
+      {t("welcome.bank.skip")}
+    </Button>
+  );
+  const bankButtons = (
+    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+      {hasBank ? (
+        <Button variant="ghostStrong" padded={false} onClick={connectBank} disabled={connectDisabled}>
+          {t("welcome.bank.addAnother")}
+        </Button>
+      ) : (
+        skipButton
+      )}
+      {hasBank ? (
+        aiConfigured ? (
+          <Button onClick={() => complete(2, 3)} disabled={!aiKnown || connecting}>{t("welcome.continue")}</Button>
+        ) : (
+          <Button onClick={() => void finish()} disabled={finishing || !aiKnown || connecting}>{t("welcome.finish")}</Button>
+        )
+      ) : (
+        <Button onClick={connectBank} disabled={connectDisabled}>
+          {t(bankFailed ? "welcome.bank.tryAgain" : "welcome.bank.connect")}
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex min-h-screen justify-center bg-bg px-4 py-16">
       <div className="flex w-120 max-w-full flex-col items-center gap-10">
         <div className="font-wordmark text-[56px] font-semibold tracking-tight text-fg">gripsou</div>
         <div className="flex w-full flex-col gap-5 rounded-3xl bg-surface p-4 md:p-6">
-          <h1 className="px-1 text-xl font-semibold text-fg">{t("welcome.title", { name: user?.name ?? "" })}</h1>
-          <div className="flex gap-3 rounded-2xl bg-blue-soft px-4 py-3 text-[13px] leading-relaxed text-blue-light">
-            <Lock className="mt-0.5 size-4 shrink-0" />
-            <p>{t("welcome.privacy")}</p>
-          </div>
-
-          <div className="flex flex-col gap-1">
-            <WelcomeStep
-              n={1}
-              title={t("welcome.prefs.title")}
-              active={step === 1}
-              done={done[1]}
-              summary={`${prefs.uiLanguage === "fr" ? "Français" : "English"} · ${currencyLabel} · ${zoneLabel}`}
-              onEdit={() => setStep(1)}
-            >
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-sm text-fg-dim">{t("welcome.prefs.language")}</span>
-                <SegmentedControl
-                  value={prefs.uiLanguage}
-                  onChange={(lng) => save({ uiLanguage: lng as typeof prefs.uiLanguage })}
-                  options={[
-                    { value: "en", label: "English" },
-                    { value: "fr", label: "Français" },
-                  ]}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-sm text-fg-dim">{t("welcome.prefs.currency")}</span>
-                <Select
-                  value={currency.value}
-                  onChange={currency.change}
-                  options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
-                />
-                {currency.pick && (
-                  <span className="text-xs text-fg-faint"><CurrencyChangeHint pick={currency.pick} /></span>
-                )}
-              </div>
-              <div className="flex flex-col gap-2">
-                <span className="text-sm text-fg-dim">{t("welcome.prefs.timeZone")}</span>
-                <Select
-                  value={prefs.timeZone}
-                  onChange={(timeZone) => save({ timeZone })}
-                  options={zones}
-                />
-              </div>
-              <div className="flex justify-end pt-1">
-                <Button onClick={() => complete(1, 2)}>{t("welcome.continue")}</Button>
-              </div>
-            </WelcomeStep>
-
-            <WelcomeStep
-              n={2}
-              title={t("welcome.bank.title")}
-              active={step === 2}
-              done={done[2]}
-              summary={bankSkipped ? t("welcome.bank.skipped") : t("welcome.bank.connected", { count: readyBanks.length })}
-              onEdit={() => setStep(2)}
-            >
-              {!hasBank && <ConnectionGuide providers={providers ?? []} />}
-              {connections.length > 0 && (
-                <div className="flex flex-col gap-2">
-                  {connections.map((c) => <BankRow key={c.id} connection={c} />)}
+          {!serverShown ? (
+            <ServerSetup onContinue={() => setServerShown(true)} />
+          ) : (
+            <>
+              <h1 className="px-1 text-xl font-semibold text-fg">{t("welcome.title", { name: user?.name ?? "" })}</h1>
+              {/* Only invitees are told the owner can see their data: an admin
+                  reaching this page is the one who installed the server. */}
+              {!isAdmin && (
+                <div className="flex gap-3 rounded-2xl bg-blue-soft px-4 py-3 text-[13px] leading-relaxed text-blue-light">
+                  <Lock className="mt-0.5 size-4 shrink-0" />
+                  <p>{t("welcome.privacy")}</p>
                 </div>
               )}
-              {bankFailed && (
-                <div className="flex items-center gap-2.5 rounded-xl bg-red-soft px-3.5 py-2.5">
-                  <CircleAlert className="size-4 shrink-0 text-red" />
-                  <p className="text-sm text-red-light">{t("welcome.bank.failed")}</p>
-                </div>
-              )}
-              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                {hasBank ? (
-                  <Button variant="ghostStrong" padded={false} onClick={connectBank} disabled={connectDisabled}>
-                    {t("welcome.bank.addAnother")}
-                  </Button>
-                ) : (
-                  <Button variant="ghost" padded={false} onClick={skipBank} disabled={!aiKnown || connecting}>
-                    {t("welcome.bank.skip")}
-                  </Button>
-                )}
-                {hasBank ? (
-                  aiConfigured ? (
-                    <Button onClick={() => complete(2, 3)} disabled={!aiKnown || connecting}>{t("welcome.continue")}</Button>
+
+              <div className="flex flex-col gap-1">
+                <WelcomeStep
+                  n={1}
+                  title={t("welcome.prefs.title")}
+                  active={step === 1}
+                  done={done[1]}
+                  summary={`${prefs.uiLanguage === "fr" ? "Français" : "English"} · ${currencyLabel} · ${zoneLabel}`}
+                  onEdit={() => setStep(1)}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-sm text-fg-dim">{t("welcome.prefs.language")}</span>
+                    <SegmentedControl
+                      value={prefs.uiLanguage}
+                      onChange={(lng) => save({ uiLanguage: lng as typeof prefs.uiLanguage })}
+                      options={[
+                        { value: "en", label: "English" },
+                        { value: "fr", label: "Français" },
+                      ]}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm text-fg-dim">{t("welcome.prefs.currency")}</span>
+                    <Select
+                      value={currency.value}
+                      onChange={currency.change}
+                      options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
+                    />
+                    {currency.pick && (
+                      <span className="text-xs text-fg-faint"><CurrencyChangeHint pick={currency.pick} /></span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm text-fg-dim">{t("welcome.prefs.timeZone")}</span>
+                    <Select
+                      value={prefs.timeZone}
+                      onChange={(timeZone) => save({ timeZone })}
+                      options={zones}
+                    />
+                  </div>
+                  <div className="flex justify-end pt-1">
+                    <Button onClick={() => complete(1, 2)}>{t("welcome.continue")}</Button>
+                  </div>
+                </WelcomeStep>
+
+                <WelcomeStep
+                  n={2}
+                  title={t("welcome.bank.title")}
+                  active={step === 2}
+                  done={done[2]}
+                  summary={bankSkipped ? t("welcome.bank.skipped") : t("welcome.bank.connected", { count: readyBanks.length })}
+                  onEdit={() => setStep(2)}
+                >
+                  {!hasBank && <ConnectionGuide providers={providers ?? []} />}
+                  {connections.length > 0 && (
+                    <div className="flex flex-col gap-2">
+                      {connections.map((c) => <BankRow key={c.id} connection={c} />)}
+                    </div>
+                  )}
+                  {bankFailed && (
+                    <div className="flex items-center gap-2.5 rounded-xl bg-red-soft px-3.5 py-2.5">
+                      <CircleAlert className="size-4 shrink-0 text-red" />
+                      <p className="text-sm text-red-light">{t("welcome.bank.failed")}</p>
+                    </div>
+                  )}
+                  {isAdmin ? (
+                    <BankKeysGate skip={skipButton} onSetUp={() => setServerShown(false)}>{bankButtons}</BankKeysGate>
                   ) : (
-                    <Button onClick={() => void finish()} disabled={finishing || !aiKnown || connecting}>{t("welcome.finish")}</Button>
-                  )
-                ) : (
-                  <Button onClick={connectBank} disabled={connectDisabled}>
-                    {t(bankFailed ? "welcome.bank.tryAgain" : "welcome.bank.connect")}
-                  </Button>
+                    bankButtons
+                  )}
+                </WelcomeStep>
+
+                {aiConfigured && (
+                  <WelcomeStep
+                    n={3}
+                    title={t("welcome.ai.title")}
+                    active={step === 3}
+                    done={done[3]}
+                    summary={prefs.budgetAiEnabled ? t("welcome.ai.on") : t("welcome.ai.off")}
+                    onEdit={() => setStep(3)}
+                  >
+                    <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-2 px-4 py-3">
+                      <span className="text-sm font-medium text-fg">{t("welcome.ai.toggle")}</span>
+                      <Toggle
+                        checked={prefs.budgetAiEnabled}
+                        onChange={(on) => save({ budgetAiEnabled: on })}
+                        aria-label={t("welcome.ai.toggle")}
+                      />
+                    </div>
+                    <div className="flex flex-col gap-2 text-sm text-fg-dim">
+                      <p>{t("welcome.ai.body")}</p>
+                      <p>{t("welcome.ai.suggestions")}</p>
+                      <p className="text-xs text-fg-faint">{t("welcome.ai.later")}</p>
+                    </div>
+                    <div className="flex justify-end pt-1">
+                      <Button onClick={() => void finish()} disabled={finishing}>{t("welcome.finish")}</Button>
+                    </div>
+                  </WelcomeStep>
                 )}
               </div>
-            </WelcomeStep>
-
-            {aiConfigured && (
-              <WelcomeStep
-                n={3}
-                title={t("welcome.ai.title")}
-                active={step === 3}
-                done={done[3]}
-                summary={prefs.budgetAiEnabled ? t("welcome.ai.on") : t("welcome.ai.off")}
-                onEdit={() => setStep(3)}
-              >
-                <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-2 px-4 py-3">
-                  <span className="text-sm font-medium text-fg">{t("welcome.ai.toggle")}</span>
-                  <Toggle
-                    checked={prefs.budgetAiEnabled}
-                    onChange={(on) => save({ budgetAiEnabled: on })}
-                    aria-label={t("welcome.ai.toggle")}
-                  />
-                </div>
-                <div className="flex flex-col gap-2 text-sm text-fg-dim">
-                  <p>{t("welcome.ai.body")}</p>
-                  <p>{t("welcome.ai.suggestions")}</p>
-                  <p className="text-xs text-fg-faint">{t("welcome.ai.later")}</p>
-                </div>
-                <div className="flex justify-end pt-1">
-                  <Button onClick={() => void finish()} disabled={finishing}>{t("welcome.finish")}</Button>
-                </div>
-              </WelcomeStep>
-            )}
-          </div>
+            </>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={() => void finish()}
-          className="-mt-4 cursor-pointer text-sm text-fg-faint transition-colors duration-140 hover:text-fg-dim"
-        >
-          {t("welcome.skipAll")}
-        </button>
+        {/* The server setup's own Skip is the one way past it. */}
+        {serverShown && (
+          <button
+            type="button"
+            onClick={() => void finish()}
+            className="-mt-4 cursor-pointer text-sm text-fg-faint transition-colors duration-140 hover:text-fg-dim"
+          >
+            {t("welcome.skipAll")}
+          </button>
+        )}
       </div>
       {flow.pickerOpen && <AddConnectionModal onClose={flow.closePicker} returnTo="/welcome?step=bank" />}
     </div>

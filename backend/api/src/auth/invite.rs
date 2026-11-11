@@ -41,6 +41,21 @@ pub async fn token_info(
     }))
 }
 
+/// What someone creating their own account typed, checked: the email and
+/// name trimmed and required, the password within the rules.
+pub fn new_account_fields<'a>(
+    email: &'a str,
+    name: &'a str,
+    password: &str,
+) -> Result<(&'a str, &'a str), ApiError> {
+    let (email, name) = (email.trim(), name.trim());
+    if email.is_empty() || name.is_empty() {
+        return Err(ApiError::bad_request("email and name are required"));
+    }
+    password::validate_new(password)?;
+    Ok((email, name))
+}
+
 /// Public: redeem an invite — create the account and auto-log-in.
 pub async fn redeem_invite(
     State(pool): State<PgPool>,
@@ -48,12 +63,7 @@ pub async fn redeem_invite(
     Path(token): Path<String>,
     Json(body): Json<dto::RedeemInviteReq>,
 ) -> Result<Json<dto::LoginResponse>, ApiError> {
-    let email = body.email.trim();
-    let name = body.name.trim();
-    if email.is_empty() || name.is_empty() {
-        return Err(ApiError::bad_request("email and name are required"));
-    }
-    password::validate_new(&body.password)?;
+    let (email, name) = new_account_fields(&body.email, &body.name, &body.password)?;
     let hash = auth::hash_token_str(&token);
     let pw_hash = password::hash(&body.password)?;
     let user_id = invite_token::redeem_invite(&pool, &hash, email, name, &pw_hash)

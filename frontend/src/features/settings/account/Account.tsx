@@ -9,6 +9,7 @@ import { Button } from "../../../ui/Button";
 import { Avatar } from "../../../ui/Avatar";
 import { Toggle } from "../../../ui/Toggle";
 import { CardState } from "../../../ui/CardState";
+import { Tag } from "../../../ui/Tag";
 import { DeleteAccountModal } from "./DeleteAccountModal";
 import { SessionDetailModal } from "../security/SessionDetailModal";
 import { EditProfileModal } from "./EditProfileModal";
@@ -197,9 +198,9 @@ export function SettingsAccount() {
                 <span className="flex items-center gap-2">
                   <span className="truncate text-[15px] text-fg">{s.device}</span>
                   {s.current && (
-                    <span className="shrink-0 rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
+                    <Tag tone="green">
                       {t("settings.account.thisDevice")}
-                    </span>
+                    </Tag>
                   )}
                 </span>
                 <span className="truncate text-sm text-fg-faint">
@@ -226,9 +227,9 @@ export function SettingsAccount() {
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate text-[15px] text-fg">{s.device}</span>
                     {s.current && (
-                      <span className="shrink-0 rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
+                      <Tag tone="green">
                         {t("settings.account.thisDevice")}
-                      </span>
+                      </Tag>
                     )}
                   </span>
                   <span className="truncate text-sm text-fg-faint">

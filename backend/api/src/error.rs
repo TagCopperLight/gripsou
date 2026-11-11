@@ -43,9 +43,10 @@ impl From<JsonRejection> for ApiError {
 pub enum ApiError {
     BadRequest(String),
     /// No session, or one that no longer exists. The only 401 besides a
-    /// refused login: the client signs out on it.
+    /// refused login or setup code: the client signs out on it.
     Unauthorized,
     InvalidCredentials,
+    WrongSetupCode,
     /// The session is fine but the action needs a fresh password check (a
     /// reauth token), and the one sent is missing, used or someone else's.
     ReauthRequired,
@@ -94,7 +95,9 @@ impl ApiError {
     pub fn status(&self) -> StatusCode {
         match self {
             ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
-            ApiError::Unauthorized | ApiError::InvalidCredentials => StatusCode::UNAUTHORIZED,
+            ApiError::Unauthorized | ApiError::InvalidCredentials | ApiError::WrongSetupCode => {
+                StatusCode::UNAUTHORIZED
+            }
             ApiError::ReauthRequired | ApiError::Forbidden(_) => StatusCode::FORBIDDEN,
             ApiError::NotFound(_) => StatusCode::NOT_FOUND,
             ApiError::Conflict(_) => StatusCode::CONFLICT,
@@ -116,6 +119,7 @@ impl ApiError {
             | ApiError::Unprocessable(m) => m,
             ApiError::Unauthorized => "unauthorized",
             ApiError::InvalidCredentials => "invalid email or password",
+            ApiError::WrongSetupCode => "wrong setup code",
             ApiError::ReauthRequired => "reauthentication required",
             ApiError::ChallengeExpired => "challenge expired",
             ApiError::TooMany { .. } => "too many attempts",

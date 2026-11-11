@@ -9,6 +9,7 @@ mod holdings;
 mod prefs;
 pub mod routes;
 mod security_headers;
+pub mod setup;
 #[cfg(test)]
 mod testkit;
 mod transactions;
@@ -42,12 +43,14 @@ pub struct AppState {
     pub key: EncryptionKey,
     pub jobs: Arc<gripsou_jobs::Deps>,
     pub passkeys: Passkeys,
+    pub setup: Arc<setup::Setup>,
 }
 
 fn member_routes() -> routes::Routes {
     routes::Routes::default()
         .get("/health", health)
         .merge(auth::routes())
+        .merge(setup::routes())
         .merge(accounts::routes())
         .merge(transactions::routes())
         .merge(budget::routes())
@@ -65,6 +68,7 @@ pub fn router(
     static_dir: &std::path::Path,
     jobs: Arc<gripsou_jobs::Deps>,
     passkeys: Passkeys,
+    setup: setup::Setup,
 ) -> Router {
     let state = AppState {
         db,
@@ -72,6 +76,7 @@ pub fn router(
         key: jobs.key.clone(),
         jobs,
         passkeys,
+        setup: Arc::new(setup),
     };
 
     let index_html = static_dir.join("index.html");

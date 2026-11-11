@@ -137,8 +137,8 @@ pub const KIND: AccountKind = AccountKind {
     about: About {
         key: "powens",
         display_name: "Powens",
-        // The redirect address is not asked for: it is always the public
-        // address + `/connections/callback`.
+        // The redirect address is not asked for: it is always
+        // `Context::callback_url`.
         fields: &[
             ConfigField {
                 key: "client_id",
@@ -177,10 +177,7 @@ impl PowensProvider {
         Some(Self {
             client_id: get("client_id")?,
             client_secret: get("client_secret")?,
-            redirect_uri: format!(
-                "{}/connections/callback",
-                ctx.public_url.trim_end_matches('/')
-            ),
+            redirect_uri: ctx.callback_url(),
             origin: format!("https://{domain}"),
             domain,
             http: reqwest::Client::new(),
@@ -526,6 +523,7 @@ mod tests {
         c.set("powens", "client_secret", Some("s".into()));
         let p = PowensProvider::from_config(&c, &ctx("https://g.example/")).unwrap();
         assert_eq!(p.redirect_uri, "https://g.example/connections/callback");
+        assert_eq!(p.redirect_uri, ctx("https://g.example/").callback_url());
         assert_eq!(p.origin, "https://x.biapi.pro");
         let meta = serde_json::json!({ "external_connection_id": "7" });
         assert_eq!(p.refresh_mode(&meta), RefreshMode::Direct);

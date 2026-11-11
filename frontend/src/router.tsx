@@ -26,6 +26,7 @@ import { ConnectionCallback } from "./features/connections/ConnectionCallback";
 import { Invite } from "./features/auth/Invite";
 import { Reset } from "./features/auth/Reset";
 import { Welcome } from "./features/welcome/Welcome";
+import { Setup } from "./features/setup/Setup";
 import type { AuthValue } from "./auth/context";
 import { scrollRestorationOptions } from "./lib/scroll";
 
@@ -211,6 +212,17 @@ const inviteRoute = createRoute({
   component: Invite,
 });
 
+// The first account. Signed in, there is nothing to set up: the guard then
+// sends a new admin on to the welcome screen.
+const setupRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/setup",
+  beforeLoad: ({ context }) => {
+    if (context.auth.isAuthenticated) throw redirect({ to: "/" });
+  },
+  component: Setup,
+});
+
 const resetRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/reset/$token",
@@ -240,6 +252,7 @@ const settingsRouteWithChildren = settingsRoute.addChildren([
 
 export const routeTree = rootRoute.addChildren([
   loginRoute,
+  setupRoute,
   inviteRoute,
   resetRoute,
   signedInRoute.addChildren([

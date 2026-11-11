@@ -68,7 +68,7 @@ pub async fn api_keys(
     let providers = jobs.providers();
     Json(
         registry::keyed()
-            .map(|k| dto::ApiKeyProvider::new(k, providers.config()))
+            .map(|k| dto::ApiKeyProvider::new(k, &providers, jobs.context()))
             .collect(),
     )
 }
@@ -85,7 +85,7 @@ pub async fn set_api_key(
 ) -> Result<Json<dto::ApiKeyProvider>, ApiError> {
     let kind =
         registry::keyed_provider(&provider).ok_or(ApiError::NotFound("provider not found"))?;
-    if !kind.fields.iter().any(|f| f.key == body.field) {
+    if !kind.about().fields.iter().any(|f| f.key == body.field) {
         return Err(ApiError::NotFound("field not found"));
     }
     let value = body
@@ -111,9 +111,12 @@ pub async fn set_api_key(
         action = if removed { "removed" } else { "set" },
         "provider setting changed"
     );
-    let dto = dto::ApiKeyProvider::new(kind, &config);
     jobs.apply_config(config);
-    Ok(Json(dto))
+    Ok(Json(dto::ApiKeyProvider::new(
+        kind,
+        &jobs.providers(),
+        jobs.context(),
+    )))
 }
 
 pub async fn budget_ai_settings(
@@ -364,7 +367,13 @@ mod tests {
         seed_user(&pool, "member@t.local").await;
         let token = login_token(&pool, "member@t.local", PASSWORD).await;
         let passkeys = crate::Passkeys::parse(Some("https://gripsou.test")).unwrap();
-        let app = crate::router(pool, &std::env::temp_dir(), deps(), passkeys);
+        let app = crate::router(
+            pool,
+            &std::env::temp_dir(),
+            deps(),
+            passkeys,
+            crate::setup::Setup::closed(),
+        );
         let id = Uuid::new_v4().to_string();
         for (method, path) in routes().list() {
             let path = format!("/api{path}")
@@ -395,15 +404,103 @@ mod tests {
         }
     }
 
+    fn api_key_dto(
+        provider: &str,
+        fields: &[(&str, &str)],
+    ) -> (dto::ApiKeyProvider, registry::Context) {
+        let mut c = gripsou_core::provider_config::ProviderConfig::default();
+        for (f, v) in fields {
+            c.set(provider, f, Some(v.to_string()));
+        }
+        let ctx = registry::Context {
+            public_url: "https://g.example/".into(),
+        };
+        let providers = registry::Providers::build(c, &ctx);
+        let dto = dto::ApiKeyProvider::new(
+            registry::keyed_provider(provider).unwrap(),
+            &providers,
+            &ctx,
+        );
+        (dto, ctx)
+    }
+
     #[test]
     fn api_key_dto_never_carries_a_secret() {
-        let mut c = gripsou_core::provider_config::ProviderConfig::default();
-        c.set("powens", "client_id", Some("id-1".into()));
-        c.set("powens", "client_secret", Some("hunter2".into()));
-        let dto = dto::ApiKeyProvider::new(registry::keyed_provider("powens").unwrap(), &c);
+        let (dto, _) = api_key_dto(
+            "powens",
+            &[("client_id", "id-1"), ("client_secret", "hunter2")],
+        );
         let json = serde_json::to_string(&dto).unwrap();
         assert!(!json.contains("hunter2"), "{json}");
         assert!(json.contains(r#""value":"id-1""#), "{json}");
+    }
+
+    #[test]
+    fn a_bank_provider_is_ready_without_its_webhook_secret() {
+        let (partial, _) = api_key_dto("powens", &[("client_id", "id"), ("domain", "x.biapi.pro")]);
+        assert!(!partial.ready);
+        let (dto, ctx) = api_key_dto(
+            "powens",
+            &[
+                ("client_id", "id"),
+                ("domain", "x.biapi.pro"),
+                ("client_secret", "s"),
+            ],
+        );
+        assert_eq!(dto.group, dto::KeyGroup::Bank);
+        assert!(dto.ready);
+        assert_eq!(dto.return_address, Some(ctx.callback_url()));
+        assert_eq!(
+            dto.return_address.as_deref(),
+            Some("https://g.example/connections/callback")
+        );
+    }
+
+    #[test]
+    fn logos_are_ready_once_every_field_is_set() {
+        let (none, _) = api_key_dto("brandfetch", &[]);
+        assert_eq!(none.group, dto::KeyGroup::Logos);
+        assert!(!none.ready);
+        assert_eq!(none.return_address, None);
+        assert!(api_key_dto("brandfetch", &[("client_id", "c")]).0.ready);
+    }
+
+    /// Whether an AI provider is picked doesn't matter: the key is what the
+    /// group needs.
+    #[test]
+    fn a_categoriser_is_ready_when_its_key_is_saved() {
+        let (none, _) = api_key_dto("jev", &[]);
+        assert_eq!(none.group, dto::KeyGroup::Categorize);
+        assert!(!none.ready);
+        assert!(api_key_dto("jev", &[("api_key", "k")]).0.ready);
+    }
+
+    /// The answer to a save reflects the adapters the new keys build.
+    #[gripsou_core::testkit::db_test]
+    async fn saving_the_last_bank_key_answers_ready(pool: PgPool) {
+        let admin = seed_admin(&pool, "a@t.local").await;
+        let jobs = deps();
+        for (field, value) in [
+            ("client_id", "id"),
+            ("domain", "x.biapi.pro"),
+            ("client_secret", "s"),
+        ] {
+            let ready = set_api_key(
+                State(pool.clone()),
+                State(jobs.clone()),
+                AdminUser { user_id: admin },
+                Path("powens".to_string()),
+                Json(dto::SetApiKeyReq {
+                    field: field.into(),
+                    value: Some(value.into()),
+                }),
+            )
+            .await
+            .unwrap()
+            .0
+            .ready;
+            assert_eq!(ready, field == "client_secret", "{field}");
+        }
     }
 
     #[gripsou_core::testkit::db_test]

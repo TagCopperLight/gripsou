@@ -3,7 +3,7 @@
 
 import type { AiStatus, ApiKeyField, ApiKeyProvider, BudgetAiSettings, BudgetAiUsage, LotSuggestion, SyncHealth } from "../src/api/wire.ts";
 import { baseData, type BaseData } from "./data/base.ts";
-import { CONFIG_PROVIDERS } from "./data/backend.ts";
+import { CONFIG_PROVIDERS, keysReady } from "./data/backend.ts";
 import type { Fault } from "./faults.ts";
 
 export type Store = BaseData & {
@@ -23,24 +23,31 @@ export type Store = BaseData & {
   accountHealth: Record<string, SyncHealth>;
   /** Signing in asks for the second step (a code, or a backup code). */
   loginMfa: boolean;
+  /** No account yet: the sign-in page sends to /setup. */
+  setupNeeded: boolean;
   /** Requests the active states make fail. */
   faults: Fault[];
 };
 
-/** Saved values: a public field's text, whether a secret is set; absent is unset. */
+/** Saved values: a public field's text, whether a secret is set; absent is unset.
+ *  Brandfetch has none, so it starts not ready. */
 const SAVED_KEYS: Record<string, Record<string, string | boolean>> = {
   powens: { client_id: "48211093", domain: "myapp-sandbox.biapi.pro", client_secret: true },
   jev: { api_key: true },
 };
 
 function apiKeys(): ApiKeyProvider[] {
-  return CONFIG_PROVIDERS.map((p) => ({
-    ...p,
-    fields: p.fields.map(({ key, label, secret }): ApiKeyField => {
-      const saved = SAVED_KEYS[p.key]?.[key];
-      return secret ? { key, label, secret, set: saved === true } : { key, label, secret, value: typeof saved === "string" ? saved : null };
-    }),
-  }));
+  return CONFIG_PROVIDERS.map((p) => {
+    const provider: ApiKeyProvider = {
+      ...p,
+      ready: false,
+      fields: p.fields.map(({ key, label, secret }): ApiKeyField => {
+        const saved = SAVED_KEYS[p.key]?.[key];
+        return secret ? { key, label, secret, set: saved === true } : { key, label, secret, value: typeof saved === "string" ? saved : null };
+      }),
+    };
+    return { ...provider, ready: keysReady(provider) };
+  });
 }
 
 export function createStore(): Store {
@@ -53,6 +60,7 @@ export function createStore(): Store {
     providerLots: [],
     accountHealth: {},
     loginMfa: false,
+    setupNeeded: false,
     faults: [],
     apiKeys: apiKeys(),
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },

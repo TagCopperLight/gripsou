@@ -11,6 +11,7 @@ fn app(db: sqlx::PgPool, static_dir: &std::path::Path) -> axum::Router {
         static_dir,
         std::sync::Arc::new(gripsou_jobs::testing::deps()),
         passkeys,
+        gripsou_api::setup::Setup::closed(),
     )
 }
 

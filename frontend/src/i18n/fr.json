@@ -14,6 +14,9 @@
     },
     "loading": "Chargement…",
     "retry": "Réessayer",
+    "stepOf": "Étape {{step}} sur {{total}}",
+    "next": "Suivant",
+    "back": "Retour",
     "loadFailed": "Chargement impossible",
     "tryAgain": "Réessayez dans un instant.",
     "refreshPage": "Actualisez la page.",
@@ -272,7 +275,51 @@
       "status": { "connecting": "Connexion…", "syncing": "Synchronisation…", "ok": "Connectée", "error": "Échec de la synchronisation" },
       "failed": "Votre banque n'a pas pu être connectée. Rien n'a été enregistré.",
       "tryAgain": "Réessayer",
-      "connectError": "Impossible d'ouvrir la connexion à la banque"
+      "connectError": "Impossible d'ouvrir la connexion à la banque",
+      "keysMissing": "Les clés bancaires ne sont pas encore configurées : impossible de connecter une banque pour l'instant. Ajoutez-les dans la configuration du serveur, ou passez cette étape.",
+      "setUpKeys": "Configurer les clés bancaires"
+    },
+    "server": {
+      "title": "Configuration du serveur",
+      "intro": "Avant de connecter une banque, gripsou a besoin de quelques clés de services externes. Chacune est facultative, mais sans les clés bancaires, vous ne pourrez pas encore connecter de banque. Vous pourrez tout modifier plus tard dans Paramètres › Serveur.",
+      "skip": "Passer",
+      "howTo": "Comment les obtenir",
+      "state": {
+        "ready": "Prêt",
+        "notSetUp": "Non configuré",
+        "off": "Désactivé"
+      },
+      "useProvider": "Connecter les banques via {{name}}",
+      "copyAddress": "Copier l'adresse",
+      "realtime": "Synchronisation en temps réel (facultatif)",
+      "bank": {
+        "title": "Connexions bancaires",
+        "what": "Nécessaires pour connecter vos banques."
+      },
+      "categorize": {
+        "title": "Catégorisation automatique",
+        "what": "Range les transactions dans les catégories du budget. Chaque utilisateur décide ensuite de l'activer ou non."
+      },
+      "logos": {
+        "title": "Logos des banques",
+        "what": "Affiche le logo de chaque banque. Sans clé, certains logos peuvent ne pas s'afficher."
+      },
+      "guide": {
+        "powens": {
+          "app": "Dans la console Powens, ouvrez votre domaine et créez une application cliente.",
+          "keys": "Copiez son identifiant client, son secret client et le nom du domaine (par exemple myapp-sandbox.biapi.pro) dans les champs ci-dessous.",
+          "address": "Autorisez cette adresse de retour dans les URI de redirection de l'application :",
+          "realtime": "Powens prévient gripsou dès qu'une banque a de nouvelles données, sans attendre la prochaine synchronisation prévue. Il faut pour cela un webhook et un appel à l'API de Powens : <a>suivez les étapes du README</a>, puis collez le secret ici."
+        },
+        "jev": {
+          "account": "Connectez-vous à la <a>console TypeSafe</a> et créez une clé d'API.",
+          "paste": "Collez-la ci-dessous, puis choisissez le fournisseur et son modèle."
+        },
+        "brandfetch": {
+          "account": "Créez un compte gratuit sur le <a>portail développeur de Brandfetch</a>.",
+          "paste": "Copiez l'identifiant client affiché sur son tableau de bord dans le champ ci-dessous."
+        }
+      }
     },
     "ai": {
       "title": "Catégoriser vos transactions automatiquement",
@@ -332,6 +379,14 @@
     "enterName": "Saisissez votre nom.",
     "resetFailed": "Impossible de mettre à jour votre mot de passe",
     "dataNotice": "Vos données sont stockées chiffrées, mais l'administrateur de ce serveur peut y accéder."
+  },
+  "setup": {
+    "title": "Configurer gripsou",
+    "adminNote": "Ce compte sera celui de l'administrateur.",
+    "code": "Code de configuration",
+    "codeHint": "Affiché dans le journal du serveur à son démarrage. Utilisez le plus récent.",
+    "enterCode": "Saisissez le code de configuration.",
+    "wrongCode": "Ce code ne correspond pas à celui du journal du serveur."
   },
   "roles": {
     "admin": "Admin",
@@ -937,10 +992,7 @@
   "twoFactor": {
     "setupTitle": "Activer la double authentification",
     "codesTitle": "Enregistrez vos codes de secours",
-    "stepOf": "Étape {{step}} sur {{total}}",
     "continue": "Continuer",
-    "next": "Suivant",
-    "back": "Retour",
     "done": "Terminé",
     "scanIntro": "Scannez ce QR code avec votre application d'authentification.",
     "qrAlt": "QR code à scanner avec votre application d'authentification",

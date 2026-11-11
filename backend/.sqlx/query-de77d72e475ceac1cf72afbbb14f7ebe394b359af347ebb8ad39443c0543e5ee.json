@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "insert into users (email, name, password_hash, role)\n           select $1, $2, $3, $4\n           where not exists (select 1 from users)\n           returning id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "de77d72e475ceac1cf72afbbb14f7ebe394b359af347ebb8ad39443c0543e5ee"
+}

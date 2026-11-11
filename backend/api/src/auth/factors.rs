@@ -55,10 +55,6 @@ pub fn totp_code(secret: &[u8], step: u64) -> String {
     totp.generate(step * TOTP_STEP_SECS).to_string()
 }
 
-fn ct_eq(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
-}
-
 /// The step `code` matches for this encrypted secret, at the current time.
 pub fn check_totp(
     key: &gripsou_core::crypto::EncryptionKey,
@@ -80,7 +76,7 @@ pub fn match_totp(secret: &[u8], code: &str, now_unix: u64) -> Option<u64> {
     let current = current_step(now_unix);
     let mut found = None;
     for step in [current.saturating_sub(1), current, current + 1] {
-        if ct_eq(totp_code(secret, step).as_bytes(), code.as_bytes()) {
+        if super::ct_eq(totp_code(secret, step).as_bytes(), code.as_bytes()) {
             found = Some(step);
         }
     }
