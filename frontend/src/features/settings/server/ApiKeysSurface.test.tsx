@@ -8,6 +8,9 @@ const KEYS: ApiKeyProvider[] = [
   {
     key: "powens",
     displayName: "Powens",
+    group: "bank",
+    ready: true,
+    returnAddress: "https://gripsou.example/connections/callback",
     fields: [
       { key: "client_id", label: "Client ID", secret: false, value: "id-1" },
       { key: "client_secret", label: "Client secret", secret: true, set: true },

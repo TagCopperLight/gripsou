@@ -42,6 +42,16 @@ export function authRoutes(r: Router<Store>): void {
     store.user = { ...store.user, name, email, welcomeDone: false };
     return { token: TOKEN, user: store.user };
   });
+  // The first account, an admin at the welcome screen; the code "wrong" is
+  // refused, as the server refuses one that isn't the printed code.
+  r.route("GET /setup", ({ store }) => ({ needed: store.setupNeeded }));
+  r.route("POST /setup", ({ store, body: { code, name, email } }) => {
+    if (!store.setupNeeded) return fail(404, "setup is closed");
+    if (code === WRONG) return fail(401, "wrong setup code");
+    store.setupNeeded = false;
+    store.user = { ...store.user, name, email, role: "admin", welcomeDone: false };
+    return { token: TOKEN, user: store.user };
+  });
   r.route("POST /auth/reset/:token/redeem", ({ store }) => ({ token: TOKEN, user: store.user }));
   r.route("POST /auth/welcome", ({ store }) => {
     store.user = { ...store.user, welcomeDone: true };

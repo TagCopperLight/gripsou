@@ -34,6 +34,7 @@ const unauth = signedOut();
 
 describe("route guard", () => {
   it("redirects an unauthenticated visit to a protected route to /login", async () => {
+    stubFetch(() => jsonResponse({ needed: false }));
     const router = renderAt("/accounts", unauth);
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"));
     expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();

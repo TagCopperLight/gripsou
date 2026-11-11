@@ -1,7 +1,7 @@
 // Copied from the backend: what the server seeds or declares that the mock
 // answers with too. Each block names its source; keep them in step.
 
-import type { BudgetCategory } from "../../src/api/wire.ts";
+import type { ApiKeyProvider, BudgetCategory } from "../../src/api/wire.ts";
 
 /** `seed_budget_categories` (backend/migrations/0033_budget_neutral_kind.sql):
  *  name, default key, colour, icon, kind, system key, hint. */
@@ -42,21 +42,41 @@ export const CATEGORY_SEED: [string, string, string, string, BudgetCategory["kin
 
 /** The providers with API keys, in the registry's order
  *  (backend/providers/src/registry.rs), each with its `fields`
- *  (providers/src/powens, providers/src/jev, providers/src/brandfetch.rs). */
-export const CONFIG_PROVIDERS: { key: string; displayName: string; fields: { key: string; label: string; secret: boolean }[] }[] = [
+ *  (providers/src/powens, providers/src/jev, providers/src/brandfetch.rs).
+ *  `optional`: a field the provider works without (Powens::from_config reads
+ *  the webhook secret without requiring it). */
+export const CONFIG_PROVIDERS: (Pick<ApiKeyProvider, "key" | "displayName" | "group" | "returnAddress"> & {
+  fields: { key: string; label: string; secret: boolean; optional?: true }[];
+})[] = [
   {
     key: "powens",
     displayName: "Powens",
+    group: "bank",
+    returnAddress: "https://gripsou.example/connections/callback",
     fields: [
       { key: "client_id", label: "Client ID", secret: false },
       { key: "domain", label: "Domain", secret: false },
       { key: "client_secret", label: "Client secret", secret: true },
-      { key: "webhook_secret", label: "Webhook secret", secret: true },
+      { key: "webhook_secret", label: "Webhook secret", secret: true, optional: true },
     ],
   },
-  { key: "jev", displayName: "JEV", fields: [{ key: "api_key", label: "API key", secret: true }] },
-  { key: "brandfetch", displayName: "Brandfetch", fields: [{ key: "client_id", label: "Client ID", secret: false }] },
+  { key: "jev", displayName: "JEV", group: "categorize", returnAddress: null, fields: [{ key: "api_key", label: "API key", secret: true }] },
+  {
+    key: "brandfetch",
+    displayName: "Brandfetch",
+    group: "logos",
+    returnAddress: null,
+    fields: [{ key: "client_id", label: "Client ID", secret: false }],
+  },
 ];
+
+/** `ApiKeyProvider.ready` (backend/api/src/admin/dto.rs): a bank provider
+ *  once its adapter can be built, a categoriser once its key is set, logos
+ *  once every field is. Each comes down to every field it needs being set. */
+export function keysReady(p: ApiKeyProvider): boolean {
+  const declared = CONFIG_PROVIDERS.find((c) => c.key === p.key)?.fields ?? [];
+  return p.fields.every((f) => declared.find((d) => d.key === f.key)?.optional || (f.secret ? f.set : f.value !== null));
+}
 
 // The Overview's rules (backend/core/src/budget/overview/calc.rs).
 /** A Sankey side keeps slices of at least this share of the period's expenses... */

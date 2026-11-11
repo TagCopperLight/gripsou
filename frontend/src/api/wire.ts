@@ -39,7 +39,16 @@ export type ApiKeyField = { key: string, label: string, secret: false, value: st
  * One provider's keys for Settings → Server. A secret's value never leaves
  * the server: only whether it is set.
  */
-export type ApiKeyProvider = { key: string, displayName: string, fields: Array<ApiKeyField>, };
+export type ApiKeyProvider = { key: string, displayName: string, group: KeyGroup, 
+/**
+ * Whether the saved keys are enough for what the group enables.
+ */
+ready: boolean, 
+/**
+ * For a bank provider, the address its console must allow, as the server
+ * sends it: the browser's own address can differ.
+ */
+returnAddress: string | null, fields: Array<ApiKeyField>, };
 
 export type ApplyToDescriptionBody = { categoryId?: string | null, 
 /**
@@ -264,6 +273,12 @@ export type InvestmentReturns = {
 today: string, total: ReturnFigures, accounts: Array<ReturnAccount>, };
 
 export type InviteLinkResp = { token: string, };
+
+/**
+ * What a provider's keys are for: the first-run server setup shows one
+ * section per group.
+ */
+export type KeyGroup = "bank" | "categorize" | "logos";
 
 /**
  * What `/auth/login` answers: a session, or (second factor enrolled) a
@@ -493,6 +508,10 @@ export type SetBudgetAiSettingsReq = { provider?: string | null, model?: string 
 export type SetProviderReq = { enabled: boolean, };
 
 export type SetRoleReq = { role: Role, };
+
+export type SetupReq = { code: string, email: string, name: string, password: string, };
+
+export type SetupStatus = { needed: boolean, };
 
 /**
  * One discriminated union for the Sankey's nodes, the breakdown's rows and

@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "../../../ui/Button";
 import { Dialog } from "../../../ui/Dialog";
+import { Tag } from "../../../ui/Tag";
 import { formatDate, formatRelative } from "../../../lib/date";
 import type { Session } from "../../../api/wire";
 
@@ -43,15 +44,15 @@ export function SessionDetailModal({
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-2">
           {session.current && (
-            <span className="rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
+            <Tag tone="green">
               {t("settings.account.thisDevice")}
-            </span>
+            </Tag>
           )}
-          <span className="rounded-md bg-surface-3 px-2 py-0.5 text-xs font-medium text-fg-dim">
+          <Tag tone="neutral">
             {session.remembered
               ? t("settings.account.sessionRemembered")
               : t("settings.account.sessionSingle")}
-          </span>
+          </Tag>
         </div>
 
         <dl className="flex flex-col gap-2 text-sm">

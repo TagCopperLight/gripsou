@@ -4,7 +4,7 @@ import { goTo } from "../../lib/navigate";
 import { Welcome } from "./Welcome";
 import { type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../api/wire";
-import type { SessionUser } from "../../api/wire";
+import type { ApiKeyProvider, SessionUser } from "../../api/wire";
 import { ApiError } from "../../api/client";
 import { authValue, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
@@ -22,13 +22,26 @@ const newcomer: SessionUser = {
 };
 
 
-type Server = { status?: string; providers: { key: string; displayName: string; description: string | null }[]; aiConfigured: boolean; connections: number };
+type Server = { status?: string; providers: { key: string; displayName: string; description: string | null }[]; aiConfigured: boolean; connections: number; bankReady: boolean };
 let server: Server;
 let fetchMock: ReturnType<typeof stubFetch>;
 
 function routes(url: string, init?: RequestInit) {
   const method = init?.method ?? "GET";
   if (url === "/api/providers/enabled") return jsonResponse(server.providers);
+  // Admin-only: what the server setup and the bank step's keys check read.
+  if (url === "/api/providers") return jsonResponse(server.providers.map((p) => ({ ...p, description: "", enabled: true })));
+  if (url === "/api/settings/api-keys")
+    return jsonResponse([
+      ...server.providers.map((p): ApiKeyProvider => ({
+        key: p.key, displayName: p.displayName, group: "bank", ready: server.bankReady, returnAddress: "https://g.example/connections/callback",
+        fields: [{ key: "client_id", label: "Client ID", secret: false, value: server.bankReady ? "id" : null }],
+      })),
+      {
+        key: "logos", displayName: "Logos", group: "logos", ready: false, returnAddress: null,
+        fields: [{ key: "client_id", label: "Client ID", secret: false, value: null }],
+      } satisfies ApiKeyProvider,
+    ]);
   if (url === "/api/budget/categorize/status") return jsonResponse({ configured: server.aiConfigured, running: false });
   if (url === "/api/connections")
     return jsonResponse(server.connections === 0 ? [] : [{
@@ -57,7 +70,7 @@ const posted = (path: string) =>
 beforeEach(() => {
   search = {};
   navigate.mockClear();
-  server = { providers: [{ key: "p1", displayName: "Provider", description: null }], aiConfigured: true, connections: 0 };
+  server = { providers: [{ key: "p1", displayName: "Provider", description: null }], aiConfigured: true, connections: 0, bankReady: true };
   fetchMock = stubFetch(routes);
 });
 
@@ -66,6 +79,42 @@ afterEach(() => {
 });
 
 describe("Welcome", () => {
+  it("opens on the server setup for an admin, one screen per group, then goes on to the steps", async () => {
+    renderWelcome({ user: { ...newcomer, role: "admin" } });
+    expect(await screen.findByRole("heading", { name: "Bank connections" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Step 1 of 2" })).toBeInTheDocument();
+    expect(screen.queryByText("Your preferences")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Skip setup for now" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Bank logos" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("heading", { name: "Bank connections" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    // Logos aren't set up: the last screen skips to the steps.
+    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+    expect(screen.getByText("Your preferences")).toBeInTheDocument();
+  });
+
+  it("starts on the steps for a member, without asking for the admin's keys", async () => {
+    renderWelcome();
+    expect(screen.getByText("Your preferences")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Server setup" })).not.toBeInTheDocument();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(fetchMock.mock.calls.some(([url]) => url === "/api/settings/api-keys")).toBe(false);
+  });
+
+  it("sends an admin back to the bank screen when the bank keys are missing", async () => {
+    search = { step: "bank" };
+    server.bankReady = false;
+    renderWelcome({ user: { ...newcomer, role: "admin" } });
+    const setUp = await screen.findByRole("button", { name: "Set up bank keys" });
+    expect(screen.queryByRole("button", { name: "Connect a bank" })).not.toBeInTheDocument();
+    fireEvent.click(setUp);
+    expect(await screen.findByRole("heading", { name: "Bank connections" })).toBeInTheDocument();
+  });
+
   it("pre-fills language and time zone from the browser", async () => {
     vi.spyOn(navigator, "languages", "get").mockReturnValue(["fr-FR", "en"]);
     const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;

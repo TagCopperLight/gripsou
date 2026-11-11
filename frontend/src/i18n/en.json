@@ -14,6 +14,9 @@
     },
     "loading": "Loading…",
     "retry": "Retry",
+    "stepOf": "Step {{step}} of {{total}}",
+    "next": "Next",
+    "back": "Back",
     "loadFailed": "Couldn't load this",
     "tryAgain": "Try again in a moment.",
     "refreshPage": "Refresh the page.",
@@ -272,7 +275,51 @@
       "status": { "connecting": "Connecting…", "syncing": "Syncing…", "ok": "Connected", "error": "Sync failed" },
       "failed": "Your bank couldn't be connected. Nothing was saved.",
       "tryAgain": "Try again",
-      "connectError": "Couldn't open the bank connection"
+      "connectError": "Couldn't open the bank connection",
+      "keysMissing": "The bank keys aren't set up yet, so a bank can't be connected. Add them in the server setup, or skip this step for now.",
+      "setUpKeys": "Set up bank keys"
+    },
+    "server": {
+      "title": "Server setup",
+      "intro": "Before you connect a bank, gripsou needs a few keys from outside services. Each one is optional, but without the bank keys you can't connect a bank yet. Change any of it later in Settings › Server.",
+      "skip": "Skip",
+      "howTo": "How to get them",
+      "state": {
+        "ready": "Ready",
+        "notSetUp": "Not set up",
+        "off": "Off"
+      },
+      "useProvider": "Connect banks through {{name}}",
+      "copyAddress": "Copy the address",
+      "realtime": "Real-time sync (optional)",
+      "bank": {
+        "title": "Bank connections",
+        "what": "Needed to connect your banks."
+      },
+      "categorize": {
+        "title": "Automatic categorisation",
+        "what": "Sorts transactions into budget categories. Each user still chooses to turn it on."
+      },
+      "logos": {
+        "title": "Bank logos",
+        "what": "Shows each bank's logo. Without a key, some logos may not load."
+      },
+      "guide": {
+        "powens": {
+          "app": "In the Powens console, open your domain and create a client application.",
+          "keys": "Copy its client ID and client secret, and the domain's name (like myapp-sandbox.biapi.pro), into the fields below.",
+          "address": "Allow this return address in the application's redirect URIs:",
+          "realtime": "Powens tells gripsou as soon as a bank has new data, instead of waiting for the next scheduled sync. It takes a webhook and a call to Powens' API: <a>follow the steps in the README</a>, then paste the secret here."
+        },
+        "jev": {
+          "account": "Sign in to the <a>TypeSafe console</a> and create an API key.",
+          "paste": "Paste it below, then pick the provider and its model."
+        },
+        "brandfetch": {
+          "account": "Create a free account on the <a>Brandfetch developer portal</a>.",
+          "paste": "Copy the client ID from its dashboard into the field below."
+        }
+      }
     },
     "ai": {
       "title": "Categorise your transactions automatically",
@@ -332,6 +379,14 @@
     "enterName": "Enter your name.",
     "resetFailed": "Couldn't update your password",
     "dataNotice": "Your data is encrypted at rest, but the owner of this server can view it."
+  },
+  "setup": {
+    "title": "Set up gripsou",
+    "adminNote": "This account will be the administrator.",
+    "code": "Setup code",
+    "codeHint": "Printed in the server's log when it started. Use the newest one.",
+    "enterCode": "Enter the setup code.",
+    "wrongCode": "This code doesn't match the one in the server's log."
   },
   "roles": {
     "admin": "Admin",
@@ -928,10 +983,7 @@
   "twoFactor": {
     "setupTitle": "Set up two-factor",
     "codesTitle": "Save your backup codes",
-    "stepOf": "Step {{step}} of {{total}}",
     "continue": "Continue",
-    "next": "Next",
-    "back": "Back",
     "done": "Done",
     "scanIntro": "Scan this QR code with your authenticator app.",
     "qrAlt": "QR code to scan with your authenticator app",

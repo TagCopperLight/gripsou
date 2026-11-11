@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { showError } from "../../../lib/errorToasts";
-import { Copy, Check } from "lucide-react";
 
 import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
@@ -12,6 +11,8 @@ import { throttledError } from "../../../auth/throttle";
 import { CodeInput } from "../../../ui/CodeInput";
 import { BackupCodes } from "./BackupCodes";
 import { useCopy } from "../../../lib/useCopy";
+import { Check, Copy } from "lucide-react";
+import { StepDots } from "../../../ui/StepDots";
 import { FieldError } from "../../../ui/FieldError";
 import { PasswordField } from "../../../ui/PasswordField";
 import { useReauthStep } from "../../../auth/useReauthStep";
@@ -80,14 +81,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
     }
   };
 
-  const index = STEPS.indexOf(step);
-  const progress = (
-    <span role="img" className="flex gap-1.5" aria-label={t("twoFactor.stepOf", { step: index + 1, total: STEPS.length })}>
-      {STEPS.map((s, i) => (
-        <span key={s} className={`h-1.5 w-5 rounded-full ${i <= index ? "bg-green" : "bg-surface-3"}`} />
-      ))}
-    </span>
-  );
+  const progress = <StepDots current={STEPS.indexOf(step)} total={STEPS.length} />;
 
   let body;
   let footer;
@@ -130,7 +124,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
     footer = (
       <>
         <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
-        <Button onClick={() => setStep("code")}>{t("twoFactor.next")}</Button>
+        <Button onClick={() => setStep("code")}>{t("common.next")}</Button>
       </>
     );
   } else if (step === "code") {
@@ -157,7 +151,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
     );
     footer = (
       <>
-        <Button variant="ghost" onClick={() => { setError(null); setStep("scan"); }}>{t("twoFactor.back")}</Button>
+        <Button variant="ghost" onClick={() => { setError(null); setStep("scan"); }}>{t("common.back")}</Button>
       </>
     );
   } else {

@@ -63,6 +63,8 @@ import type {
   SetBudgetAiSettingsReq,
   SetProviderReq,
   SetRoleReq,
+  SetupReq,
+  SetupStatus,
   SummaryParams,
   SyncAllResp,
   TagBody,
@@ -157,6 +159,8 @@ export const ROUTES = [
   "GET /settings/budget-ai/models/:provider",
   "PUT /settings/budget-ai/prices",
   "GET /settings/budget-ai/usage",
+  "GET /setup",
+  "POST /setup",
   "POST /sync",
   "GET /transactions",
   "PATCH /transactions/:id",
@@ -248,6 +252,8 @@ export type Api = {
   "GET /settings/budget-ai/models/:provider": { res: Array<string> };
   "PUT /settings/budget-ai/prices": { body: { [key in string]: BudgetAiPriceReq }; res: void };
   "GET /settings/budget-ai/usage": { res: BudgetAiUsage };
+  "GET /setup": { res: SetupStatus };
+  "POST /setup": { body: SetupReq; res: SessionResponse };
   "POST /sync": { res: SyncAllResp };
   "GET /transactions": { query: TransactionParams; res: Array<Transaction> };
   "PATCH /transactions/:id": { body: TransactionPatch; res: PatchResult };

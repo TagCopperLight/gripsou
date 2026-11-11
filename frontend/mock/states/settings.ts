@@ -1,3 +1,4 @@
+import { keysReady } from "../data/backend.ts";
 import { daysAgo } from "../data/util.ts";
 import { nothingConnected } from "./helpers.ts";
 import type { MockState } from "./pieces.ts";
@@ -13,6 +14,7 @@ export const apiKeys: MockState[] = [
           if (f.secret) f.set = false;
           else f.value = null;
         }
+        p.ready = keysReady(p);
       }
       store.aiSettings.available = [];
       store.aiSettings.provider = null;
@@ -150,6 +152,14 @@ export const server: MockState[] = [
 // Log out to reach /login; /invite/any, /reset/any, /invite/expired;
 // /connections/callback?state=x (add &error=1 for a failure).
 export const signIn: MockState[] = [
+  {
+    id: "setup-needed",
+    label: "Fresh install: no account yet (the setup code \"wrong\" is refused)",
+    pieces: ["Sign-in pages"],
+    apply(store) {
+      store.setupNeeded = true;
+    },
+  },
   {
     id: "login-two-factor",
     label: "Signing in asks for a code (000000 and the backup code \"wrong\" are refused)",

@@ -10,6 +10,7 @@ import { useUsers, useCreateInvite, useSetUserRole } from "../../../api/admin";
 import { useErrorToast } from "../../../lib/errorToasts";
 import { GridTable } from "../../../ui/GridTable";
 import { HEAD_CELL, ROW_CELLS, ROW_HOVER, type Track } from "../../../ui/gridTable";
+import { Tag } from "../../../ui/Tag";
 import { LinkModal } from "./LinkModal";
 import { ResetLinkModal } from "./ResetLinkModal";
 import { DeleteUserModal } from "./DeleteUserModal";
@@ -220,9 +221,9 @@ export function SettingsUsers() {
 function YouTag() {
   const { t } = useTranslation();
   return (
-    <span className="shrink-0 rounded-md bg-green-soft px-2 py-0.5 text-xs font-medium text-green">
+    <Tag tone="green">
       {t("settings.users.you")}
-    </span>
+    </Tag>
   );
 }
 
