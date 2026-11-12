@@ -30,17 +30,18 @@ export function SecurityScreen({
   // Leaving the screen closes a browser window still open.
   useEffect(() => creation.cancel, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (enrolment.step === "scan" && enrolment.setup) {
+  const { state } = enrolment;
+  if (state?.step === "scan") {
     return (
       <>
-        <TotpScan setup={enrolment.setup} />
+        <TotpScan setup={state.setup} />
         <WelcomeFooter onBack={enrolment.close}>
           <Button onClick={enrolment.toCode}>{t("common.next")}</Button>
         </WelcomeFooter>
       </>
     );
   }
-  if (enrolment.step === "code") {
+  if (state?.step === "code") {
     return (
       <>
         <TotpCode enrolment={enrolment} />
@@ -48,10 +49,10 @@ export function SecurityScreen({
       </>
     );
   }
-  if (enrolment.step === "codes") {
+  if (state?.step === "codes") {
     return (
       <>
-        <BackupCodes codes={enrolment.recoveryCodes} />
+        <BackupCodes codes={state.recoveryCodes} />
         <WelcomeFooter>
           <Button onClick={enrolment.close}>{t("twoFactor.done")}</Button>
         </WelcomeFooter>

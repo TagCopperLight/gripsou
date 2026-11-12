@@ -20,7 +20,8 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
     setPassword("");
     setError(t("twoFactor.expired"));
   });
-  const step = enrolment.step ?? "password";
+  const { state } = enrolment;
+  const step = state?.step ?? "password";
   const busy = checking || enrolment.busy;
 
   const submitPassword = async () => {
@@ -31,7 +32,7 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
 
   let body;
   let footer;
-  if (step === "password") {
+  if (state === null) {
     body = (
       <form className="flex flex-col gap-5" onSubmit={(e) => { e.preventDefault(); void submitPassword(); }}>
         <PasswordField value={password} onChange={setPassword} autoFocus error={error} />
@@ -44,19 +45,19 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
         <Button onClick={() => void submitPassword()} disabled={!password || busy}>{t("twoFactor.continue")}</Button>
       </>
     );
-  } else if (step === "scan" && enrolment.setup) {
-    body = <TotpScan setup={enrolment.setup} />;
+  } else if (state.step === "scan") {
+    body = <TotpScan setup={state.setup} />;
     footer = (
       <>
         <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
         <Button onClick={enrolment.toCode}>{t("common.next")}</Button>
       </>
     );
-  } else if (step === "code") {
+  } else if (state.step === "code") {
     body = <TotpCode enrolment={enrolment} />;
     footer = <Button variant="ghost" onClick={enrolment.backToScan}>{t("common.back")}</Button>;
   } else {
-    body = <BackupCodes codes={enrolment.recoveryCodes} />;
+    body = <BackupCodes codes={state.recoveryCodes} />;
     footer = <Button onClick={onClose}>{t("twoFactor.done")}</Button>;
   }
 

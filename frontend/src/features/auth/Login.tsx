@@ -17,6 +17,11 @@ import { useSetupStatus } from "../../api/setup";
 
 type Step = "password" | "passwordless" | "code" | "backup";
 
+/** A message under the step's last field. `refused` rings the fields: what
+ *  was typed is wrong, rather than a throttle, an expiry or a server failure. */
+type LoginError = { text: string; refused: boolean };
+const failed = (text: string): LoginError => ({ text, refused: false });
+
 export function Login() {
   const { t } = useTranslation();
   const { login, loginWithPasskey, verifyLogin } = useAuth();
@@ -31,7 +36,7 @@ export function Login() {
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [backupCode, setBackupCode] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<LoginError | null>(null);
   const [pending, setPending] = useState(false);
 
   // A server with no account yet is set up first. If the server doesn't
@@ -43,7 +48,7 @@ export function Login() {
     if (setupNeeded) void navigate({ to: "/setup", replace: true });
   }, [setupNeeded, navigate]);
 
-  const backToPassword = (message: string | null = null) => {
+  const backToPassword = (message: LoginError | null = null) => {
     setStep("password");
     setChallenge(null);
     setPassword("");
@@ -67,9 +72,11 @@ export function Login() {
     } catch (err) {
       // 401 is the server's answer to a wrong email or password; anything
       // else failed on its side, and must not blame what was typed.
+      const throttled = throttledError(t, err);
       setError(
-        throttledError(t, err) ??
-          (err instanceof ApiError && err.status === 401 ? t("auth.invalidCredentials") : t("auth.mfa.failed")),
+        throttled ? failed(throttled)
+        : err instanceof ApiError && err.status === 401 ? { text: t("auth.invalidCredentials"), refused: true }
+        : failed(t("auth.mfa.failed")),
       );
     } finally {
       setPending(false);
@@ -91,8 +98,10 @@ export function Login() {
       // 410: the sign-in's challenge expired while the browser window was open.
       if (err instanceof ApiError) {
         setError(
-          throttledError(t, err) ??
-            (err.status === 400 || err.status === 410 ? t("auth.mfa.passkeyRefused") : t("auth.mfa.failed")),
+          failed(
+            throttledError(t, err) ??
+              (err.status === 400 || err.status === 410 ? t("auth.mfa.passkeyRefused") : t("auth.mfa.failed")),
+          ),
         );
       }
     }
@@ -107,13 +116,15 @@ export function Login() {
     } catch (err) {
       // 410: the challenge expired (5 minutes) or was used up; start over.
       if (err instanceof ApiError && err.status === 410) {
-        backToPassword(t("auth.mfa.expired"));
+        backToPassword(failed(t("auth.mfa.expired")));
         return;
       }
       setCode("");
+      const throttled = throttledError(t, err);
       setError(
-        throttledError(t, err) ??
-          (err instanceof ApiError && err.status === 400 ? t("auth.mfa.wrongCode") : t("auth.mfa.failed")),
+        throttled ? failed(throttled)
+        : err instanceof ApiError && err.status === 400 ? { text: t("auth.mfa.wrongCode"), refused: true }
+        : failed(t("auth.mfa.failed")),
       );
     } finally {
       setPending(false);
@@ -128,10 +139,8 @@ export function Login() {
     setStep(next);
   };
 
-  // Under the step's last field. Its ring only when what was typed was refused,
-  // not for a throttle, an expiry or a passkey that didn't work.
-  const errorLine = error && <FieldError>{error}</FieldError>;
-  const refused = error === t("auth.invalidCredentials") || error === t("auth.mfa.wrongCode");
+  const errorLine = error && <FieldError>{error.text}</FieldError>;
+  const refused = error?.refused ?? false;
 
   // The account being signed into, with a way back to the password. Leaving
   // a step is disabled while its code is checked, so the answer can't land on
