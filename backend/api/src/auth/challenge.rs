@@ -120,6 +120,28 @@ pub async fn spend_reauth(
     }
 }
 
+/// The reauth token adding a second factor needs, or `None` while the user
+/// hasn't finished the welcome flow, which offers a second factor right after
+/// signing up and asks for no password there: the caller then has nothing to
+/// check or spend.
+pub async fn factor_reauth<'a>(
+    pool: &sqlx::PgPool,
+    user_id: Uuid,
+    reauth: Option<&'a str>,
+) -> Result<Option<&'a str>, ApiError> {
+    if reauth.is_some() {
+        return Ok(reauth);
+    }
+    let profile = gripsou_core::repo::user::profile_by_id(pool, user_id)
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
+    if profile.welcome_done {
+        Err(ApiError::ReauthRequired)
+    } else {
+        Ok(None)
+    }
+}
+
 /// Check a reauth token without spending it (a ceremony that finishes later
 /// spends it).
 pub async fn check_reauth(pool: &sqlx::PgPool, user_id: Uuid, token: &str) -> Result<(), ApiError> {

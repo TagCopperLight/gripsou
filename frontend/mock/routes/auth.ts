@@ -105,8 +105,13 @@ export function authRoutes(r: Router<Store>): void {
     return reply(204);
   });
 
+  // Adding a second factor asks for no password during the welcome flow.
+  const factorRefused = (welcomeDone: boolean, reauth: string | undefined) =>
+    welcomeDone && reauth === undefined && fail(403, "reauthentication required");
   // Two-factor: any 6 digits confirm the app, except "000000".
-  r.route("POST /auth/mfa/totp/setup", () => ({ secret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP", qrSvg: QR_SVG }));
+  r.route("POST /auth/mfa/totp/setup", ({ store, body }) =>
+    factorRefused(store.user.welcomeDone, body.reauth) || { secret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP", qrSvg: QR_SVG },
+  );
   r.route("POST /auth/mfa/totp/confirm", ({ store, body }) => {
     if (body.code === "000000") return fail(400, "invalid code");
     store.mfa = { ...store.mfa, totp: true, recoveryRemaining: 10 };
@@ -121,7 +126,7 @@ export function authRoutes(r: Router<Store>): void {
     return { recoveryCodes: RECOVERY_CODES };
   });
   // A real passkey for the review's host, which any later passkey sign-in accepts.
-  r.route("POST /auth/mfa/passkeys/register/options", ({ store }) => ({
+  r.route("POST /auth/mfa/passkeys/register/options", ({ store, body }) => factorRefused(store.user.welcomeDone, body.reauth) || ({
     challenge: CHALLENGE,
     options: {
       challenge: CHALLENGE,
@@ -133,7 +138,9 @@ export function authRoutes(r: Router<Store>): void {
       timeout: 300_000,
     },
   }));
-  r.route("POST /auth/mfa/passkeys/register", ({ store }) => {
+  r.route("POST /auth/mfa/passkeys/register", ({ store, body }) => {
+    const refused = factorRefused(store.user.welcomeDone, body.reauth);
+    if (refused) return refused;
     const added = { id: store.ids.next("passkey"), name: "Passkey", createdAt: Date.now(), lastUsedAt: null };
     store.mfa = { ...store.mfa, passkeys: [...store.mfa.passkeys, added] };
     return added;

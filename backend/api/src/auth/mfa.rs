@@ -49,21 +49,23 @@ pub async fn status(
 
 /// Start (or restart) enrolment: a fresh secret replaces any unconfirmed one
 /// and restarts its 10-minute confirmation window.
-/// Needs a fresh reauth token: otherwise a stolen session could enrol its own
-/// authenticator and lock the owner out. Like every reauth-gated change, the
-/// checks that need no password come first, so a refusal doesn't spend the
-/// token.
+/// Needs a fresh reauth token (outside the welcome flow): otherwise a stolen
+/// session could enrol its own authenticator and lock the owner out. Like
+/// every reauth-gated change, the checks that need no password come first, so
+/// a refusal doesn't spend the token.
 pub async fn totp_setup(
     State(pool): State<PgPool>,
     State(key): State<EncryptionKey>,
     AuthUser { user_id, .. }: AuthUser,
-    Json(body): Json<dto::ReauthTokenReq>,
+    Json(body): Json<dto::FactorSetupReq>,
 ) -> Result<Json<dto::TotpSetup>, ApiError> {
     let already = || ApiError::Conflict("authenticator already set up");
     if mfa::status(&pool, user_id).await?.totp {
         return Err(already());
     }
-    spend_reauth(&pool, user_id, &body.reauth).await?;
+    if let Some(token) = challenge::factor_reauth(&pool, user_id, body.reauth.as_deref()).await? {
+        spend_reauth(&pool, user_id, token).await?;
+    }
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
         .await?
         .ok_or(ApiError::Unauthorized)?;
@@ -170,20 +172,20 @@ mod tests {
 
     async fn setup(pool: &PgPool, a: &AuthUser) -> Result<Json<dto::TotpSetup>, ApiError> {
         let token = reauth_token(pool, a, "hunter22").await;
-        setup_with(pool, a, &token).await
+        setup_with(pool, a, Some(&token)).await
     }
 
     async fn setup_with(
         pool: &PgPool,
         a: &AuthUser,
-        token: &str,
+        token: Option<&str>,
     ) -> Result<Json<dto::TotpSetup>, ApiError> {
         totp_setup(
             State(pool.clone()),
             State(key()),
             a.clone(),
-            Json(dto::ReauthTokenReq {
-                reauth: token.into(),
+            Json(dto::FactorSetupReq {
+                reauth: token.map(Into::into),
             }),
         )
         .await
@@ -322,6 +324,21 @@ mod tests {
         assert!(confirm(&pool, &me, totp_now(&second)).await.is_ok());
     }
 
+    /// The welcome flow offers it without the password; afterwards it's asked.
+    #[gripsou_core::testkit::db_test]
+    async fn setup_needs_no_reauth_until_the_welcome_is_done(pool: PgPool) {
+        let uid = seed_user(&pool, "a@t.local").await;
+        let me = seed_session(&pool, uid).await;
+        assert!(setup_with(&pool, &me, None).await.is_ok());
+        gripsou_core::repo::user::finish_welcome(&pool, uid)
+            .await
+            .unwrap();
+        assert_eq!(
+            setup_with(&pool, &me, None).await.unwrap_err(),
+            ApiError::ReauthRequired
+        );
+    }
+
     #[gripsou_core::testkit::db_test]
     async fn setup_needs_a_fresh_reauth_of_the_caller(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
@@ -329,20 +346,26 @@ mod tests {
         let me = seed_session(&pool, uid).await;
         let other = seed_session(&pool, other_uid).await;
         for bad in ["", "random-token"] {
-            let err = setup_with(&pool, &me, bad).await.unwrap_err();
+            let err = setup_with(&pool, &me, Some(bad)).await.unwrap_err();
             assert_eq!(err, ApiError::ReauthRequired);
         }
         let theirs = reauth_token(&pool, &other, "hunter22").await;
         assert_eq!(
-            setup_with(&pool, &me, &theirs).await.unwrap_err().status(),
+            setup_with(&pool, &me, Some(&theirs))
+                .await
+                .unwrap_err()
+                .status(),
             StatusCode::FORBIDDEN
         );
         assert!(repo::totp(&pool, uid).await.unwrap().is_none());
         // Single use.
         let tok = reauth_token(&pool, &me, "hunter22").await;
-        assert!(setup_with(&pool, &me, &tok).await.is_ok());
+        assert!(setup_with(&pool, &me, Some(&tok)).await.is_ok());
         assert_eq!(
-            setup_with(&pool, &me, &tok).await.unwrap_err().status(),
+            setup_with(&pool, &me, Some(&tok))
+                .await
+                .unwrap_err()
+                .status(),
             StatusCode::FORBIDDEN
         );
     }
@@ -370,7 +393,7 @@ mod tests {
         let me = seed_session(&pool, uid).await;
         enrol(&pool, &me).await;
         let token = reauth_token(&pool, &me, "hunter22").await;
-        let err = setup_with(&pool, &me, &token).await.unwrap_err();
+        let err = setup_with(&pool, &me, Some(&token)).await.unwrap_err();
         assert_eq!(err.status(), StatusCode::CONFLICT);
         assert_eq!(err.message(), "authenticator already set up");
         assert!(reauth_valid(&pool, &token).await);

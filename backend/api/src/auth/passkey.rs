@@ -89,15 +89,18 @@ fn default_name(client: &Client) -> String {
         .collect()
 }
 
-/// Start adding a passkey. Needs a fresh reauth token, checked but not spent,
-/// so a cancelled browser prompt can be retried without the password.
+/// Start adding a passkey. Needs a fresh reauth token (outside the welcome
+/// flow), checked but not spent, so a cancelled browser prompt can be retried
+/// without the password.
 pub async fn register_options(
     State(pool): State<PgPool>,
     State(pk): State<Passkeys>,
     AuthUser { user_id, .. }: AuthUser,
-    Json(body): Json<dto::ReauthTokenReq>,
+    Json(body): Json<dto::FactorSetupReq>,
 ) -> Result<Json<dto::PasskeyOptions>, ApiError> {
-    check_reauth(&pool, user_id, &body.reauth).await?;
+    if let Some(token) = challenge::factor_reauth(&pool, user_id, body.reauth.as_deref()).await? {
+        check_reauth(&pool, user_id, token).await?;
+    }
     let profile = gripsou_core::repo::user::profile_by_id(&pool, user_id)
         .await?
         .ok_or(ApiError::Unauthorized)?;
@@ -134,12 +137,15 @@ pub async fn register(
     }: AuthUser,
     Json(body): Json<dto::PasskeyRegisterReq>,
 ) -> Result<Json<dto::PasskeyInfo>, ApiError> {
+    let reauth = challenge::factor_reauth(&pool, user_id, body.reauth.as_deref()).await?;
     let mut tx = pool.begin().await?;
     let ceremony = challenge::consume::<PasskeyRegister>(&mut *tx, &body.challenge)
         .await?
         .filter(|c| c.user_id == Some(user_id))
         .ok_or(ApiError::ChallengeExpired)?;
-    spend_reauth(&mut *tx, user_id, &body.reauth).await?;
+    if let Some(token) = reauth {
+        spend_reauth(&mut *tx, user_id, token).await?;
+    }
     let passkey =
         pk.0.finish_passkey_registration(&body.credential, &ceremony.state.reg)
             .map_err(|e| {
@@ -396,8 +402,8 @@ mod tests {
             State(pool.clone()),
             State(passkeys()),
             a.clone(),
-            Json(dto::ReauthTokenReq {
-                reauth: reauth.into(),
+            Json(dto::FactorSetupReq {
+                reauth: Some(reauth.into()),
             }),
         )
         .await
@@ -417,7 +423,7 @@ mod tests {
             firefox(),
             a.clone(),
             Json(dto::PasskeyRegisterReq {
-                reauth: reauth.into(),
+                reauth: Some(reauth.into()),
                 challenge: o.challenge.clone(),
                 credential: soft.register(&o.options),
             }),
@@ -461,6 +467,40 @@ mod tests {
             .0;
         assert_eq!(st.passkeys.len(), 1);
         assert!(!st.totp, "a passkey doesn't turn two-factor on");
+    }
+
+    /// The welcome flow offers it without the password; afterwards it's asked.
+    #[gripsou_core::testkit::db_test]
+    async fn adding_needs_no_reauth_until_the_welcome_is_done(pool: PgPool) {
+        let u = seed_user(&pool, "a@t.local").await;
+        let a = seed_session(&pool, u).await;
+        let start = || {
+            register_options(
+                State(pool.clone()),
+                State(passkeys()),
+                a.clone(),
+                Json(dto::FactorSetupReq { reauth: None }),
+            )
+        };
+        let o = start().await.expect("options at the welcome flow").0;
+        let mut soft = Soft::new();
+        register(
+            State(pool.clone()),
+            State(passkeys()),
+            firefox(),
+            a.clone(),
+            Json(dto::PasskeyRegisterReq {
+                reauth: None,
+                challenge: o.challenge.clone(),
+                credential: soft.register(&o.options),
+            }),
+        )
+        .await
+        .expect("added at the welcome flow");
+        gripsou_core::repo::user::finish_welcome(&pool, u)
+            .await
+            .unwrap();
+        assert_eq!(start().await.err().unwrap(), ApiError::ReauthRequired);
     }
 
     #[gripsou_core::testkit::db_test]
@@ -510,7 +550,7 @@ mod tests {
             firefox(),
             a.clone(),
             Json(dto::PasskeyRegisterReq {
-                reauth: reauth.clone(),
+                reauth: Some(reauth.clone()),
                 challenge: o.challenge.clone(),
                 credential: wrong,
             }),
@@ -620,7 +660,7 @@ mod tests {
             firefox(),
             a.clone(),
             Json(dto::PasskeyRegisterReq {
-                reauth: reauth.clone(),
+                reauth: Some(reauth.clone()),
                 challenge: o.challenge.clone(),
                 credential,
             }),

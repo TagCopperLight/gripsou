@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronRight, Fingerprint, KeyRound, Loader2, Monitor, Plus, Settings, ShieldCheck, Smartphone } from "lucide-react";
+import { ChevronRight, KeyRound, Monitor, Plus, Settings, Smartphone } from "lucide-react";
 
 import { Surface } from "../../../ui/Surface";
 import { SettingsSurface } from "../../../ui/SettingsSurface";
@@ -18,6 +18,7 @@ import { TotpSetupModal } from "../security/TotpSetupModal";
 import { ManageTwoFactorModal } from "../security/ManageTwoFactorModal";
 import { PasskeysModal } from "../security/PasskeysModal";
 import { AddPasskeyModal } from "../security/AddPasskeyModal";
+import { PasskeyRow, SecurityRow, TotpRow } from "../security/SecurityRow";
 import { useMfaStatus, useSessions, useRevokeSession, useRevokeOtherSessions } from "../../../api/auth";
 import { useAuth } from "../../../auth/context";
 import type { Session } from "../../../api/wire";
@@ -32,6 +33,7 @@ export function SettingsAccount() {
   const [settingUp, setSettingUp] = useState(false);
   const [managing, setManaging] = useState<"menu" | "turnOff" | null>(null);
   const [passkeysOpen, setPasskeysOpen] = useState(false);
+  const totp = mfa.data?.totp ?? false;
   const hasPasskeys = (mfa.data?.passkeys.length ?? 0) > 0;
   const [addingPasskey, setAddingPasskey] = useState(false);
   const addPasskey = () => {
@@ -91,73 +93,51 @@ export function SettingsAccount() {
               </Button>
             }
           />
-          <SecurityRow
-            icon={
-              mfa.data?.totp ? (
-                <ShieldCheck className="size-4.5" strokeWidth={2} />
-              ) : (
-                <Smartphone className="size-4.5" strokeWidth={2} />
-              )
-            }
-            iconTone={mfa.data?.totp ? "bg-green-soft text-green" : undefined}
-            title={t("settings.account.twoFactor")}
-            hint={mfa.isError && <span className="text-red">{t("common.loadFailed")}</span>}
+          <TotpRow
             action={
-              !mfa.data ? (
-                <MfaPending failed={mfa.isError} onRetry={() => mfa.refetch()} />
-              ) : (
-                <div className="flex items-center gap-3">
-                  {mfa.data.totp && (
-                    <button
-                      type="button"
-                      onClick={() => setManaging("menu")}
-                      aria-label={t("settings.account.manage")}
-                      className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
-                    >
-                      <Settings className="size-4.5" strokeWidth={2} />
-                    </button>
-                  )}
-                  <Toggle
-                    checked={mfa.data.totp}
-                    onChange={(on) => (on ? setSettingUp(true) : setManaging("turnOff"))}
-                    aria-label={t("settings.account.twoFactor")}
-                    offClassName="bg-surface-3"
-                  />
-                </div>
-              )
-            }
-          />
-          <SecurityRow
-            icon={<Fingerprint className="size-4.5" strokeWidth={2} />}
-            iconTone={hasPasskeys ? "bg-green-soft text-green" : undefined}
-            title={t("passkeys.title")}
-            hint={mfa.isError && <span className="text-red">{t("common.loadFailed")}</span>}
-            action={
-              !mfa.data ? (
-                <MfaPending failed={mfa.isError} onRetry={() => mfa.refetch()} />
-              ) : (
-                <div className="flex items-center gap-3">
-                  {hasPasskeys && (
-                    <button
-                      type="button"
-                      onClick={() => setPasskeysOpen(true)}
-                      aria-label={t("settings.account.manage")}
-                      className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
-                    >
-                      <Settings className="size-4.5" strokeWidth={2} />
-                    </button>
-                  )}
-                  {/* As wide as the two-factor switch above, so the gears line up. */}
+              <div className="flex items-center gap-3">
+                {totp && (
                   <button
                     type="button"
-                    onClick={addPasskey}
-                    aria-label={t("passkeys.addPasskey")}
-                    className="flex h-7.5 w-11 cursor-pointer items-center justify-center rounded-lg text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
+                    onClick={() => setManaging("menu")}
+                    aria-label={t("settings.account.manage")}
+                    className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
                   >
-                    <Plus className="size-5" strokeWidth={2} />
+                    <Settings className="size-4.5" strokeWidth={2} />
                   </button>
-                </div>
-              )
+                )}
+                <Toggle
+                  checked={totp}
+                  onChange={(on) => (on ? setSettingUp(true) : setManaging("turnOff"))}
+                  aria-label={t("settings.account.twoFactor")}
+                  offClassName="bg-surface-3"
+                />
+              </div>
+            }
+          />
+          <PasskeyRow
+            action={
+              <div className="flex items-center gap-3">
+                {hasPasskeys && (
+                  <button
+                    type="button"
+                    onClick={() => setPasskeysOpen(true)}
+                    aria-label={t("settings.account.manage")}
+                    className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
+                  >
+                    <Settings className="size-4.5" strokeWidth={2} />
+                  </button>
+                )}
+                {/* As wide as the two-factor switch above, so the gears line up. */}
+                <button
+                  type="button"
+                  onClick={addPasskey}
+                  aria-label={t("passkeys.addPasskey")}
+                  className="flex h-7.5 w-11 cursor-pointer items-center justify-center rounded-lg text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
+                >
+                  <Plus className="size-5" strokeWidth={2} />
+                </button>
+              </div>
             }
           />
         </div>
@@ -320,45 +300,4 @@ export function SettingsAccount() {
 /** A phone or tablet, from the device name the server writes ("Safari on iPhone"). */
 function isPhone(device: string): boolean {
   return /iPhone|iPad|Android|Mobile/i.test(device);
-}
-
-/** A security row's control while two-factor's status loads, or a retry
- *  once it failed (the row's hint says so). */
-function MfaPending({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
-  const { t } = useTranslation();
-  if (!failed) return <Loader2 aria-label={t("common.loading")} className="size-4.5 animate-spin text-fg-faint" />;
-  return (
-    <Button variant="ghostStrong" onClick={onRetry}>
-      {t("common.retry")}
-    </Button>
-  );
-}
-
-function SecurityRow({
-  icon,
-  iconTone = "bg-surface-3 text-fg-dim",
-  title,
-  hint,
-  action,
-}: {
-  icon: ReactNode;
-  iconTone?: string;
-  title: string;
-  hint?: ReactNode;
-  action: ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-4 rounded-xl bg-surface-2 px-4 py-3">
-      <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg transition-colors duration-140 ${iconTone}`}>
-        {icon}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="text-[15px] text-fg">{title}</span>
-        </span>
-        {hint && <span className="text-sm text-fg-faint">{hint}</span>}
-      </div>
-      <div className="shrink-0">{action}</div>
-    </div>
-  );
 }

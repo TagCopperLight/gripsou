@@ -179,7 +179,7 @@ export const signIn: MockState[] = [
   },
   {
     id: "welcome-no-ai",
-    label: "No AI provider (the welcome screen has two steps)",
+    label: "No AI provider (the welcome flow has no AI screen)",
     pieces: ["Sign-in pages"],
     apply(store) {
       store.aiStatus = { ...store.aiStatus, configured: false };

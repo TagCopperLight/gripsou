@@ -91,13 +91,13 @@
     }
   },
   "fx": {
-    "fetching": "Récupération du taux de change {{currency}}…",
-    "refused": "Impossible d'obtenir le taux de change {{currency}}. Réessayez plus tard.",
-    "excludes_one": "{{count}} actif n'est pas compté : son taux de change n'est pas encore disponible.",
-    "excludes_other": "{{count}} actifs ne sont pas comptés : leur taux de change n'est pas encore disponible.",
-    "excludesSome": "Certains montants ne sont pas comptés : leur taux de change n'est pas encore disponible.",
+    "fetching": "Récupération du taux de change ({{currency}})…",
+    "refused": "Impossible d'obtenir le taux de change ({{currency}}). Réessayez plus tard.",
+    "excludes_one": "{{count}} actif n'est pas compté : son taux de change n'est pas encore disponible.",
+    "excludes_other": "{{count}} actifs ne sont pas comptés : leur taux de change n'est pas encore disponible.",
+    "excludesSome": "Certains montants ne sont pas comptés : leur taux de change n'est pas encore disponible.",
     "budget": "Les opérations dans une devise sans taux de change ne sont pas encore comptées.",
-    "holdings": "Taux de change pas encore disponible : montant affiché dans sa devise d'origine, non compté dans les totaux."
+    "holdings": "Taux de change pas encore disponible : montant affiché dans sa devise d'origine, non compté dans les totaux."
   },
   "dashboard": {
     "netWorth": {
@@ -220,23 +220,23 @@
     }
   },
   "connectionGuide": {
-    "howItWorks": "Comment ça marche ?",
+    "howItWorks": "Comment ça marche ?",
     "gotIt": "Compris",
     "readOnly": {
       "title": "Lecture seule",
-      "bodyOne": "gripsou consulte vos comptes et vos transactions par l'intermédiaire de {{provider}}, un prestataire agréé, et en conserve une copie. Il ne peut faire ni virement ni paiement.",
-      "body": "gripsou consulte vos comptes et vos transactions par l'intermédiaire d'un prestataire agréé, et en conserve une copie. Il ne peut faire ni virement ni paiement."
+      "bodyOne": "gripsou récupère vos comptes et vos transactions via {{provider}}, un prestataire agréé, et en garde une copie. Il ne peut faire aucun virement ni paiement.",
+      "body": "gripsou récupère vos comptes et vos transactions via un prestataire agréé, et en garde une copie. Il ne peut faire aucun virement ni paiement."
     }
   },
   "powens": {
     "guide": {
       "psd2": {
-        "title": "Une autorisation auprès de votre banque",
-        "body": "Vous donnez votre accord (DSP2) depuis le site ou l'application de votre banque."
+        "title": "D'abord, l'accès officiel de votre banque",
+        "body": "Vous autorisez l'accès (DSP2) sur le site ou l'application de votre banque."
       },
       "login": {
-        "title": "Parfois, vos identifiants bancaires",
-        "body": "Certains comptes, souvent un PEA ou une assurance vie, échappent à cette autorisation. Pour les récupérer, Powens peut vous demander l'identifiant et le mot de passe de votre banque ; gripsou ne les voit jamais. Libre à vous de refuser : ces comptes seront alors absents."
+        "title": "Ensuite, peut-être vos identifiants",
+        "body": "L'accès officiel ne couvre pas certains comptes, souvent un PEA ou une assurance vie. Pour les récupérer, Powens peut vous demander l'identifiant et le mot de passe de votre banque, qui ne sont jamais transmis à gripsou. Vous pouvez refuser : ces comptes n'apparaîtront simplement pas."
       }
     },
     "issue": "Powens signale un problème ({{state}}).",
@@ -252,83 +252,85 @@
   },
   "welcome": {
     "title": "Bienvenue, {{name}}",
-    "privacy": "Cette instance de gripsou est hébergée par la personne qui vous a invité. Elle peut accéder à vos données en tant que propriétaire du serveur.",
-    "edit": "Modifier",
-    "continue": "Continuer",
+    "privacy": "Ce serveur gripsou appartient à la personne qui vous a invité : elle a donc accès à vos données.",
     "finish": "Terminer",
-    "skipAll": "Passer la configuration pour l'instant",
+    "skipAll": "Configurer plus tard",
     "finishError": "Impossible de terminer la configuration",
+    "skip": "Passer cette étape",
     "prefs": {
-      "title": "Vos préférences",
       "language": "Langue",
       "currency": "Devise",
       "timeZone": "Fuseau horaire"
+    },
+    "twoFactor": {
+      "title": "Protéger votre compte",
+      "passkeyCount_one": "{{count}} clé d'accès",
+      "passkeyCount_other": "{{count}} clés d'accès",
+      "setUp": "Configurer",
+      "on": "Activée",
+      "add": "Ajouter",
+      "addAnother": "En ajouter une",
+      "expired": "Le délai est dépassé. Recommencez la configuration.",
+      "skipTitle": "Continuer sans protéger votre compte ?",
+      "skipBody": "Votre compte administre ce serveur et donne accès aux données de tous ses utilisateurs. Sans double authentification, votre mot de passe suffit pour y entrer.",
+      "skipConfirm": "Passer quand même",
+      "setUpNow": "Configurer maintenant"
     },
     "bank": {
       "title": "Connecter une banque",
       "connect": "Connecter une banque",
       "addAnother": "Ajouter une autre banque",
-      "skip": "Passer cette étape",
-      "connected_one": "{{count}} banque connectée",
-      "connected_other": "{{count}} banques connectées",
-      "skipped": "Étape ignorée. Vous pourrez connecter une banque plus tard dans Paramètres › Connexions.",
-      "status": { "connecting": "Connexion…", "syncing": "Synchronisation…", "ok": "Connectée", "error": "Échec de la synchronisation" },
-      "failed": "Votre banque n'a pas pu être connectée. Rien n'a été enregistré.",
+      "status": { "connecting": "Connexion en cours…", "syncing": "Synchronisation en cours…", "ok": "Connectée", "error": "Échec de la synchronisation" },
+      "failed": "La connexion à votre banque a échoué. Rien n'a été enregistré.",
       "tryAgain": "Réessayer",
-      "connectError": "Impossible d'ouvrir la connexion à la banque",
-      "keysMissing": "Les clés bancaires ne sont pas encore configurées : impossible de connecter une banque pour l'instant. Ajoutez-les dans la configuration du serveur, ou passez cette étape.",
-      "setUpKeys": "Configurer les clés bancaires"
+      "connectError": "Impossible de lancer la connexion à la banque",
+      "keysMissing": "Les clés de connexion bancaire du serveur ne sont pas encore renseignées, vous ne pouvez donc pas connecter de banque. Ajoutez-les maintenant, ou passez cette étape.",
+      "setUpKeys": "Ajouter les clés"
     },
     "server": {
-      "title": "Configuration du serveur",
-      "intro": "Avant de connecter une banque, gripsou a besoin de quelques clés de services externes. Chacune est facultative, mais sans les clés bancaires, vous ne pourrez pas encore connecter de banque. Vous pourrez tout modifier plus tard dans Paramètres › Serveur.",
-      "skip": "Passer",
-      "howTo": "Comment les obtenir",
       "state": {
-        "ready": "Prêt",
-        "notSetUp": "Non configuré",
+        "ready": "En service",
+        "notSetUp": "À configurer",
         "off": "Désactivé"
       },
-      "useProvider": "Connecter les banques via {{name}}",
+      "useProvider": "Utiliser {{name}} pour connecter les banques",
       "copyAddress": "Copier l'adresse",
-      "realtime": "Synchronisation en temps réel (facultatif)",
+      "realtime": "Synchronisation en temps réel",
       "bank": {
         "title": "Connexions bancaires",
-        "what": "Nécessaires pour connecter vos banques."
+        "what": "Ces clés permettent de connecter les banques."
       },
       "categorize": {
         "title": "Catégorisation automatique",
-        "what": "Range les transactions dans les catégories du budget. Chaque utilisateur décide ensuite de l'activer ou non."
+        "what": "Classe les transactions dans les catégories du budget. Chaque utilisateur choisit ensuite de l'activer ou non."
       },
       "logos": {
         "title": "Logos des banques",
-        "what": "Affiche le logo de chaque banque. Sans clé, certains logos peuvent ne pas s'afficher."
+        "what": "Affiche le logo de chaque banque. Sans clé, certains logos risquent de ne pas s'afficher."
       },
       "guide": {
         "powens": {
           "app": "Dans la console Powens, ouvrez votre domaine et créez une application cliente.",
-          "keys": "Copiez son identifiant client, son secret client et le nom du domaine (par exemple myapp-sandbox.biapi.pro) dans les champs ci-dessous.",
-          "address": "Autorisez cette adresse de retour dans les URI de redirection de l'application :",
-          "realtime": "Powens prévient gripsou dès qu'une banque a de nouvelles données, sans attendre la prochaine synchronisation prévue. Il faut pour cela un webhook et un appel à l'API de Powens : <a>suivez les étapes du README</a>, puis collez le secret ici."
+          "address": "Ajoutez cette adresse de retour aux URI de redirection de l'application :",
+          "keys": "Reportez son Client ID, son Client secret et le nom du domaine (par exemple myapp-sandbox.biapi.pro) dans les champs ci-dessous.",
+          "realtime": "Facultatif : Powens prévient gripsou dès qu'une banque a de nouvelles données, au lieu d'attendre la prochaine synchronisation programmée. Cela demande un webhook et un appel à l'API Powens : <a>suivez les étapes du README</a>, puis collez le secret ci-dessous."
         },
         "jev": {
           "account": "Connectez-vous à la <a>console TypeSafe</a> et créez une clé d'API.",
-          "paste": "Collez-la ci-dessous, puis choisissez le fournisseur et son modèle."
+          "paste": "Collez-la ci-dessous, puis choisissez le fournisseur et le modèle."
         },
         "brandfetch": {
-          "account": "Créez un compte gratuit sur le <a>portail développeur de Brandfetch</a>.",
-          "paste": "Copiez l'identifiant client affiché sur son tableau de bord dans le champ ci-dessous."
+          "account": "Créez un compte gratuit sur le <a>portail développeurs de Brandfetch</a>.",
+          "paste": "Copiez le Client ID affiché sur votre tableau de bord dans le champ ci-dessous."
         }
       }
     },
     "ai": {
-      "title": "Catégoriser vos transactions automatiquement",
+      "title": "Catégoriser automatiquement vos transactions",
       "toggle": "Catégoriser mes transactions avec l'IA",
       "body": "Le libellé et le montant de chaque nouvelle transaction sont envoyés à un service d'IA choisi par le propriétaire du serveur.",
-      "suggestions": "L'IA propose des catégories. Les suggestions incertaines vous sont soumises pour vérification.",
-      "later": "Vous pouvez modifier ce choix à tout moment dans Paramètres › Budget.",
-      "on": "Catégorisation par IA activée",
-      "off": "Catégorisation par IA désactivée"
+      "suggestions": "L'IA propose une catégorie pour chaque transaction. Quand elle hésite, elle vous demande de vérifier.",
+      "later": "Vous pouvez modifier ce choix à tout moment dans Paramètres › Budget."
     }
   },
   "auth": {
@@ -345,7 +347,7 @@
       "change": "Modifier",
       "useBackup": "Utiliser un code de secours",
       "useApp": "Utiliser l'application",
-      "wrongCode": "Ce code n'a pas fonctionné. Réessayez.",
+      "wrongCode": "Code incorrect. Réessayez.",
       "expired": "Le délai est dépassé. Reconnectez-vous.",
       "failed": "Impossible de vous connecter. Réessayez dans un instant."
     },
@@ -512,7 +514,7 @@
         "replace": "Remplacer",
         "remove": "Supprimer {{name}}",
         "saved": "Enregistrée",
-        "notSet": "Non définie",
+        "notSet": "Non renseignée",
         "savedToast": "Clé enregistrée",
         "removedToast": "Clé supprimée",
         "saveError": "Impossible d'enregistrer la clé"
@@ -523,7 +525,7 @@
       "budgetAiHint": "Fournisseur utilisé pour catégoriser les transactions. Un fournisseur n'apparaît que si sa clé d'API est renseignée dans les clés d'API.",
       "budgetAiProvider": "Fournisseur",
       "budgetAiModel": "Modèle",
-      "budgetAiModelsError": "Impossible de charger la liste des modèles du fournisseur ; saisissez le nom du modèle.",
+      "budgetAiModelsError": "Impossible de charger la liste des modèles du fournisseur. Saisissez le nom du modèle.",
       "budgetAiOff": "Désactivée",
       "budgetAiCost": "Coût de la catégorisation par IA",
       "budgetAiCostHint": "Tarifs par million de jetons, en dollars américains (USD). Renseignez les tarifs indiqués par votre fournisseur.",
@@ -554,7 +556,7 @@
       },
       "syncConnection": "Synchroniser",
       "deleteConnection": "Supprimer la connexion",
-      "deleteConnectionTitle": "Supprimer {{name}} ?",
+      "deleteConnectionTitle": "Supprimer {{name}} ?",
       "deleteConnectionBody": "Ses comptes, positions et opérations, et leur historique, sont supprimés aussi. Cette action est irréversible.",
       "deletingConnection": "Suppression…",
       "deleteConnectionError": "Impossible de supprimer la connexion",
@@ -567,7 +569,7 @@
       "pickProvider": "Choisir un fournisseur de données",
       "noProviders": "Aucun fournisseur de données n'est activé. Demandez à votre administrateur d'en activer un.",
       "connect": "Connecter",
-      "connectError": "Impossible d'ouvrir la connexion à la banque",
+      "connectError": "Impossible de lancer la connexion à la banque",
       "syncFailedMessage": "La dernière synchronisation a échoué. Réessayez dans quelques minutes.",
       "problemSeparator": " : ",
       "neverSynced": "Jamais synchronisée",
@@ -996,28 +998,28 @@
     "done": "Terminé",
     "scanIntro": "Scannez ce QR code avec votre application d'authentification.",
     "qrAlt": "QR code à scanner avec votre application d'authentification",
-    "cantScan": "Impossible de le scanner ? Saisissez plutôt cette clé dans l'application :",
+    "cantScan": "Vous ne pouvez pas le scanner ? Saisissez plutôt cette clé dans l'application :",
     "copyKey": "Copier la clé",
-    "codeIntro": "Saisissez le code à 6 chiffres affiché par l'application pour gripsou.",
+    "codeIntro": "Saisissez le code à 6 chiffres que l'application affiche pour gripsou.",
     "codeLabel": "Code à 6 chiffres",
-    "codesIntro": "Si vous perdez votre téléphone, chacun de ces codes vous permet de vous connecter une fois. Ils ne seront plus affichés.",
+    "codesIntro": "Si vous perdez votre téléphone, chacun de ces codes vous permet de vous connecter une fois. Ils ne seront affichés qu'une seule fois.",
     "copy": "Copier",
     "copied": "Copié",
     "download": "Télécharger",
     "wrongPassword": "Mot de passe incorrect.",
-    "wrongCode": "Ce code n'a pas fonctionné. Réessayez.",
+    "wrongCode": "Code incorrect. Réessayez.",
     "expired": "La configuration a pris trop de temps et a expiré. Saisissez votre mot de passe pour recommencer.",
     "setupFailed": "Impossible de configurer la double authentification",
-    "newCodesFailed": "Impossible de créer de nouveaux codes de récupération",
+    "newCodesFailed": "Impossible de créer de nouveaux codes de secours",
     "removeFailed": "Impossible de désactiver la double authentification",
     "manageTitle": "Double authentification",
     "backupCodes": "Codes de secours",
-    "codesLeft_one": "{{count}} sur 10 restant",
-    "codesLeft_other": "{{count}} sur 10 restants",
+    "codesLeft_one": "{{count}} restant sur 10",
+    "codesLeft_other": "{{count}} restants sur 10",
     "newCodes": "Nouveaux codes",
     "newCodesTitle": "Nouveaux codes de secours",
     "turnOff": "Désactiver",
-    "turnOffTitle": "Désactiver la double authentification ?",
+    "turnOffTitle": "Désactiver la double authentification ?",
     "turnOffBody": "Vous vous connecterez uniquement avec votre mot de passe."
   },
   "passkeys": {
@@ -1027,16 +1029,16 @@
     "notAdded": "Aucune clé d'accès n'a été ajoutée",
     "alreadyAdded": "Cet appareil a déjà une clé d'accès pour gripsou",
     "tryAgain": "Réessayer",
-    "expired": "Cela a pris trop de temps. Saisissez à nouveau votre mot de passe.",
+    "expired": "Le délai est dépassé. Saisissez à nouveau votre mot de passe.",
     "title": "Clés d'accès",
     "addPasskey": "Ajouter une clé d'accès",
     "added": "Ajoutée le {{date}}",
-    "lastUsed": "Dernière utilisation : {{time}}",
+    "lastUsed": "Dernière utilisation : {{time}}",
     "rename": "Renommer",
     "delete": "Supprimer",
     "nameLabel": "Nom de la clé d'accès",
-    "deleteTitle": "Supprimer {{name}} ?",
-    "deleteAsk": "Supprimer ?",
+    "deleteTitle": "Supprimer {{name}} ?",
+    "deleteAsk": "Supprimer ?",
     "renameFailed": "Impossible de renommer la clé d'accès",
     "deleteFailed": "Impossible de supprimer la clé d'accès"
   }

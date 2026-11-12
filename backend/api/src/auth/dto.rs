@@ -165,6 +165,13 @@ pub struct ReauthTokenReq {
     pub reauth: String,
 }
 
+/// Adding a second factor: the reauth token, left out during the welcome flow.
+#[derive(Deserialize, TS)]
+pub struct FactorSetupReq {
+    #[ts(optional)]
+    pub reauth: Option<String>,
+}
+
 #[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct MfaStatus {
@@ -207,7 +214,8 @@ pub struct PasskeyOptions {
 #[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PasskeyRegisterReq {
-    pub reauth: String,
+    #[ts(optional)]
+    pub reauth: Option<String>,
     pub challenge: String,
     #[ts(type = "unknown")]
     pub credential: webauthn_rs::prelude::RegisterPublicKeyCredential,
