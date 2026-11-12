@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select id as \"id!\" from connection where user_id = $1",
+  "query": "select id as \"id!\" from connection where user_id = $1 and status <> $2",
   "describe": {
     "columns": [
       {
@@ -17,12 +17,13 @@
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
       false
     ]
   },
-  "hash": "441839d0baab105f5636bef21c88baf5689bae3c95b968e9739b12b8a6d0a703"
+  "hash": "f3efc95c4df4351291b9c62a653bc2855dca328772986dea8a55b9ecdc8d00cf"
 }
