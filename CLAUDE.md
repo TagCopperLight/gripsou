@@ -13,7 +13,7 @@ Work comes from GitHub issues on `TagCopperLight/gripsou`. The repo is public, s
 3. Commit freely. Before the PR, `./ci.sh` must pass, and `.sqlx/` must be regenerated if any query changed.
 4. `gh pr create`: the body has `Closes #<n>`, what changed and why in plain words, and how it was verified. Then stop. Never merge, never push to `main`. Review feedback goes in as new commits.
 
-Never create tags or releases: a release goes with a manual production update.
+Create tags and releases only through the `release` skill, when the user asks for a release: a release goes with a manual production update. Its version-bump commit is the one push to `main` allowed.
 
 ## Commands
 
