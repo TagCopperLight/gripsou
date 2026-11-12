@@ -1,14 +1,12 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, CircleAlert, LoaderCircle } from "lucide-react";
-import { startRegistration, WebAuthnAbortService } from "@simplewebauthn/browser";
 
 import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
-import { ApiError } from "../../../api/client";
-import { usePasskeyRegisterOptions, useRegisterPasskey } from "../../../api/auth";
 import { PasswordField } from "../../../ui/PasswordField";
 import { useReauthStep } from "../../../auth/useReauthStep";
+import { usePasskeyCreation } from "./usePasskeyCreation";
 
 type Step = "password" | "waiting" | "done" | "failed";
 
@@ -21,54 +19,35 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
   const [failure, setFailure] = useState<"notAdded" | "alreadyAdded">("notAdded");
   const [name, setName] = useState("");
   const token = useRef<string | null>(null);
-  // Set when the window closes, so a browser window still settling is ignored.
-  const closed = useRef(false);
-
-  const options = usePasskeyRegisterOptions();
-  const register = useRegisterPasskey();
+  const creation = usePasskeyCreation();
 
   const close = () => {
-    closed.current = true;
-    WebAuthnAbortService.cancelCeremony();
+    creation.cancel();
     onClose();
   };
 
-  /** The password check expired or was refused: ask for it again. */
-  const backToPassword = (message: string | null) => {
-    token.current = null;
-    setPassword("");
-    setError(message);
-    setStep("password");
-  };
-
   const create = async () => {
-    const reauthToken = token.current;
-    if (!reauthToken) return;
+    const reauth = token.current;
+    if (!reauth) return;
     setStep("waiting");
-    try {
-      const { challenge, options: optionsJSON } = await options.mutateAsync(reauthToken);
-      if (closed.current) return;
-      const credential = await startRegistration({ optionsJSON });
-      if (closed.current) return;
-      const added = await register.mutateAsync({ reauth: reauthToken, challenge, credential });
-      if (closed.current) return;
-      setName(added.name);
-      setStep("done");
-    } catch (err) {
-      if (closed.current) return;
-      // 403: the password check is used up; 410: the browser window stayed
-      // open past the challenge's 5 minutes.
-      if (err instanceof ApiError && (err.status === 403 || err.status === 410)) {
-        backToPassword(t("passkeys.expired"));
+    const outcome = await creation.create(reauth);
+    switch (outcome.kind) {
+      case "cancelled":
         return;
-      }
-      // The browser refuses a device that already holds one of the user's
-      // passkeys (InvalidStateError); the server answers 409 for the same.
-      const already =
-        (err instanceof Error && err.name === "InvalidStateError") ||
-        (err instanceof ApiError && err.status === 409);
-      setFailure(already ? "alreadyAdded" : "notAdded");
-      setStep("failed");
+      case "added":
+        setName(outcome.name);
+        setStep("done");
+        return;
+      case "expired":
+        // The password check expired or was refused: ask for it again.
+        token.current = null;
+        setPassword("");
+        setError(t("passkeys.expired"));
+        setStep("password");
+        return;
+      default:
+        setFailure(outcome.kind);
+        setStep("failed");
     }
   };
 

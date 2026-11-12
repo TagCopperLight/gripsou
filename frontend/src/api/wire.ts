@@ -209,6 +209,11 @@ export type DeleteUserReq = { email: string, };
 export type EnabledProvider = { key: string, displayName: string, description: string, };
 
 /**
+ * Adding a second factor: the reauth token, left out during the welcome flow.
+ */
+export type FactorSetupReq = { reauth?: string, };
+
+/**
  * A headline figure and its two comparisons. Amounts, never percentages: the
  * frontend owns the formatting and the arrow/colour logic.
  */
@@ -350,7 +355,7 @@ export type Passkey = { id: string, name: string, createdAt: number, lastUsedAt:
  */
 export type PasskeyOptions = { challenge: string, options: unknown, };
 
-export type PasskeyRegisterReq = { reauth: string, challenge: string, credential: unknown, };
+export type PasskeyRegisterReq = { reauth?: string, challenge: string, credential: unknown, };
 
 /**
  * Finish a passwordless sign-in.

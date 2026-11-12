@@ -253,25 +253,33 @@
   "welcome": {
     "title": "Welcome, {{name}}",
     "privacy": "This gripsou instance is hosted by the person who invited you. As the server owner, they can access your data.",
-    "edit": "Edit",
-    "continue": "Continue",
     "finish": "Finish",
     "skipAll": "Skip setup for now",
     "finishError": "Couldn't finish the setup",
+    "skip": "Skip this step",
     "prefs": {
-      "title": "Your preferences",
       "language": "Language",
       "currency": "Currency",
       "timeZone": "Time zone"
+    },
+    "twoFactor": {
+      "title": "Secure your account",
+      "passkeyCount_one": "{{count}} passkey",
+      "passkeyCount_other": "{{count}} passkeys",
+      "setUp": "Set up",
+      "on": "On",
+      "add": "Add",
+      "addAnother": "Add another",
+      "expired": "This setup took too long. Set it up again.",
+      "skipTitle": "Skip securing your account?",
+      "skipBody": "Your account runs this server and holds the keys to everyone's data. Without a second factor, your password alone opens it.",
+      "skipConfirm": "Skip anyway",
+      "setUpNow": "Set it up now"
     },
     "bank": {
       "title": "Connect a bank",
       "connect": "Connect a bank",
       "addAnother": "Add another bank",
-      "skip": "Skip this step",
-      "connected_one": "{{count}} bank connected",
-      "connected_other": "{{count}} banks connected",
-      "skipped": "Skipped. You can connect one later in Settings › Connections.",
       "status": { "connecting": "Connecting…", "syncing": "Syncing…", "ok": "Connected", "error": "Sync failed" },
       "failed": "Your bank couldn't be connected. Nothing was saved.",
       "tryAgain": "Try again",
@@ -280,10 +288,6 @@
       "setUpKeys": "Set up bank keys"
     },
     "server": {
-      "title": "Server setup",
-      "intro": "Before you connect a bank, gripsou needs a few keys from outside services. Each one is optional, but without the bank keys you can't connect a bank yet. Change any of it later in Settings › Server.",
-      "skip": "Skip",
-      "howTo": "How to get them",
       "state": {
         "ready": "Ready",
         "notSetUp": "Not set up",
@@ -291,7 +295,7 @@
       },
       "useProvider": "Connect banks through {{name}}",
       "copyAddress": "Copy the address",
-      "realtime": "Real-time sync (optional)",
+      "realtime": "Real-time sync",
       "bank": {
         "title": "Bank connections",
         "what": "Needed to connect your banks."
@@ -307,9 +311,9 @@
       "guide": {
         "powens": {
           "app": "In the Powens console, open your domain and create a client application.",
-          "keys": "Copy its client ID and client secret, and the domain's name (like myapp-sandbox.biapi.pro), into the fields below.",
           "address": "Allow this return address in the application's redirect URIs:",
-          "realtime": "Powens tells gripsou as soon as a bank has new data, instead of waiting for the next scheduled sync. It takes a webhook and a call to Powens' API: <a>follow the steps in the README</a>, then paste the secret here."
+          "keys": "Copy its client ID and client secret, and the domain's name (like myapp-sandbox.biapi.pro), into the fields below.",
+          "realtime": "Optional: Powens tells gripsou as soon as a bank has new data, instead of waiting for the next scheduled sync. It takes a webhook and a call to Powens' API: <a>follow the steps in the README</a>, then paste the secret here."
         },
         "jev": {
           "account": "Sign in to the <a>TypeSafe console</a> and create an API key.",
@@ -326,9 +330,7 @@
       "toggle": "Categorise my transactions with AI",
       "body": "Each new transaction's description and amount are sent to an AI service chosen by the server owner.",
       "suggestions": "AI suggests categories. Uncertain suggestions are sent to you for review.",
-      "later": "You can change this setting anytime in Settings › Budget.",
-      "on": "AI categorisation on",
-      "off": "AI categorisation off"
+      "later": "You can change this setting anytime in Settings › Budget."
     }
   },
   "auth": {

@@ -1,101 +1,109 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../lib/errorToasts";
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
-import { Check, CircleAlert, Landmark, Lock, LoaderCircle } from "lucide-react";
+import { getRouteApi } from "@tanstack/react-router";
+import { Lock } from "lucide-react";
 import { Button } from "../../ui/Button";
+import { CardState } from "../../ui/CardState";
 import { Select } from "../../ui/Select";
 import { SegmentedControl } from "../../ui/SegmentedControl";
+import { StepDots } from "../../ui/StepDots";
 import { Toggle } from "../../ui/Toggle";
-import { AddConnectionModal } from "../connections/AddConnectionModal";
-import { ConnectionGuide } from "../connections/ConnectionGuide";
 import { useAuth } from "../../auth/context";
 import { useCurrencyChange } from "../../auth/useCurrencyChange";
 import { CurrencyChangeHint } from "../../auth/CurrencyChangeHint";
 import { authApi } from "../../api/auth";
-import { useConnections } from "../../api/connections";
-import { ServerSetup } from "./ServerSetup";
-import { BankKeysGate } from "./BankKeysGate";
+import { useApiKeys, useProviders } from "../../api/admin";
 import { useAiStatus } from "../../api/budget";
-import type { SyncConnection, ConnectionStatus } from "../../api/wire";
-import { useStartConnection } from "../connections/useStartConnection";
-import { useFinishConnection } from "../connections/useFinishConnection";
-import { flattenConnections, isPending, isSyncing } from "../../lib/connectionState";
+import type { ApiKeyProvider, KeyGroup, Provider } from "../../api/wire";
 import { CURRENCIES } from "../../lib/currency";
 import { timeZoneOptions } from "../../lib/timeZoneList";
 import { prefillFromBrowser } from "../../lib/welcome";
 import type { PrefsPatch } from "../../lib/prefsPatch";
+import { ServerScreen, ServerTag } from "./ServerScreen";
+import { SecurityScreen } from "./SecurityScreen";
+import { BankScreen } from "./BankScreen";
+import { WelcomeFooter, WelcomeSkip } from "./WelcomeFooter";
+import { groupState, realtimeSet, serverGroups, serverParts, type ServerPart } from "./serverSetup";
 
-type Step = 1 | 2 | 3;
+/** The flow's parts, one step dot each: a part can take several screens. */
+type Section = "profile" | "security" | "server" | "bank" | "ai";
+
+type Screen = { section: "server"; group: KeyGroup; part: ServerPart } | { section: Exclude<Section, "server"> };
+
+/** The server's keys, for an admin's server screens. */
+type Server = { keys: ApiKeyProvider[]; providers: Provider[] };
+
+/** After an invite or the first admin's setup: one screen at a time, shown
+ *  until the user finishes or skips it (`welcomeDone`); the router sends them
+ *  here. An admin (in practice the first account) also sets up the server's
+ *  keys, before their own bank. */
+export function Welcome() {
+  const { user } = useAuth();
+  return user?.role === "admin" ? <AdminWelcome /> : <WelcomeFlow server={null} />;
+}
+
+function AdminWelcome() {
+  const keys = useApiKeys();
+  const providers = useProviders();
+  if (keys.data && providers.data) return <WelcomeFlow server={{ keys: keys.data, providers: providers.data }} />;
+  return (
+    <WelcomeShell>
+      <CardState
+        variant={keys.isError || providers.isError ? "error" : "loading"}
+        onRetry={() => {
+          void keys.refetch();
+          void providers.refetch();
+        }}
+        className="h-64"
+      />
+    </WelcomeShell>
+  );
+}
+
+function WelcomeShell({ children, below }: { children: ReactNode; below?: ReactNode }) {
+  return (
+    <div className="flex min-h-screen justify-center bg-bg px-4 py-16">
+      <div className="flex w-140 max-w-full flex-col items-center gap-6 md:gap-10">
+        <div className="font-wordmark text-[40px] font-semibold tracking-tight text-fg md:text-[56px]">gripsou</div>
+        <div className="flex w-full flex-col gap-5 rounded-3xl bg-surface p-4 md:p-6">{children}</div>
+        {below}
+      </div>
+    </div>
+  );
+}
 
 const route = getRouteApi("/signedIn/welcome");
 
-/** After an invite: preferences, a first bank, the AI opt-in. Shown until the
- *  user finishes or skips it (`welcomeDone`); the router sends them here. An
- *  admin (in practice the first account) sees the server setup first. */
-export function Welcome() {
-  const { t, i18n } = useTranslation();
-  const { user, prefs, updatePrefs, updateUser } = useAuth();
+function WelcomeFlow({ server }: { server: Server | null }) {
+  const { t } = useTranslation();
+  const { user, updateUser } = useAuth();
   const search = route.useSearch();
-  const navigate = useNavigate();
-  const backFromBank = search.step === "bank";
-  const isAdmin = user?.role === "admin";
-  const [serverShown, setServerShown] = useState(!isAdmin || backFromBank);
-
-  // A failed save is rolled back by AuthProvider (the control shows the old
-  // value again), and the user can retry here or later in Settings, so the
-  // rejection is swallowed.
-  const save = (patch: PrefsPatch) => {
-    updatePrefs(patch).catch(() => {});
-  };
-  const currency = useCurrencyChange();
-
-  const connections = flattenConnections(useConnections().data);
   const aiStatus = useAiStatus();
-  const aiConfigured = aiStatus.data?.configured ?? false;
-  // Until the status is known (or failed), whether step 3 exists is undecided.
+  usePrefillFromBrowser(search.step !== "bank");
+  // Until the status is known (or failed), whether the AI screen exists is undecided.
   const aiKnown = aiStatus.data !== undefined || aiStatus.isError;
-  const flow = useStartConnection({ returnTo: "/welcome?step=bank", errorMessage: t("welcome.bank.connectError") });
-  const providers = flow.providers.data;
 
-  const [step, setStep] = useState<Step>(backFromBank ? 2 : 1);
-  const [done, setDone] = useState<Record<Step, boolean>>({ 1: backFromBank, 2: false, 3: false });
-  const [bankSkipped, setBankSkipped] = useState(false);
+  const screens: Screen[] = [
+    { section: "profile" },
+    { section: "security" },
+    ...(server
+      ? serverGroups(server.keys).flatMap((group) =>
+          serverParts(group, server.keys).map((part) => ({ section: "server" as const, group, part })),
+        )
+      : []),
+    { section: "bank" },
+    ...(aiStatus.data?.configured ? [{ section: "ai" as const }] : []),
+  ];
+  const bankIndex = screens.findIndex((s) => s.section === "bank");
+  const [index, setIndex] = useState(search.step === "bank" ? bankIndex : 0);
+  const screen = screens[index];
+  const back = () => setIndex(index - 1);
+  const next = () => setIndex(index + 1);
+
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState(false);
   useErrorToast(finishError && t("welcome.finishError"));
-  // Coming back from the provider with its query string (ConnectionCallback
-  // hands it over; an empty one still counts): finish the connection here.
-  const callback = useFinishConnection(search.callback);
-  const connecting = callback.status === "connecting";
-  const [retried, setRetried] = useState(false);
-  const bankFailed = callback.status === "failed" && !retried;
-  const callbackCleared = useRef(false);
-  useEffect(() => {
-    if (callbackCleared.current || search.callback === undefined) return;
-    callbackCleared.current = true;
-    // Drop the query right away so a reload doesn't redo the connection.
-    void navigate({ to: "/welcome", search: { step: "bank" }, replace: true });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fill language and time zone from the browser once, when step 1 is the
-  // starting point (not when coming back from the bank's page).
-  const prefilled = useRef(false);
-  useEffect(() => {
-    if (prefilled.current || backFromBank) return;
-    prefilled.current = true;
-    const filled = prefillFromBrowser(prefs);
-    if (filled.uiLanguage !== prefs.uiLanguage || filled.timeZone !== prefs.timeZone) {
-      // The user can still set these in step 1 / Settings; AuthProvider rolls back.
-      updatePrefs({ uiLanguage: filled.uiLanguage, timeZone: filled.timeZone }).catch(() => {});
-    }
-  }, [backFromBank, prefs, updatePrefs]);
-
-  const complete = (n: Step, next: Step) => {
-    setDone((d) => ({ ...d, [n]: true }));
-    setStep(next);
-  };
-
   const finish = async () => {
     if (!user || finishing) return;
     setFinishing(true);
@@ -110,177 +118,80 @@ export function Welcome() {
       setFinishing(false);
     }
   };
+  const last = index === screens.length - 1;
+  // Past the bank, the flow either finishes or goes on to the AI screen.
+  const afterBank = !aiKnown || finishing ? undefined : last ? () => void finish() : next;
 
-  const connectBank = () => {
-    setRetried(true);
-    flow.start();
-  };
-
-  const skipBank = () => {
-    setBankSkipped(true);
-    if (aiConfigured) complete(2, 3);
-    else void finish();
-  };
-
-  const zones = timeZoneOptions(prefs.timeZone, i18n.language);
-  // As the dropdown reads it ("Paris (UTC+1)"), not the zone's code.
-  const zoneLabel = zones.find((z) => z.value === prefs.timeZone)?.label ?? prefs.timeZone;
-  const currencyLabel = CURRENCIES.find((c) => c.code === prefs.currency)?.label ?? prefs.currency;
-  const readyBanks = connections.filter((c) => !isPending(c.status));
-  const hasBank = readyBanks.length > 0;
-  const connectDisabled = connecting || flow.pending || providers === undefined;
-
-  const skipButton = (
-    <Button variant="ghost" padded={false} onClick={skipBank} disabled={!aiKnown || connecting}>
-      {t("welcome.bank.skip")}
-    </Button>
-  );
-  const bankButtons = (
-    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-      {hasBank ? (
-        <Button variant="ghostStrong" padded={false} onClick={connectBank} disabled={connectDisabled}>
-          {t("welcome.bank.addAnother")}
-        </Button>
-      ) : (
-        skipButton
-      )}
-      {hasBank ? (
-        aiConfigured ? (
-          <Button onClick={() => complete(2, 3)} disabled={!aiKnown || connecting}>{t("welcome.continue")}</Button>
-        ) : (
-          <Button onClick={() => void finish()} disabled={finishing || !aiKnown || connecting}>{t("welcome.finish")}</Button>
-        )
-      ) : (
-        <Button onClick={connectBank} disabled={connectDisabled}>
-          {t(bankFailed ? "welcome.bank.tryAgain" : "welcome.bank.connect")}
-        </Button>
-      )}
-    </div>
-  );
-
-  return (
-    <div className="flex min-h-screen justify-center bg-bg px-4 py-16">
-      <div className="flex w-120 max-w-full flex-col items-center gap-10">
-        <div className="font-wordmark text-[56px] font-semibold tracking-tight text-fg">gripsou</div>
-        <div className="flex w-full flex-col gap-5 rounded-3xl bg-surface p-4 md:p-6">
-          {!serverShown ? (
-            <ServerSetup onContinue={() => setServerShown(true)} />
+  let title;
+  let tag;
+  let body;
+  if (screen.section === "server" && server) {
+    const { group, part } = screen;
+    const state = groupState(group, server.keys, server.providers);
+    // Past this group's screens.
+    const skipGroup = () => {
+      const after = screens.findIndex((s, i) => i > index && !(s.section === "server" && s.group === group));
+      setIndex(after);
+    };
+    if (part === "keys") {
+      title = t(`welcome.server.${group}.title`);
+      tag = <ServerTag state={state} />;
+    } else {
+      title = t("welcome.server.realtime");
+    }
+    body = (
+      <>
+        <ServerScreen group={group} part={part} keys={server.keys} providers={server.providers} />
+        <WelcomeFooter onBack={back}>
+          {part === "keys" ? (
+            <>
+              {state === "notSetUp" && (
+                <WelcomeSkip onClick={skipGroup} />
+              )}
+              {/* A bank provider turned off has nothing more to set up. */}
+              <Button onClick={state === "off" ? skipGroup : next} disabled={state === "notSetUp"}>
+                {t("common.next")}
+              </Button>
+            </>
           ) : (
             <>
-              <h1 className="px-1 text-xl font-semibold text-fg">{t("welcome.title", { name: user?.name ?? "" })}</h1>
-              {/* Only invitees are told the owner can see their data: an admin
-                  reaching this page is the one who installed the server. */}
-              {!isAdmin && (
-                <div className="flex gap-3 rounded-2xl bg-blue-soft px-4 py-3 text-[13px] leading-relaxed text-blue-light">
-                  <Lock className="mt-0.5 size-4 shrink-0" />
-                  <p>{t("welcome.privacy")}</p>
-                </div>
+              {!realtimeSet(group, server.keys) && (
+                <WelcomeSkip onClick={next} />
               )}
-
-              <div className="flex flex-col gap-1">
-                <WelcomeStep
-                  n={1}
-                  title={t("welcome.prefs.title")}
-                  active={step === 1}
-                  done={done[1]}
-                  summary={`${prefs.uiLanguage === "fr" ? "Français" : "English"} · ${currencyLabel} · ${zoneLabel}`}
-                  onEdit={() => setStep(1)}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-fg-dim">{t("welcome.prefs.language")}</span>
-                    <SegmentedControl
-                      value={prefs.uiLanguage}
-                      onChange={(lng) => save({ uiLanguage: lng as typeof prefs.uiLanguage })}
-                      options={[
-                        { value: "en", label: "English" },
-                        { value: "fr", label: "Français" },
-                      ]}
-                    />
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <span className="text-sm text-fg-dim">{t("welcome.prefs.currency")}</span>
-                    <Select
-                      value={currency.value}
-                      onChange={currency.change}
-                      options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
-                    />
-                    {currency.pick && (
-                      <span className="text-xs text-fg-faint"><CurrencyChangeHint pick={currency.pick} /></span>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    <span className="text-sm text-fg-dim">{t("welcome.prefs.timeZone")}</span>
-                    <Select
-                      value={prefs.timeZone}
-                      onChange={(timeZone) => save({ timeZone })}
-                      options={zones}
-                    />
-                  </div>
-                  <div className="flex justify-end pt-1">
-                    <Button onClick={() => complete(1, 2)}>{t("welcome.continue")}</Button>
-                  </div>
-                </WelcomeStep>
-
-                <WelcomeStep
-                  n={2}
-                  title={t("welcome.bank.title")}
-                  active={step === 2}
-                  done={done[2]}
-                  summary={bankSkipped ? t("welcome.bank.skipped") : t("welcome.bank.connected", { count: readyBanks.length })}
-                  onEdit={() => setStep(2)}
-                >
-                  {!hasBank && <ConnectionGuide providers={providers ?? []} />}
-                  {connections.length > 0 && (
-                    <div className="flex flex-col gap-2">
-                      {connections.map((c) => <BankRow key={c.id} connection={c} />)}
-                    </div>
-                  )}
-                  {bankFailed && (
-                    <div className="flex items-center gap-2.5 rounded-xl bg-red-soft px-3.5 py-2.5">
-                      <CircleAlert className="size-4 shrink-0 text-red" />
-                      <p className="text-sm text-red-light">{t("welcome.bank.failed")}</p>
-                    </div>
-                  )}
-                  {isAdmin ? (
-                    <BankKeysGate skip={skipButton} onSetUp={() => setServerShown(false)}>{bankButtons}</BankKeysGate>
-                  ) : (
-                    bankButtons
-                  )}
-                </WelcomeStep>
-
-                {aiConfigured && (
-                  <WelcomeStep
-                    n={3}
-                    title={t("welcome.ai.title")}
-                    active={step === 3}
-                    done={done[3]}
-                    summary={prefs.budgetAiEnabled ? t("welcome.ai.on") : t("welcome.ai.off")}
-                    onEdit={() => setStep(3)}
-                  >
-                    <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-2 px-4 py-3">
-                      <span className="text-sm font-medium text-fg">{t("welcome.ai.toggle")}</span>
-                      <Toggle
-                        checked={prefs.budgetAiEnabled}
-                        onChange={(on) => save({ budgetAiEnabled: on })}
-                        aria-label={t("welcome.ai.toggle")}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-2 text-sm text-fg-dim">
-                      <p>{t("welcome.ai.body")}</p>
-                      <p>{t("welcome.ai.suggestions")}</p>
-                      <p className="text-xs text-fg-faint">{t("welcome.ai.later")}</p>
-                    </div>
-                    <div className="flex justify-end pt-1">
-                      <Button onClick={() => void finish()} disabled={finishing}>{t("welcome.finish")}</Button>
-                    </div>
-                  </WelcomeStep>
-                )}
-              </div>
+              <Button onClick={next} disabled={!realtimeSet(group, server.keys)}>{t("common.next")}</Button>
             </>
           )}
-        </div>
-        {/* The server setup's own Skip is the one way past it. */}
-        {serverShown && (
+        </WelcomeFooter>
+      </>
+    );
+  } else if (screen.section === "profile") {
+    title = t("welcome.title", { name: user?.name ?? "" });
+    body = <PrefsScreen onNext={next} />;
+  } else if (screen.section === "security") {
+    title = t("welcome.twoFactor.title");
+    body = <SecurityScreen confirmSkip={server !== null} onBack={back} onNext={next} />;
+  } else if (screen.section === "bank") {
+    title = t("welcome.bank.title");
+    body = (
+      <BankScreen
+        keysMissing={server !== null && groupState("bank", server.keys, server.providers) !== "ready"}
+        last={last}
+        onBack={back}
+        onNext={afterBank}
+        onSetUpKeys={() => setIndex(screens.findIndex((s) => s.section === "server" && s.group === "bank"))}
+      />
+    );
+  } else {
+    title = t("welcome.ai.title");
+    body = <AiScreen onBack={back} onFinish={() => void finish()} finishing={finishing} />;
+  }
+
+  const sections = [...new Set(screens.map((s) => s.section))];
+  return (
+    <WelcomeShell
+      below={
+        // An admin goes through every step: they are the one setting the server up.
+        server === null && (
           <button
             type="button"
             onClick={() => void finish()}
@@ -288,80 +199,123 @@ export function Welcome() {
           >
             {t("welcome.skipAll")}
           </button>
-        )}
-      </div>
-      {flow.pickerOpen && <AddConnectionModal onClose={flow.closePicker} returnTo="/welcome?step=bank" />}
-    </div>
-  );
-}
-
-function WelcomeStep({
-  n, title, active, done, summary, onEdit, children,
-}: {
-  n: Step;
-  title: string;
-  active: boolean;
-  done: boolean;
-  summary: string;
-  onEdit: () => void;
-  children: ReactNode;
-}) {
-  const { t } = useTranslation();
-  return (
-    <section className={`rounded-2xl ${active ? "bg-surface-2/50 ring-1 ring-inset ring-surface-3" : ""}`}>
-      <div className="flex items-center gap-3 px-4 py-3.5">
-        {done && !active ? (
-          <span className="flex size-7 items-center justify-center rounded-full bg-green-soft text-green">
-            <Check className="size-3.5" strokeWidth={3} />
-          </span>
-        ) : (
-          <span
-            className={`flex size-7 items-center justify-center rounded-full font-mono text-[13px] font-semibold ${
-              active ? "bg-green text-black" : "bg-surface-2 text-fg-faint"
-            }`}
-          >
-            {n}
-          </span>
-        )}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <h2 className={`text-[15px] font-semibold ${active || done ? "text-fg" : "text-fg-faint"}`}>{title}</h2>
-          {done && !active && <span className="truncate text-xs text-fg-faint">{summary}</span>}
+        )
+      }
+    >
+      <div className="flex flex-col gap-3">
+        <StepDots current={sections.indexOf(screen.section)} total={sections.length} />
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold text-fg">{title}</h1>
+          {tag}
         </div>
-        {done && !active && (
-          <Button variant="ghost" padded={false} className="px-2 py-1" onClick={onEdit}>
-            {t("welcome.edit")}
-          </Button>
-        )}
       </div>
-      {active && <div className="flex flex-col gap-4 px-4 pb-4 pl-14">{children}</div>}
-    </section>
+      {body}
+    </WelcomeShell>
   );
 }
 
-function bankState(status: ConnectionStatus): "ok" | "error" | "syncing" | "connecting" {
-  if (isPending(status)) return "connecting";
-  if (isSyncing(status)) return "syncing";
-  return status === "error" ? "error" : "ok";
+/** A failed save is rolled back by AuthProvider (the control shows the old
+ *  value again), and the user can retry here or later in Settings, so the
+ *  rejection is swallowed. */
+function useSavePrefs() {
+  const { updatePrefs } = useAuth();
+  return (patch: PrefsPatch) => {
+    updatePrefs(patch).catch(() => {});
+  };
 }
 
-function BankRow({ connection }: { connection: SyncConnection }) {
-  const { t } = useTranslation();
-  const state = bankState(connection.status);
-  const tone = { ok: "text-green", error: "text-red", syncing: "text-amber", connecting: "text-fg-dim" }[state];
+/** Fills language and time zone from the browser once, when the flow starts
+ *  (not when coming back from the bank's page): a value the user picks
+ *  afterwards stays, even back on the profile screen. */
+function usePrefillFromBrowser(starting: boolean) {
+  const { prefs } = useAuth();
+  const save = useSavePrefs();
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current || !starting) return;
+    prefilled.current = true;
+    const filled = prefillFromBrowser(prefs);
+    if (filled.uiLanguage !== prefs.uiLanguage || filled.timeZone !== prefs.timeZone) {
+      save({ uiLanguage: filled.uiLanguage, timeZone: filled.timeZone });
+    }
+  }, [starting, prefs, save]);
+}
+
+function PrefsScreen({ onNext }: { onNext: () => void }) {
+  const { t, i18n } = useTranslation();
+  const { user, prefs } = useAuth();
+  const currency = useCurrencyChange();
+  const save = useSavePrefs();
+
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-surface-2 px-3.5 py-2.5">
-      <Landmark className="size-4 text-fg-faint" />
-      <span className="flex-1 truncate text-sm text-fg">{connection.displayName}</span>
-      <span className={`flex items-center gap-1.5 text-xs ${tone}`}>
-        {state === "ok" ? (
-          <Check className="size-3" />
-        ) : state === "connecting" ? (
-          <LoaderCircle className="size-3 animate-spin" />
-        ) : (
-          <span className="size-1.5 rounded-full bg-current" />
+    <>
+      {/* Only invitees are told the owner can see their data: an admin
+          reaching this page is the one who installed the server. */}
+      {user?.role !== "admin" && (
+        <div className="flex items-center gap-3 rounded-2xl bg-blue-soft px-4 py-3 text-[13px] leading-relaxed text-blue-light">
+          <Lock className="size-4 shrink-0" />
+          <p>{t("welcome.privacy")}</p>
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm text-fg-dim">{t("welcome.prefs.language")}</span>
+        <SegmentedControl
+          value={prefs.uiLanguage}
+          onChange={(lng) => save({ uiLanguage: lng as typeof prefs.uiLanguage })}
+          options={[
+            { value: "en", label: "English" },
+            { value: "fr", label: "Français" },
+          ]}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm text-fg-dim">{t("welcome.prefs.currency")}</span>
+        <Select
+          value={currency.value}
+          onChange={currency.change}
+          options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
+        />
+        {currency.pick && (
+          <span className="text-xs text-fg-faint"><CurrencyChangeHint pick={currency.pick} /></span>
         )}
-        {t(`welcome.bank.status.${state}`)}
-      </span>
-    </div>
+      </div>
+      <div className="flex flex-col gap-2">
+        <span className="text-sm text-fg-dim">{t("welcome.prefs.timeZone")}</span>
+        <Select
+          value={prefs.timeZone}
+          onChange={(timeZone) => save({ timeZone })}
+          options={timeZoneOptions(prefs.timeZone, i18n.language)}
+        />
+      </div>
+      <WelcomeFooter>
+        <Button onClick={onNext}>{t("common.next")}</Button>
+      </WelcomeFooter>
+    </>
+  );
+}
+
+function AiScreen({ onBack, onFinish, finishing }: { onBack: () => void; onFinish: () => void; finishing: boolean }) {
+  const { t } = useTranslation();
+  const { prefs } = useAuth();
+  const save = useSavePrefs();
+  return (
+    <>
+      <div className="flex items-center justify-between gap-4 rounded-xl bg-surface-2 px-4 py-3">
+        <span className="text-sm font-medium text-fg">{t("welcome.ai.toggle")}</span>
+        <Toggle
+          checked={prefs.budgetAiEnabled}
+          onChange={(on) => save({ budgetAiEnabled: on })}
+          aria-label={t("welcome.ai.toggle")}
+        />
+      </div>
+      <p className="-mt-3 text-xs text-fg-faint">{t("welcome.ai.later")}</p>
+      <div className="flex flex-col gap-2 text-sm text-fg-dim">
+        <p>{t("welcome.ai.body")}</p>
+        <p>{t("welcome.ai.suggestions")}</p>
+      </div>
+      <WelcomeFooter onBack={onBack}>
+        <Button onClick={onFinish} disabled={finishing}>{t("welcome.finish")}</Button>
+      </WelcomeFooter>
+    </>
   );
 }

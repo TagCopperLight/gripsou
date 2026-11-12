@@ -115,9 +115,11 @@ export function useReauth() {
   });
 }
 
+/** Starts setting up an authenticator. No password check (`reauth`) during
+ *  the welcome flow. */
 export function useTotpSetup() {
   return useMutation({
-    mutationFn: (reauth: string) =>
+    mutationFn: (reauth: string | undefined) =>
       api("POST /auth/mfa/totp/setup", { body: { reauth } }),
   });
 }
@@ -151,10 +153,10 @@ export function useRegenerateRecovery() {
 
 /** Starts adding a passkey: the browser's creation options for a fresh
  *  password check (the token is checked, not spent, so a cancelled browser
- *  window can be retried). */
+ *  window can be retried), or for none during the welcome flow. */
 export function usePasskeyRegisterOptions() {
   return useMutation({
-    mutationFn: (reauth: string) =>
+    mutationFn: (reauth: string | undefined) =>
       api("POST /auth/mfa/passkeys/register/options", { body: { reauth } }) as Promise<
         PasskeyOptions & { options: PublicKeyCredentialCreationOptionsJSON }
       >,

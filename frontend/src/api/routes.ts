@@ -23,6 +23,7 @@ import type {
   DeleteAccountReq,
   DeleteUserReq,
   EnabledProvider,
+  FactorSetupReq,
   Health,
   Holding,
   InitConnectionReq,
@@ -195,12 +196,12 @@ export type Api = {
   "DELETE /auth/mfa/passkeys/:id": { res: void };
   "PATCH /auth/mfa/passkeys/:id": { body: RenamePasskeyReq; res: void };
   "POST /auth/mfa/passkeys/register": { body: PasskeyRegisterReq; res: Passkey };
-  "POST /auth/mfa/passkeys/register/options": { body: ReauthTokenReq; res: PasskeyOptions };
+  "POST /auth/mfa/passkeys/register/options": { body: FactorSetupReq; res: PasskeyOptions };
   "POST /auth/mfa/recovery/regenerate": { body: ReauthTokenReq; res: RecoveryCodes };
   "GET /auth/mfa/status": { res: MfaStatus };
   "DELETE /auth/mfa/totp": { body: ReauthTokenReq; res: void };
   "POST /auth/mfa/totp/confirm": { body: TotpConfirmReq; res: RecoveryCodes };
-  "POST /auth/mfa/totp/setup": { body: ReauthTokenReq; res: TotpSetup };
+  "POST /auth/mfa/totp/setup": { body: FactorSetupReq; res: TotpSetup };
   "POST /auth/passkey": { body: PasskeySignInReq; res: SessionResponse };
   "POST /auth/passkey/options": { res: PasskeyOptions };
   "PATCH /auth/prefs": { body: UpdatePrefsReq; res: SessionUser };

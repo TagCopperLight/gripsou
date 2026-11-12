@@ -4,7 +4,7 @@ import { goTo } from "../../lib/navigate";
 import { Welcome } from "./Welcome";
 import { type AuthValue } from "../../auth/context";
 import { DEFAULT_PREFS } from "../../api/wire";
-import type { ApiKeyProvider, SessionUser } from "../../api/wire";
+import type { ApiKeyProvider, MfaStatus, SessionUser } from "../../api/wire";
 import { ApiError } from "../../api/client";
 import { authValue, renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
@@ -22,7 +22,7 @@ const newcomer: SessionUser = {
 };
 
 
-type Server = { status?: string; providers: { key: string; displayName: string; description: string | null }[]; aiConfigured: boolean; connections: number; bankReady: boolean };
+type Server = { status?: string; providers: { key: string; displayName: string; description: string | null }[]; aiConfigured: boolean; connections: number; bankReady: boolean; mfa: MfaStatus };
 let server: Server;
 let fetchMock: ReturnType<typeof stubFetch>;
 
@@ -42,6 +42,9 @@ function routes(url: string, init?: RequestInit) {
         fields: [{ key: "client_id", label: "Client ID", secret: false, value: null }],
       } satisfies ApiKeyProvider,
     ]);
+  if (url === "/api/auth/mfa/status") return jsonResponse(server.mfa);
+  if (url === "/api/auth/mfa/totp/setup") return jsonResponse({ secret: "JBSWY3DPEHPK3PXP", qrSvg: "<svg/>" });
+  if (url === "/api/auth/mfa/totp/confirm") return jsonResponse({ recoveryCodes: ["ABCD-EFGH"] });
   if (url === "/api/budget/categorize/status") return jsonResponse({ configured: server.aiConfigured, running: false });
   if (url === "/api/connections")
     return jsonResponse(server.connections === 0 ? [] : [{
@@ -70,7 +73,7 @@ const posted = (path: string) =>
 beforeEach(() => {
   search = {};
   navigate.mockClear();
-  server = { providers: [{ key: "p1", displayName: "Provider", description: null }], aiConfigured: true, connections: 0, bankReady: true };
+  server = { providers: [{ key: "p1", displayName: "Provider", description: null }], aiConfigured: true, connections: 0, bankReady: true, mfa: { totp: false, recoveryRemaining: 0, passkeys: [] } };
   fetchMock = stubFetch(routes);
 });
 
@@ -79,28 +82,65 @@ afterEach(() => {
 });
 
 describe("Welcome", () => {
-  it("opens on the server setup for an admin, one screen per group, then goes on to the steps", async () => {
+  it("takes an admin through their profile and security, then the server's keys one group at a time, then their bank", async () => {
     renderWelcome({ user: { ...newcomer, role: "admin" } });
+    // The admin's flow waits for the server's keys.
+    expect(await screen.findByRole("heading", { name: "Welcome, Alex" })).toBeInTheDocument();
+    // An admin can't leave the flow before the server is set up.
+    expect(screen.queryByRole("button", { name: "Skip setup for now" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    // Skipping the admin's security asks first.
+    fireEvent.click(await screen.findByRole("button", { name: "Skip this step" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Skip anyway" }));
+
+    // The bank keys are set. Every server screen is one step of the flow.
     expect(await screen.findByRole("heading", { name: "Bank connections" })).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Step 1 of 2" })).toBeInTheDocument();
-    expect(screen.queryByText("Your preferences")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Skip setup for now" })).not.toBeInTheDocument();
-
+    expect(screen.getByRole("img", { name: "Step 3 of 5" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    // The logos aren't: Next waits for them, skipping goes on.
     expect(screen.getByRole("heading", { name: "Bank logos" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Step 3 of 5" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
+    expect(screen.getByRole("heading", { name: "Connect a bank" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByRole("heading", { name: "Bank connections" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    // Logos aren't set up: the last screen skips to the steps.
-    fireEvent.click(screen.getByRole("button", { name: "Skip" }));
-    expect(screen.getByText("Your preferences")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bank logos" })).toBeInTheDocument();
   });
 
-  it("starts on the steps for a member, without asking for the admin's keys", async () => {
+  it("offers two-factor after the preferences, and can skip it", async () => {
     renderWelcome();
-    expect(screen.getByText("Your preferences")).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Server setup" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("button", { name: "Set up" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
+    // Only an admin is asked to confirm.
+    expect(await screen.findByRole("button", { name: "Connect a bank" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("heading", { name: "Secure your account" })).toBeInTheDocument();
+  });
+
+  it("sets up an authenticator in place, without asking for the password", async () => {
+    renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Set up" }));
+    expect(await screen.findByRole("img", { name: "QR code to scan with your authenticator app" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(posted("/auth/mfa/totp/setup")[0][1]?.body).toBe("{}");
+
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    // As the server answers once the code is right.
+    server.mfa = { ...server.mfa, totp: true };
+    fireEvent.change(screen.getByRole("textbox", { name: "6-digit code" }), { target: { value: "123456" } });
+    expect(await screen.findByText("ABCD-EFGH")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByText("On")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+  });
+
+  it("starts on the preferences for a member, without asking for the admin's keys", async () => {
+    renderWelcome();
+    expect(screen.getByRole("heading", { name: "Welcome, Alex" })).toBeInTheDocument();
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(fetchMock.mock.calls.some(([url]) => url === "/api/settings/api-keys")).toBe(false);
   });
@@ -182,7 +222,7 @@ describe("Welcome", () => {
     search = { step: "bank" };
     server.connections = 1;
     const auth = renderWelcome();
-    const next = await screen.findByRole("button", { name: "Continue" });
+    const next = await screen.findByRole("button", { name: "Next" });
     await waitFor(() => expect(next).toBeEnabled());
     fireEvent.click(next);
     fireEvent.click(await screen.findByRole("switch", { name: "Categorise my transactions with AI" }));
@@ -195,6 +235,16 @@ describe("Welcome", () => {
     const auth = renderWelcome({ prefs });
     await screen.findByRole("button", { name: "Skip setup for now" });
     expect(auth.updatePrefs).not.toHaveBeenCalled();
+  });
+
+  it("fills the prefs from the browser once, not again when coming back to them", async () => {
+    vi.spyOn(navigator, "languages", "get").mockReturnValue(["fr-FR"]);
+    const auth = renderWelcome();
+    await waitFor(() => expect(auth.updatePrefs).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Back" }));
+    await screen.findByRole("button", { name: "Next" });
+    expect(auth.updatePrefs).toHaveBeenCalledTimes(1);
   });
 
   it("shows an error and stays put when finishing fails", async () => {
@@ -320,7 +370,7 @@ describe("Welcome", () => {
       expect(screen.getByText("Connecting…")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Skip this step" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: "Continue" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Next" })).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Add another bank" })).not.toBeInTheDocument();
     });
 
