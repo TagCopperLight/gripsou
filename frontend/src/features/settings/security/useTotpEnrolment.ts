@@ -10,7 +10,8 @@ import { throttledError } from "../../../auth/throttle";
 /** Where a setup is. Scanning and the first code need the server's secret;
  *  the last step shows the backup codes the confirmed code earned. */
 export type TotpState =
-  | { step: "scan" | "code"; setup: TotpSetup }
+  | { step: "scan"; setup: TotpSetup }
+  | { step: "code"; setup: TotpSetup }
   | { step: "codes"; recoveryCodes: string[] };
 
 /** Setting up an authenticator once the password is checked (or needs no

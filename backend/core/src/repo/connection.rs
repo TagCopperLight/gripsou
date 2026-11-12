@@ -232,7 +232,11 @@ pub async fn mark_synced_error(pool: &sqlx::PgPool, id: Uuid, msg: &str) -> Resu
 /// Release an `awaiting` claim whose refresh request failed, recording the
 /// message. A connection the awaiting-timeout fallback has meanwhile claimed
 /// for syncing is left to that sync.
-pub async fn mark_refresh_failed(pool: &sqlx::PgPool, id: Uuid, msg: &str) -> Result<(), CoreError> {
+pub async fn mark_refresh_failed(
+    pool: &sqlx::PgPool,
+    id: Uuid,
+    msg: &str,
+) -> Result<(), CoreError> {
     release_with_error(pool, id, ConnectionStatus::Awaiting, msg).await
 }
 

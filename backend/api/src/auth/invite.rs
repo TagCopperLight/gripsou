@@ -21,7 +21,14 @@ pub async fn mint(
     created_by: Uuid,
 ) -> Result<String, ApiError> {
     let token = auth::generate_token();
-    invite_token::create(pool, kind, user_id, created_by, &auth::hash_token_str(&token)).await?;
+    invite_token::create(
+        pool,
+        kind,
+        user_id,
+        created_by,
+        &auth::hash_token_str(&token),
+    )
+    .await?;
     Ok(token)
 }
 
