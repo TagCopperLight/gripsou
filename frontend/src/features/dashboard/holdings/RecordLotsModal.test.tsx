@@ -12,6 +12,8 @@ let txns: Lot[] = [];
 let suggestions: LotSuggestion[] = [];
 let suggestionsFailed = false;
 let saveFails = false;
+// When set, the lots answer waits for it.
+let lotsGate: Promise<void> | null = null;
 
 // Fixed sentinel answers from the preview endpoint, deliberately not the basis
 // formula: they prove the row set reaches the server and the figures it sends
@@ -47,6 +49,7 @@ function stubServer() {
     if (url.endsWith("/lots") && init?.method === "PUT") {
       return new Response(saveFails ? "x" : null, { status: saveFails ? 500 : 204 });
     }
+    if (lotsGate) await lotsGate;
     return jsonResponse(txns);
   });
 }
@@ -113,6 +116,7 @@ describe("RecordLotsModal", () => {
     suggestions = [];
     suggestionsFailed = false;
     saveFails = false;
+    lotsGate = null;
     previewCallCount = 0;
     holdPreviewResolution = false;
     heldResolvers = [];
@@ -506,6 +510,19 @@ describe("RecordLotsModal", () => {
     await refetch(client);
 
     expect(screen.getAllByTestId("lot-quantity")[0]).toHaveValue("17");
+  });
+
+  it("keeps a row added while the lots load, beside the lots", async () => {
+    const user = userEvent.setup();
+    txns = [lot("a", "buy", "10", "20")];
+    let release = () => {};
+    lotsGate = new Promise((done) => { release = done; });
+    renderWithApp(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
+
+    await user.click(screen.getByRole("button", { name: /^add entry$/i }));
+    release();
+    await waitFor(() => expect(screen.getAllByTestId("lot-row")).toHaveLength(2));
+    expect(accountedLine()).toBe("10 / 20 shares accounted for");
   });
 
   it("keeps the modal open and reports the error when the save fails", async () => {

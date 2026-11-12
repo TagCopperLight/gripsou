@@ -12,16 +12,23 @@ use crate::auth::{self, password, session};
 use crate::error::ApiError;
 use gripsou_core::repo::invite_token::{self, TokenKind};
 
-/// Store a new link and return its token, for the URL. `email` names the
-/// account a reset is for; an invitee chooses their own.
+/// Store a new link and return its token, for the URL. `user_id` names the
+/// account a reset is for; an invitee creates their own.
 pub async fn mint(
     pool: &PgPool,
     kind: TokenKind,
-    email: Option<&str>,
+    user_id: Option<Uuid>,
     created_by: Uuid,
 ) -> Result<String, ApiError> {
     let token = auth::generate_token();
-    invite_token::create(pool, kind, email, created_by, &auth::hash_token_str(&token)).await?;
+    invite_token::create(
+        pool,
+        kind,
+        user_id,
+        created_by,
+        &auth::hash_token_str(&token),
+    )
+    .await?;
     Ok(token)
 }
 
@@ -201,12 +208,12 @@ mod tests {
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
-    /// A reset link for `email`, issued by a fresh admin whose unique address
+    /// A reset link for `user`, issued by a fresh admin whose unique address
     /// can't collide with a test's own users.
-    async fn mint_reset(pool: &PgPool, email: &str) -> String {
+    async fn mint_reset(pool: &PgPool, user: Uuid) -> String {
         let issuer = format!("issuer-{}@t.local", Uuid::new_v4());
         let admin = seed_user_with_password(pool, &issuer, PASSWORD, Role::Admin).await;
-        mint(pool, TokenKind::Reset, Some(email), admin)
+        mint(pool, TokenKind::Reset, Some(user), admin)
             .await
             .unwrap()
     }
@@ -231,9 +238,9 @@ mod tests {
     /// every old session and logs the user in.
     #[gripsou_core::testkit::db_test]
     async fn redeem_reset_sets_password_and_revokes_sessions(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
+        let user = seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
         let old_session = principal_for(&pool, "t@t.local", "old-pw").await;
-        let raw = mint_reset(&pool, "t@t.local").await;
+        let raw = mint_reset(&pool, user).await;
 
         let resp = call_redeem_reset(&pool, &raw, "new-password")
             .await
@@ -256,8 +263,8 @@ mod tests {
     /// password chosen with it.
     #[gripsou_core::testkit::db_test]
     async fn redeem_reset_token_is_single_use(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
-        let raw = mint_reset(&pool, "t@t.local").await;
+        let user = seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
+        let raw = mint_reset(&pool, user).await;
         assert!(
             call_redeem_reset(&pool, &raw, "first-pw").await.is_ok(),
             "first redeem ok"
@@ -285,8 +292,8 @@ mod tests {
     /// An expired reset link is a 404 and changes no password.
     #[gripsou_core::testkit::db_test]
     async fn redeem_reset_expired_token_is_404(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
-        let raw = mint_reset(&pool, "t@t.local").await;
+        let user = seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
+        let raw = mint_reset(&pool, user).await;
         gripsou_core::testkit::expire(
             &pool,
             "invite_token",
@@ -304,8 +311,8 @@ mod tests {
 
     #[gripsou_core::testkit::db_test]
     async fn reset_refuses_a_short_password(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-password", Role::User).await;
-        let raw = mint_reset(&pool, "t@t.local").await;
+        let user = seed_user_with_password(&pool, "t@t.local", "old-password", Role::User).await;
+        let raw = mint_reset(&pool, user).await;
         let err = call_redeem_reset(&pool, &raw, "1234567").await.unwrap_err();
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         // The link was not spent: a valid password still works with it.
@@ -326,8 +333,8 @@ mod tests {
     /// can retry with a real one.
     #[gripsou_core::testkit::db_test]
     async fn redeem_reset_rejects_empty_password(pool: PgPool) {
-        seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
-        let raw = mint_reset(&pool, "t@t.local").await;
+        let user = seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
+        let raw = mint_reset(&pool, user).await;
 
         let err = call_redeem_reset(&pool, &raw, "")
             .await

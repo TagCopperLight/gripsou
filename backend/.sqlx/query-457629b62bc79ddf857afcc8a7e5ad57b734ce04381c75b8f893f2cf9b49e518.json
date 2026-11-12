@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select exists(select 1 from connection where id = $1 and user_id = $2) as \"exists!\"",
+  "query": "select exists(\n               select 1 from connection where id = $1 and user_id = $2 and status <> $3\n           ) as \"exists!\"",
   "describe": {
     "columns": [
       {
@@ -13,12 +13,13 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "Text"
       ]
     },
     "nullable": [
       null
     ]
   },
-  "hash": "c7bc69fcb9405719ace1ab27835266c120cbc668c3738a07405336373f98e9ab"
+  "hash": "457629b62bc79ddf857afcc8a7e5ad57b734ce04381c75b8f893f2cf9b49e518"
 }

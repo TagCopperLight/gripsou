@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "select type as \"token_type!: TokenKind\", email\n             from invite_token\n            where token = $1 and used_at is null and expires_at > now()",
+  "query": "select t.type as \"token_type!: TokenKind\", u.email as \"email?\"\n             from invite_token t\n             left join users u on u.id = t.user_id\n            where t.token = $1 and t.used_at is null and t.expires_at > now()",
   "describe": {
     "columns": [
       {
@@ -16,11 +16,11 @@
       },
       {
         "ordinal": 1,
-        "name": "email",
+        "name": "email?",
         "type_info": "Text",
         "origin": {
           "Table": {
-            "table": "invite_token",
+            "table": "users",
             "name": "email"
           }
         }
@@ -36,5 +36,5 @@
       true
     ]
   },
-  "hash": "8885311f31d702ab222a2f6f60abf78f66547091f21d6d38ee48de2918dc69df"
+  "hash": "87794a7bfea3239e731675769dca7d30d1f91056105fd886159f3ec72a90329a"
 }

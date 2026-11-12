@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "select user_id as \"user_id!\" from invite_token\n            where token = $1 and type = $2\n              and used_at is null and expires_at > now()\n            for update",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "invite_token",
+            "name": "user_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "3f643d4381eeb83f23039f2206805cd78590a57b230d62c4883f82bc6731167b"
+}

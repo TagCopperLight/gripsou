@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        update connection\n           set status = $3\n         where id = $1 and user_id = $2 and status <> $3\n        returning id as \"id!\", status as \"status!: ConnectionStatus\", last_sync_at, last_error\n        ",
+  "query": "\n        update connection\n           set status = $3, sync_requested_at = now(), last_error = null\n         where id = $1 and user_id = $2 and status in ($4, $5)\n        returning id as \"id!\", status as \"status!: ConnectionStatus\", last_sync_at, last_error\n        ",
   "describe": {
     "columns": [
       {
@@ -52,6 +52,8 @@
       "Left": [
         "Uuid",
         "Uuid",
+        "Text",
+        "Text",
         "Text"
       ]
     },
@@ -62,5 +64,5 @@
       true
     ]
   },
-  "hash": "262263da8b052ec42066c9d1dbc7b93ac4307056a379e53d01667c057789c3f5"
+  "hash": "e92364469d2a7e119e17ae47c688c9bed2e615ddaecf9751ead0cc4bd95ec036"
 }

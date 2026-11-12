@@ -138,6 +138,22 @@ describe("Welcome", () => {
     expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
   });
 
+  it("starts a new authenticator setup with an empty code", async () => {
+    renderWelcome();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Set up" }));
+    await screen.findByRole("img", { name: "QR code to scan with your authenticator app" });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "6-digit code" }), { target: { value: "123" } });
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Set up" }));
+    await screen.findByRole("img", { name: "QR code to scan with your authenticator app" });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("textbox", { name: "6-digit code" })).toHaveValue("");
+  });
+
   it("starts on the preferences for a member, without asking for the admin's keys", async () => {
     renderWelcome();
     expect(screen.getByRole("heading", { name: "Welcome, Alex" })).toBeInTheDocument();

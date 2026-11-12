@@ -82,17 +82,20 @@ export function RecordLotsModal({
   // Mirrors the server into state during render, as React recommends for
   // "copy this prop until the user diverges from it". Seeding waits for the
   // suggestions to settle (loaded or failed) so pre-filled rows don't pop in
-  // after the table has rendered.
+  // after the table has rendered. The first seed always happens: rows added
+  // while the lots were still loading (or failed to) join them rather than
+  // replace them.
   const suggestionsSettled = !suggestions.isPending;
+  const seeded = seededFrom.lots !== undefined;
   if (
     data !== undefined &&
     suggestionsSettled &&
     (data !== seededFrom.lots || suggestions.data !== seededFrom.suggested) &&
-    !(rows !== null && dirty)
+    !(seeded && dirty)
   ) {
     setSeededFrom({ lots: data, suggested: suggestions.data });
     setFound(byDate((suggestions.data ?? []).map((sg) => ({ ...sg, key: newKey() }))));
-    setRows(byDate(data.map(rowFromLot)));
+    setRows(byDate([...data.map(rowFromLot), ...(seeded ? [] : rows ?? [])]));
   }
 
   const list = rows ?? [];

@@ -1,6 +1,7 @@
 use gripsou_core::repo::connection::ConnectionStatus;
 use gripsou_core::repo::connection::{
-    BeginSync, begin_sync, clear_syncing, insert_pending, mark_synced_error, mark_synced_ok,
+    BeginSync, begin_await, begin_sync, clear_syncing, ids_for_user, insert_pending,
+    mark_refresh_failed, mark_synced_error, mark_synced_ok,
 };
 use gripsou_core::testkit::{self, seed_connection};
 use sqlx::PgPool;
@@ -36,7 +37,9 @@ async fn begin_sync_claims_once(pool: PgPool) -> anyhow::Result<()> {
 #[gripsou_core::testkit::db_test]
 async fn mark_ok_and_error_set_fields(pool: PgPool) -> anyhow::Result<()> {
     let conn = seed_connection(&pool).await;
+    let user_id = testkit::owner(&pool, conn).await;
 
+    begin_sync(&pool, user_id, conn).await?;
     mark_synced_error(&pool, conn, "boom").await?;
     let (status, err): (String, Option<String>) =
         sqlx::query_as("select status, last_error from connection where id=$1")
@@ -46,6 +49,7 @@ async fn mark_ok_and_error_set_fields(pool: PgPool) -> anyhow::Result<()> {
     assert_eq!(status, "error");
     assert_eq!(err.as_deref(), Some("boom"));
 
+    begin_sync(&pool, user_id, conn).await?;
     mark_synced_ok(&pool, conn).await?;
     let (status, err, synced): (
         String,
@@ -304,8 +308,8 @@ async fn delete_stale_pending_only_removes_old_pending(pool: PgPool) {
 #[gripsou_core::testkit::db_test]
 async fn clear_syncing_releases_every_claim(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
-    let syncing = insert_pending(&pool, user_id, "powens", "syncing").await?;
-    let idle = insert_pending(&pool, user_id, "powens", "idle").await?;
+    let syncing = testkit::seed_connection_for(&pool, user_id).await;
+    let idle = testkit::seed_connection_for(&pool, user_id).await;
     begin_sync(&pool, user_id, syncing).await?;
     begin_sync(&pool, user_id, idle).await?;
     mark_synced_ok(&pool, idle).await?;
@@ -319,5 +323,63 @@ async fn clear_syncing_releases_every_claim(pool: PgPool) -> anyhow::Result<()> 
             .await?;
     assert_eq!(status, "error");
     assert!(last_error.is_some_and(|e| e.contains("interrupted")));
+    Ok(())
+}
+
+async fn status(pool: &PgPool, conn: uuid::Uuid) -> String {
+    sqlx::query_scalar("select status from connection where id = $1")
+        .bind(conn)
+        .fetch_one(pool)
+        .await
+        .unwrap()
+}
+
+/// A connection still on the provider's page has no credentials: no sync or
+/// refresh may claim it, and "Sync all" leaves it out, so its callback can
+/// still finish it.
+#[gripsou_core::testkit::db_test]
+async fn a_pending_connection_is_never_claimed(pool: PgPool) -> anyhow::Result<()> {
+    let user_id = testkit::seed_user(&pool).await;
+    let set_up = testkit::seed_connection_for(&pool, user_id).await;
+    let pending = insert_pending(&pool, user_id, "powens", "new").await?;
+
+    assert!(matches!(
+        begin_sync(&pool, user_id, pending).await?,
+        BeginSync::NotFound
+    ));
+    assert!(matches!(
+        begin_await(&pool, user_id, pending).await?,
+        BeginSync::NotFound
+    ));
+    assert_eq!(status(&pool, pending).await, "pending");
+    assert_eq!(ids_for_user(&pool, user_id).await?, vec![set_up]);
+    Ok(())
+}
+
+/// Finishing writes release only the lock they were given: a late answer
+/// from a sync or refresh that no longer holds it leaves the connection's
+/// current state alone.
+#[gripsou_core::testkit::db_test]
+async fn finishing_writes_need_the_lock_they_release(pool: PgPool) -> anyhow::Result<()> {
+    let conn = seed_connection(&pool).await;
+    let user_id = testkit::owner(&pool, conn).await;
+
+    // Not syncing: a stray sync outcome changes nothing.
+    mark_synced_error(&pool, conn, "late").await?;
+    assert_eq!(status(&pool, conn).await, "ok");
+
+    // A refresh request that fails after the awaiting-timeout fallback
+    // claimed the sync must not release that sync's lock.
+    begin_await(&pool, user_id, conn).await?;
+    begin_sync(&pool, user_id, conn).await?;
+    mark_refresh_failed(&pool, conn, "refresh failed").await?;
+    assert_eq!(status(&pool, conn).await, "syncing");
+    mark_synced_ok(&pool, conn).await?;
+    assert_eq!(status(&pool, conn).await, "ok");
+
+    // Still awaiting: the failure is recorded and the claim released.
+    begin_await(&pool, user_id, conn).await?;
+    mark_refresh_failed(&pool, conn, "refresh failed").await?;
+    assert_eq!(status(&pool, conn).await, "error");
     Ok(())
 }

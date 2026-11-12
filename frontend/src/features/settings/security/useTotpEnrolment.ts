@@ -7,25 +7,31 @@ import { useTotpConfirm, useTotpSetup } from "../../../api/auth";
 import { TOTP_DIGITS, type TotpSetup } from "../../../api/wire";
 import { throttledError } from "../../../auth/throttle";
 
-export type TotpStep = "scan" | "code" | "codes";
+/** Where a setup is. Scanning and the first code need the server's secret;
+ *  the last step shows the backup codes the confirmed code earned. */
+export type TotpState =
+  | { step: "scan"; setup: TotpSetup }
+  | { step: "code"; setup: TotpSetup }
+  | { step: "codes"; recoveryCodes: string[] };
 
 /** Setting up an authenticator once the password is checked (or needs no
- *  check): scan, first code, backup codes. `step` is null until `begin`, and
- *  again when the setup expired (10 minutes), after `onExpired`. */
+ *  check): scan, first code, backup codes. `state` is null until `begin`, and
+ *  again when the setup expired (10 minutes), after `onExpired`. Each `begin`
+ *  starts with an empty code. */
 export function useTotpEnrolment(onExpired: () => void) {
   const { t } = useTranslation();
   const start = useTotpSetup();
   const confirm = useTotpConfirm();
-  const [step, setStep] = useState<TotpStep | null>(null);
-  const [setup, setSetup] = useState<TotpSetup | null>(null);
+  const [state, setState] = useState<TotpState | null>(null);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
 
   const begin = async (reauth?: string) => {
     try {
-      setSetup(await start.mutateAsync(reauth));
-      setStep("scan");
+      const setup = await start.mutateAsync(reauth);
+      setCode("");
+      setError(null);
+      setState({ step: "scan", setup });
     } catch {
       showError(t("twoFactor.setupFailed"));
     }
@@ -35,12 +41,11 @@ export function useTotpEnrolment(onExpired: () => void) {
     if (value.length !== TOTP_DIGITS || confirm.isPending) return;
     setError(null);
     try {
-      setRecoveryCodes((await confirm.mutateAsync(value)).recoveryCodes);
-      setStep("codes");
+      setState({ step: "codes", recoveryCodes: (await confirm.mutateAsync(value)).recoveryCodes });
     } catch (err) {
       setCode("");
       if (err instanceof ApiError && err.status === 409) {
-        setStep(null);
+        setState(null);
         onExpired();
         return;
       }
@@ -60,24 +65,26 @@ export function useTotpEnrolment(onExpired: () => void) {
     if (digits.length === TOTP_DIGITS) void submitCode(digits);
   };
 
+  /** Between scanning and the code, which share the setup. */
+  const withSetup = (step: "scan" | "code") =>
+    setState((s) => (s && s.step !== "codes" ? { step, setup: s.setup } : s));
+
   const backToScan = () => {
     setError(null);
-    setStep("scan");
+    withSetup("scan");
   };
 
   return {
-    step,
-    setup,
+    state,
     code,
     error,
-    recoveryCodes,
     begin,
     typeCode,
     submitCode: () => void submitCode(code),
-    toCode: () => setStep("code"),
+    toCode: () => withSetup("code"),
     backToScan,
     /** Leaves the setup (abandoned, or done once the codes are saved). */
-    close: () => setStep(null),
+    close: () => setState(null),
     busy: start.isPending || confirm.isPending,
   };
 }
