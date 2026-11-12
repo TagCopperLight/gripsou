@@ -383,7 +383,7 @@ pub async fn request_sync(
 async fn refresh_failed(db: &Db, id: Uuid, msg: impl Into<String>) {
     let msg = msg.into();
     tracing::error!(connection_id = %id, error = %msg, "refresh request failed");
-    if let Err(e) = connection::mark_synced_error(db, id, &msg).await {
+    if let Err(e) = connection::mark_refresh_failed(db, id, &msg).await {
         tracing::error!(
             connection_id = %id,
             error = %error_chain(&e),

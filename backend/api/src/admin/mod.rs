@@ -297,11 +297,11 @@ pub async fn create_reset_link(
             "cannot create a reset link for yourself",
         ));
     }
-    let target = gripsou_core::repo::user::profile_by_id(&pool, id)
+    gripsou_core::repo::user::profile_by_id(&pool, id)
         .await?
         .ok_or(ApiError::NotFound("user not found"))?;
     challenge::spend_reauth(&pool, user_id, &body.reauth).await?;
-    let raw = invite::mint(&pool, TokenKind::Reset, Some(&target.email), user_id).await?;
+    let raw = invite::mint(&pool, TokenKind::Reset, Some(id), user_id).await?;
     tracing::info!(target_user_id = %id, "reset link created");
     Ok((
         StatusCode::CREATED,
@@ -617,14 +617,14 @@ mod tests {
         assert_eq!(resp.0, StatusCode::CREATED);
         assert!(!resp.1.0.token.is_empty());
 
-        let (kind, email): (String, Option<String>) =
-            sqlx::query_as("select type, email from invite_token where created_by = $1")
+        let (kind, target): (String, Option<Uuid>) =
+            sqlx::query_as("select type, user_id from invite_token where created_by = $1")
                 .bind(admin)
                 .fetch_one(&pool)
                 .await
                 .unwrap();
         assert_eq!(kind, "invite");
-        assert_eq!(email, None);
+        assert_eq!(target, None);
 
         let stored_token: String =
             sqlx::query_scalar("select token from invite_token where created_by = $1")
@@ -636,7 +636,7 @@ mod tests {
     }
 
     #[gripsou_core::testkit::db_test]
-    async fn create_reset_link_stores_target_email(pool: PgPool) {
+    async fn create_reset_link_stores_target_user(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
         let target = seed_user(&pool, "target@t.local").await;
         let who = principal_for(&pool, "a@t.local", PASSWORD).await;
@@ -654,13 +654,13 @@ mod tests {
         .expect("ok");
         assert_eq!(resp.0, StatusCode::CREATED);
 
-        let (kind, email): (String, Option<String>) =
-            sqlx::query_as("select type, email from invite_token where type = 'reset'")
+        let (kind, stored): (String, Option<Uuid>) =
+            sqlx::query_as("select type, user_id from invite_token where type = 'reset'")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
         assert_eq!(kind, "reset");
-        assert_eq!(email.as_deref(), Some("target@t.local"));
+        assert_eq!(stored, Some(target));
 
         let stored_token: String =
             sqlx::query_scalar("select token from invite_token where type = 'reset'")

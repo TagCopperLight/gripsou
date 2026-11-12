@@ -146,9 +146,11 @@ pub enum BeginSync {
 }
 
 /// Atomically claim a connection for syncing: flip status to `syncing` only if it
-/// is owned by `user_id` and not already syncing. This is the per-connection
-/// lock that prevents double runs. A sync always releases it: it ends, fails,
-/// panics or hits its time limit, and a restart clears it at boot.
+/// is owned by `user_id`, set up (not `pending`) and not already syncing. This
+/// is the per-connection lock that prevents double runs. A sync always
+/// releases it: it ends, fails, panics or hits its time limit, and a restart
+/// clears it at boot. A `pending` connection has no credentials yet, and its
+/// callback only finishes it while it is still `pending`.
 pub async fn begin_sync(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -159,12 +161,15 @@ pub async fn begin_sync(
         r#"
         update connection
            set status = $3
-         where id = $1 and user_id = $2 and status <> $3
+         where id = $1 and user_id = $2 and status in ($4, $5, $6)
         returning id as "id!", status as "status!: ConnectionStatus", last_sync_at, last_error
         "#,
         id,
         user_id,
         ConnectionStatus::Syncing as ConnectionStatus,
+        ConnectionStatus::Ok as ConnectionStatus,
+        ConnectionStatus::Error as ConnectionStatus,
+        ConnectionStatus::Awaiting as ConnectionStatus,
     )
     .fetch_optional(pool)
     .await?;
@@ -173,7 +178,8 @@ pub async fn begin_sync(
 }
 
 /// A claim's outcome. No claimed row means either "already busy" or "not
-/// owned"; only then is it worth a second query to tell them apart.
+/// owned" (a `pending` connection counts as not there yet); only then is it
+/// worth a second query to tell them apart.
 async fn claim_outcome(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -184,9 +190,12 @@ async fn claim_outcome(
         return Ok(BeginSync::Started(state));
     }
     let exists = sqlx::query_scalar!(
-        r#"select exists(select 1 from connection where id = $1 and user_id = $2) as "exists!""#,
+        r#"select exists(
+               select 1 from connection where id = $1 and user_id = $2 and status <> $3
+           ) as "exists!""#,
         id,
         user_id,
+        ConnectionStatus::Pending as ConnectionStatus,
     )
     .fetch_one(pool)
     .await?;
@@ -197,26 +206,48 @@ async fn claim_outcome(
     })
 }
 
+/// Release a sync's lock as a success. Only a `syncing` connection is
+/// touched: the lock is the sync's, and a write from a sync that no longer
+/// holds it must not release a lock another sync has since taken.
 pub async fn mark_synced_ok(pool: &sqlx::PgPool, id: Uuid) -> Result<(), CoreError> {
     sqlx::query!(
         "update connection
             set status = $2, last_sync_at = now(), last_error = null
-          where id = $1",
+          where id = $1 and status = $3",
         id,
         ConnectionStatus::Ok as ConnectionStatus,
+        ConnectionStatus::Syncing as ConnectionStatus,
     )
     .execute(pool)
     .await?;
     Ok(())
 }
 
-/// Mark a finished sync as failed, recording the message.
+/// Release a sync's lock as a failure, recording the message. Only a
+/// `syncing` connection is touched, as in [`mark_synced_ok`].
 pub async fn mark_synced_error(pool: &sqlx::PgPool, id: Uuid, msg: &str) -> Result<(), CoreError> {
+    release_with_error(pool, id, ConnectionStatus::Syncing, msg).await
+}
+
+/// Release an `awaiting` claim whose refresh request failed, recording the
+/// message. A connection the awaiting-timeout fallback has meanwhile claimed
+/// for syncing is left to that sync.
+pub async fn mark_refresh_failed(pool: &sqlx::PgPool, id: Uuid, msg: &str) -> Result<(), CoreError> {
+    release_with_error(pool, id, ConnectionStatus::Awaiting, msg).await
+}
+
+async fn release_with_error(
+    pool: &sqlx::PgPool,
+    id: Uuid,
+    held: ConnectionStatus,
+    msg: &str,
+) -> Result<(), CoreError> {
     sqlx::query!(
-        "update connection set status = $3, last_error = $2 where id = $1",
+        "update connection set status = $3, last_error = $2 where id = $1 and status = $4",
         id,
         msg,
         ConnectionStatus::Error as ConnectionStatus,
+        held as ConnectionStatus,
     )
     .execute(pool)
     .await?;
@@ -301,10 +332,13 @@ pub async fn sync_source(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<SyncSou
     Ok(row)
 }
 
+/// The user's set-up connections, for "Sync all": a `pending` one is still
+/// on the provider's page.
 pub async fn ids_for_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<Uuid>, CoreError> {
     let ids = sqlx::query_scalar!(
-        r#"select id as "id!" from connection where user_id = $1"#,
+        r#"select id as "id!" from connection where user_id = $1 and status <> $2"#,
         user_id,
+        ConnectionStatus::Pending as ConnectionStatus,
     )
     .fetch_all(pool)
     .await?;
@@ -475,7 +509,8 @@ pub async fn connection_for_sync(
 }
 
 /// Atomically transition an owned connection to `awaiting` (force-refresh
-/// requested). Rejects if already `syncing` or `awaiting`.
+/// requested). Only from `ok` or `error`: rejects one already `syncing` or
+/// `awaiting`, and a `pending` one, which is not set up yet.
 pub async fn begin_await(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -486,13 +521,14 @@ pub async fn begin_await(
         r#"
         update connection
            set status = $3, sync_requested_at = now(), last_error = null
-         where id = $1 and user_id = $2 and status not in ($3, $4)
+         where id = $1 and user_id = $2 and status in ($4, $5)
         returning id as "id!", status as "status!: ConnectionStatus", last_sync_at, last_error
         "#,
         id,
         user_id,
         ConnectionStatus::Awaiting as ConnectionStatus,
-        ConnectionStatus::Syncing as ConnectionStatus,
+        ConnectionStatus::Ok as ConnectionStatus,
+        ConnectionStatus::Error as ConnectionStatus,
     )
     .fetch_optional(pool)
     .await?;

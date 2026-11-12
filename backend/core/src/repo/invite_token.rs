@@ -14,7 +14,7 @@ text_enum! {
     /// `invite_token.type`.
     pub enum TokenKind {
         Invite = "invite",
-        /// A password reset for an existing user's email.
+        /// A password reset for an existing user.
         Reset = "reset",
     }
 }
@@ -25,6 +25,7 @@ pub const TTL_HOURS: i32 = 24;
 /// A token that is currently redeemable: row exists, unused, unexpired.
 pub struct ValidToken {
     pub token_type: TokenKind,
+    /// The current email of the user a reset is for. `None` for invites.
     pub email: Option<String>,
 }
 
@@ -36,9 +37,10 @@ pub async fn find_valid(
 ) -> Result<Option<ValidToken>, CoreError> {
     let row = sqlx::query_as!(
         ValidToken,
-        r#"select type as "token_type!: TokenKind", email
-             from invite_token
-            where token = $1 and used_at is null and expires_at > now()"#,
+        r#"select t.type as "token_type!: TokenKind", u.email as "email?"
+             from invite_token t
+             left join users u on u.id = t.user_id
+            where t.token = $1 and t.used_at is null and t.expires_at > now()"#,
         token_hash,
     )
     .fetch_optional(pool)
@@ -95,16 +97,16 @@ pub async fn redeem_invite(
 
 /// Redeem a reset token: set the new password, consume the token, revoke every
 /// existing session of the user and turn off their second factors, all
-/// atomically. `Ok(None)` if the token is invalid or its target user has since
-/// been deleted.
+/// atomically. `Ok(None)` if the token is invalid (deleting the user deletes
+/// their links).
 pub async fn redeem_reset(
     pool: &sqlx::PgPool,
     token_hash: &str,
     password_hash: &str,
 ) -> Result<Option<(Uuid, Cleared)>, CoreError> {
     let mut tx = pool.begin().await?;
-    let email = sqlx::query_scalar!(
-        r#"select email from invite_token
+    let user_id = sqlx::query_scalar!(
+        r#"select user_id as "user_id!" from invite_token
             where token = $1 and type = $2
               and used_at is null and expires_at > now()
             for update"#,
@@ -112,21 +114,17 @@ pub async fn redeem_reset(
         TokenKind::Reset as TokenKind,
     )
     .fetch_optional(&mut *tx)
-    .await?
-    .flatten(); // email column is nullable; reset tokens always carry one.
-    let Some(email) = email else {
-        return Ok(None);
-    };
-    let user_id = sqlx::query_scalar!(
-        "update users set password_hash = $2 where email = $1 returning id",
-        email,
-        password_hash,
-    )
-    .fetch_optional(&mut *tx)
     .await?;
     let Some(user_id) = user_id else {
-        return Ok(None); // user deleted after the token was minted.
+        return Ok(None);
     };
+    sqlx::query!(
+        "update users set password_hash = $2 where id = $1",
+        user_id,
+        password_hash,
+    )
+    .execute(&mut *tx)
+    .await?;
     sqlx::query!(
         "update invite_token set used_at = now() where token = $1",
         token_hash,
@@ -141,21 +139,21 @@ pub async fn redeem_reset(
     Ok(Some((user_id, cleared)))
 }
 
-/// Insert a one-time token, redeemable for [`TTL_HOURS`]. `email` is the
-/// target user's email for resets, `None` for invites (the invitee chooses it).
+/// Insert a one-time token, redeemable for [`TTL_HOURS`]. `user_id` is the
+/// user a reset is for, `None` for invites (the invitee creates their own).
 pub async fn create(
     pool: &sqlx::PgPool,
     kind: TokenKind,
-    email: Option<&str>,
+    user_id: Option<Uuid>,
     created_by: Uuid,
     token: &str,
 ) -> Result<(), CoreError> {
     sqlx::query!(
-        r#"insert into invite_token (token, type, email, created_by, expires_at)
+        r#"insert into invite_token (token, type, user_id, created_by, expires_at)
            values ($1, $2, $3, $4, now() + make_interval(hours => $5))"#,
         token,
         kind as TokenKind,
-        email,
+        user_id,
         created_by,
         TTL_HOURS,
     )
@@ -180,7 +178,8 @@ mod tests {
     #[crate::testkit::db_test]
     async fn find_valid_returns_unused_unexpired(pool: PgPool) {
         let admin = seed_admin(&pool).await;
-        create(&pool, TokenKind::Reset, Some("u@t.local"), admin, "tok-ok")
+        let user = crate::testkit::seed_user_email(&pool, "u@t.local").await;
+        create(&pool, TokenKind::Reset, Some(user), admin, "tok-ok")
             .await
             .unwrap();
         let found = find_valid(&pool, "tok-ok").await.unwrap().unwrap();
@@ -237,7 +236,7 @@ mod tests {
             .await
             .unwrap();
         }
-        create(&pool, TokenKind::Reset, Some("a@t.local"), admin, "rst-2")
+        create(&pool, TokenKind::Reset, Some(admin), admin, "rst-2")
             .await
             .unwrap();
 
@@ -254,5 +253,38 @@ mod tests {
         let theirs = crate::repo::mfa::status(&pool, other).await.unwrap();
         assert!(theirs.totp && theirs.passkeys == 1);
         assert_eq!(theirs.recovery_remaining, 2);
+    }
+
+    /// The link follows the user, not the address it was made for: it still
+    /// works after an email change, and the account that takes the old
+    /// address later is never reset by it.
+    #[crate::testkit::db_test]
+    async fn redeem_reset_follows_the_user_through_an_email_change(pool: PgPool) {
+        let admin = seed_admin(&pool).await;
+        let user = crate::testkit::seed_user_email(&pool, "old@t.local").await;
+        create(&pool, TokenKind::Reset, Some(user), admin, "rst-3")
+            .await
+            .unwrap();
+        sqlx::query("update users set email = 'new@t.local' where id = $1")
+            .bind(user)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let other = crate::testkit::seed_user_email(&pool, "old@t.local").await;
+
+        let found = find_valid(&pool, "rst-3").await.unwrap().unwrap();
+        assert_eq!(found.email.as_deref(), Some("new@t.local"));
+        let (reset, _) = redeem_reset(&pool, "rst-3", "new-hash")
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(reset, user);
+        let hash = |id: Uuid| {
+            sqlx::query_scalar::<_, String>("select password_hash from users where id = $1")
+                .bind(id)
+                .fetch_one(&pool)
+        };
+        assert_eq!(hash(user).await.unwrap(), "new-hash");
+        assert_ne!(hash(other).await.unwrap(), "new-hash");
     }
 }
