@@ -34,7 +34,7 @@ export function SessionDetailModal({
             {t("common.close")}
           </Button>
           {onRevoke && (
-            <Button variant="danger" onClick={onRevoke} disabled={revoking}>
+            <Button variant="danger" onClick={onRevoke} busy={revoking} busyLabel={t("common.busy.loggingOut")}>
               {t("settings.account.revokeSession")}
             </Button>
           )}

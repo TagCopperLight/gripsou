@@ -5,7 +5,10 @@ import { useErrorToast } from "../../../lib/errorToasts";
 import { Lock, Trash2, X } from "lucide-react";
 
 import { Button } from "../../../ui/Button";
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
+import { LoadingFrame } from "../../../ui/LoadingFrame";
+import { Bone, Skeleton, TextBone } from "../../../ui/Skeleton";
+import { staleClass } from "../../../ui/stale";
 import { HoldingModalHeader } from "./HoldingModalHeader";
 import { Modal } from "../../../ui/Modal";
 import { Money } from "../../../ui/Money";
@@ -83,8 +86,8 @@ export function RecordLotsModal({
   // "copy this prop until the user diverges from it". Seeding waits for the
   // suggestions to settle (loaded or failed) so pre-filled rows don't pop in
   // after the table has rendered. The first seed always happens: rows added
-  // while the lots were still loading (or failed to) join them rather than
-  // replace them.
+  // after the lots failed to load join them, once a retry brings them, rather
+  // than replace them.
   const suggestionsSettled = !suggestions.isPending;
   const seeded = seededFrom.lots !== undefined;
   if (
@@ -99,6 +102,8 @@ export function RecordLotsModal({
   }
 
   const list = rows ?? [];
+  // The table waits for the lots and the suggestions (see the seeding above).
+  const loading = rows === null && !isError;
   const set = (i: number, patch: Partial<LotRow>) => {
     setDirty(true);
     setRows((rs) => (rs ?? []).map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -160,12 +165,17 @@ export function RecordLotsModal({
   }, [JSON.stringify(parsed), holding.id, dirty, rows === null]);
 
   // Nothing to compute from: no figure, rather than the server's all-zero answer.
-  const figures = list.some((r) => lotEntry(r, language) !== null) ? lastPreview : null;
+  const computable = list.some((r) => lotEntry(r, language) !== null);
+  const figures = computable ? lastPreview : null;
+  // Bones until the first answer for loaded rows; after an edit, the last
+  // figures dimmed until the new ones come.
+  const figuresLoading = loading || (computable && lastPreview === null && !preview.isError);
+  const figuresStale = staleClass(computable && lastPreview !== null && preview.isPending);
 
   const { adds, deletes, pending, anyInvalid } = lotChanges(list, queuedDeletes, language);
   // A red bar does NOT disable Save: a user entering a sale before the buy it
   // came from is mid-task, not wrong.
-  const canSave = pending > 0 && !anyInvalid && !saveLots.isPending;
+  const canSave = pending > 0 && !anyInvalid;
 
   const save = async () => {
     setFailed(false);
@@ -197,7 +207,7 @@ export function RecordLotsModal({
           onClick={onClose}
           disabled={saveLots.isPending}
           aria-label={t("common.close")}
-          className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
         >
           <X className="size-5" />
         </button>
@@ -207,6 +217,11 @@ export function RecordLotsModal({
           when there is one. Its bottom rule, or this one, separates them from the table. */}
       <div className={`shrink-0 px-6 pb-4 ${found.length > 0 && !dismissed ? "" : "border-b border-surface-2"}`}>
         <div className="bg-surface-2 rounded-2xl p-5 flex flex-col gap-3">
+          {loading ? (
+            <Skeleton>
+              <TextBone text="text-sm" className="w-56" />
+            </Skeleton>
+          ) : (
           <span className="text-fg-dim text-sm">
             <Trans
               i18nKey="dashboard.holdings.gap.accounted"
@@ -217,6 +232,7 @@ export function RecordLotsModal({
               components={{ num: <span className="font-mono" /> }}
             />
           </span>
+          )}
           <div className="h-2 w-full rounded-full bg-surface-3 overflow-hidden">
             <div
               data-testid="accounted-bar"
@@ -230,15 +246,15 @@ export function RecordLotsModal({
         <FoundPanel found={found} currency={currency} onAdd={addFound} onDismiss={() => setDismissed(true)} />
       )}
 
+      <LoadingFrame loading={loading} className="flex min-h-0 flex-1 flex-col">
       <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 flex flex-col gap-4">
         {/* Table — no surface, deliberately: it is the working area, not a card. */}
-        {rows === null ? (
-          <CardState
-            variant={isError ? "error" : "loading"}
+        {rows === null && !loading ? (
+          <CardError
             onRetry={() => refetch()}
             className="mt-4 h-32"
           />
-        ) : list.length === 0 ? (
+        ) : !loading && list.length === 0 ? (
           <p className="text-fg-faint text-sm py-4">{t("dashboard.holdings.gap.empty")}</p>
         ) : (
           <table className="w-full table-fixed border-separate border-spacing-0">
@@ -255,6 +271,7 @@ export function RecordLotsModal({
               </tr>
             </thead>
             <tbody>
+              {loading && <LotRowsSkeleton />}
               {list.map((r, i) => {
                 const p = lotEntry(r, language);
                 const cell = "py-1.5 pr-2 border-t border-surface-2";
@@ -373,8 +390,9 @@ export function RecordLotsModal({
           <span className="text-fg text-sm font-semibold">
             {t("dashboard.holdings.gap.figures")}
           </span>
-          <div className="grid grid-cols-2 gap-y-4 gap-x-6 mt-4">
+          <div className={`grid grid-cols-2 gap-y-4 gap-x-6 mt-4 ${figuresStale}`}>
             <Figure
+              loading={figuresLoading}
               currency={currency}
               converted={figures?.reporting?.invested}
               testId="figure-invested"
@@ -382,6 +400,7 @@ export function RecordLotsModal({
               value={figures ? formatMoney(figures.invested, { currency }) : "—"}
             />
             <Figure
+              loading={figuresLoading}
               currency={currency}
               converted={figures?.reporting?.meanPrice}
               testId="figure-meanPrice"
@@ -389,6 +408,7 @@ export function RecordLotsModal({
               value={figures ? formatMoney(figures.meanPrice, { currency }) : "—"}
             />
             <SignedFigure
+              loading={figuresLoading}
               converted={figures?.reporting?.realised}
               testId="figure-realised"
               label={t("dashboard.holdings.gap.realisedPnl")}
@@ -396,6 +416,7 @@ export function RecordLotsModal({
               currency={currency}
             />
             <SignedFigure
+              loading={figuresLoading}
               converted={figures?.reporting?.unrealised}
               testId="figure-unrealised"
               label={t("dashboard.holdings.gap.unrealisedPnl")}
@@ -406,39 +427,58 @@ export function RecordLotsModal({
         </div>
       </div>
 
+      </LoadingFrame>
+
       <div ref={actions} className="relative z-10 flex shrink-0 items-center justify-end gap-2 rounded-b-3xl bg-surface px-6 pb-6 pt-2">
         <Button variant="ghost" onClick={onClose} disabled={saveLots.isPending}>
           {t("dashboard.holdings.gap.cancel")}
         </Button>
-        <Button variant="primary" onClick={save} disabled={!canSave}>
-          {pending === 0
-            ? t("dashboard.holdings.gap.saveNone")
-            : t("dashboard.holdings.gap.save", { count: pending })}
-        </Button>
+        <LoadingFrame loading={loading}>
+          <Button variant="primary" onClick={save} disabled={!canSave} busy={saveLots.isPending} busyLabel={t("common.busy.saving")}>
+            {pending === 0
+              ? t("dashboard.holdings.gap.saveNone")
+              : t("dashboard.holdings.gap.save", { count: pending })}
+          </Button>
+        </LoadingFrame>
       </div>
     </Modal>
   );
 }
 
-function Figure({ testId, label, value, currency, converted }: {
+/** A figure's label over its value, or over a bone while it is computed. */
+function FigureSlot({ label, loading, children }: { label: string; loading: boolean; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-fg-faint text-xs">{label}</span>
+      {loading ? (
+        <Skeleton>
+          {/* The figure's line is the slot's own, not its text-sm. */}
+          <TextBone text="text-base" className="w-24" />
+        </Skeleton>
+      ) : (
+        <span className="self-start">{children}</span>
+      )}
+    </div>
+  );
+}
+
+function Figure({ testId, label, value, currency, converted, loading }: {
   testId: string;
   label: string;
   value: string;
   currency: string;
   /** The figure in the reader's currency, shown on hover. */
   converted: string | null | undefined;
+  loading: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-fg-faint text-xs">{label}</span>
-      <span className="self-start">
-        <MoneyHint side="right" currency={currency} converted={converted}>
-          <span data-testid={testId} className="text-fg font-mono font-semibold text-sm">
-            {value}
-          </span>
-        </MoneyHint>
-      </span>
-    </div>
+    <FigureSlot label={label} loading={loading}>
+      <MoneyHint side="right" currency={currency} converted={converted}>
+        <span data-testid={testId} className="text-fg font-mono font-semibold text-sm">
+          {value}
+        </span>
+      </MoneyHint>
+    </FigureSlot>
   );
 }
 
@@ -448,35 +488,34 @@ function SignedFigure({
   value,
   currency,
   converted,
+  loading,
 }: {
   converted: string | null | undefined;
   testId: string;
   label: string;
   value: number | null;
   currency: string;
+  loading: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="text-fg-faint text-xs">{label}</span>
+    <FigureSlot label={label} loading={loading}>
       {/* `Money` renders only its own span and does not forward arbitrary
           props, so the test hook goes on a wrapper. */}
-      <span className="self-start">
-        <MoneyHint side="right" currency={currency} converted={converted} signed>
-          <span data-testid={testId}>
-            {value === null ? (
-              <span className="text-fg-faint font-mono font-semibold text-sm">—</span>
-            ) : (
-              <Money
-                value={value}
-                currency={currency}
-                signed
-                className={`font-semibold text-sm ${value >= 0 ? "text-green" : "text-red"}`}
-              />
-            )}
-          </span>
-        </MoneyHint>
-      </span>
-    </div>
+      <MoneyHint side="right" currency={currency} converted={converted} signed>
+        <span data-testid={testId}>
+          {value === null ? (
+            <span className="text-fg-faint font-mono font-semibold text-sm">—</span>
+          ) : (
+            <Money
+              value={value}
+              currency={currency}
+              signed
+              className={`font-semibold text-sm ${value >= 0 ? "text-green" : "text-red"}`}
+            />
+          )}
+        </span>
+      </MoneyHint>
+    </FigureSlot>
   );
 }
 
@@ -561,4 +600,25 @@ function FoundPanel({ found, currency, onAdd, onDismiss }: {
       </table>
     </section>
   );
+}
+
+/** Three rows of the table while the lots load: a bone for the buy/sell
+ *  switch, one per field as tall as a `TextInput`, the total and the bin. The
+ *  table's body can't hold a `Skeleton`, so each row pulses on its own and is
+ *  hidden from screen readers; the line above the bar says the window is
+ *  loading. */
+function LotRowsSkeleton() {
+  const cell = "py-1.5 pr-2 border-t border-surface-2";
+  const field = <Bone className="h-9.5 rounded-xl" />;
+  return Array.from({ length: 3 }, (_, i) => (
+    <tr key={i} aria-hidden className="motion-safe:animate-pulse">
+      <td className={cell}><Bone className="h-8.5 w-24 rounded-xl" /></td>
+      <td className={cell}>{field}</td>
+      <td className={cell}>{field}</td>
+      <td className={cell}>{field}</td>
+      <td className={cell}>{field}</td>
+      <td className={cell}><Bone className="ml-auto h-3 w-16" /></td>
+      <td className="py-1.5 border-t border-surface-2"><Bone className="ml-auto mr-1.5 size-4 rounded" /></td>
+    </tr>
+  ));
 }

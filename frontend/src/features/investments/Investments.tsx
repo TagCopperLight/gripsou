@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { PageHeader } from "../../ui/PageHeader";
 import { Surface } from "../../ui/Surface";
-import { CardState } from "../../ui/CardState";
+import { CardError } from "../../ui/CardError";
 import { AnnualisedReturnCard } from "./AnnualisedReturnCard";
 import { ReturnsCard } from "./ReturnsCard";
 import { ExposureDonut } from "../exposure/ExposureDonut";
@@ -20,31 +20,32 @@ export function Investments() {
   const returns = useInvestmentReturns();
   const holdings = useHoldings();
 
-  const failed = returns.isError || holdings.isError;
+  const loading = returns.isPending || holdings.isPending;
   const view =
     returns.data !== undefined && holdings.data !== undefined ? investmentsView(holdings.data, returns.data) : null;
 
   return (
     <div>
       <PageHeader title={t("nav.investments")} />
-      {view === null || returns.data === undefined ? (
+      {view !== null && returns.data !== undefined ? (
+        view.empty ? <InvestmentsEmpty /> : <InvestmentsBody data={returns.data} held={view.held} excluded={view.excluded} />
+      ) : loading ? (
+        // Whether anything is invested is still unknown: the full page, in bones.
+        <InvestmentsBody />
+      ) : (
         <Placeholder
-          variant={failed ? "error" : "loading"}
           onRetry={() => {
             void returns.refetch();
             void holdings.refetch();
           }}
         />
-      ) : view.empty ? (
-        <InvestmentsEmpty />
-      ) : (
-        <InvestmentsBody data={returns.data} held={view.held} excluded={view.excluded} />
       )}
     </div>
   );
 }
 
-function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; held: ExposureHolding[]; excluded: number }) {
+/** The page's cards; without data (still loading), each one in bones. */
+function InvestmentsBody({ data, held = [], excluded = 0 }: { data?: InvestmentReturns; held?: ExposureHolding[]; excluded?: number }) {
   const { t, i18n } = useTranslation();
   // One eye by the section's heading reveals the three donuts.
   const privacy = usePrivacy();
@@ -58,7 +59,7 @@ function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; he
       <ReturnsCard data={data} className="mb-4" />
 
       <section className="mt-8 mb-4">
-        <CardTitle size="lg" className="mb-3 px-1" privacy={privacy}>
+        <CardTitle size="lg" className="mb-3 px-1" privacy={data !== undefined && privacy}>
           {t("investments.exposure.title")}
         </CardTitle>
 
@@ -70,6 +71,7 @@ function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; he
             total={e.covered}
             fxExcluded={fxExcluded}
             masked={privacy.masked}
+            loading={data === undefined}
           />
           <div className="grid gap-4 md:grid-cols-2">
             <ExposureDonut
@@ -78,6 +80,7 @@ function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; he
               total={e.covered}
               fxExcluded={fxExcluded}
               masked={privacy.masked}
+              loading={data === undefined}
             />
             <ExposureDonut
               title={t("investments.exposure.indices")}
@@ -85,6 +88,7 @@ function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; he
               total={e.total}
               fxExcluded={fxExcluded}
               masked={privacy.masked}
+              loading={data === undefined}
             />
           </div>
         </div>
@@ -93,15 +97,15 @@ function InvestmentsBody({ data, held, excluded }: { data: InvestmentReturns; he
   );
 }
 
-/** Loading, or the API can't be reached: the page keeps its shape, each
- *  surface saying so the way every other card in the app does. */
-function Placeholder({ variant, onRetry }: { variant: "loading" | "error"; onRetry: () => void }) {
+/** The API can't be reached: the page keeps its shape, each surface saying
+ *  so the way every other card in the app does. */
+function Placeholder({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
   const card = (title: string, height: string, className = "") => (
     <Surface className={`w-full ${className}`}>
       <div className="flex flex-col p-4 md:p-5">
         <CardTitle>{title}</CardTitle>
-        <CardState variant={variant} onRetry={onRetry} className={`mt-2 ${height}`} />
+        <CardError onRetry={onRetry} className={`mt-2 ${height}`} />
       </div>
     </Surface>
   );

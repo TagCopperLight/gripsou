@@ -124,6 +124,15 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("BudgetOverview", () => {
+  it("shows its frame, controls off, while the period and the summary load", async () => {
+    stubFetch(() => new Promise<Response>(() => {}));
+    renderPage();
+    expect(await screen.findByTestId("period-range")).toBeDisabled();
+    expect(screen.getByTestId("period-prev")).toBeDisabled();
+    expect(screen.getAllByTestId("skeleton").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Loading…")).toBeNull();
+  });
+
   it("in private mode, hides every amount behind one eye in the period line, shares kept", async () => {
     renderPage(undefined, { ...DEFAULT_PREFS, privateMode: true });
     await waitFor(() => expect(screen.getByTestId("figure-income")).toHaveTextContent("*"));

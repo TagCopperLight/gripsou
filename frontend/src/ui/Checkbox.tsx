@@ -39,7 +39,7 @@ export function Checkbox({
       />
       <span
         aria-hidden="true"
-        className={`pointer-events-none flex size-4.5 items-center justify-center rounded-[5px] border-[1.5px] border-surface-3 bg-surface text-transparent transition-colors duration-140 peer-[:hover:not(:checked)]:border-fg-faint peer-focus-visible:ring-2 peer-focus-visible:ring-green/40 ${TONE[tone]}`}
+        className={`pointer-events-none flex size-4.5 items-center justify-center rounded-[5px] border-[1.5px] border-surface-3 bg-surface text-transparent transition-colors duration-140 peer-disabled:opacity-40 peer-[:hover:not(:checked):enabled]:border-fg-faint peer-focus-visible:ring-2 peer-focus-visible:ring-green/40 ${TONE[tone]}`}
       >
         <Check className="size-3" strokeWidth={3.5} />
       </span>

@@ -4,7 +4,9 @@ import { useErrorToast } from "../../lib/errorToasts";
 import { getRouteApi } from "@tanstack/react-router";
 import { Lock } from "lucide-react";
 import { Button } from "../../ui/Button";
-import { CardState } from "../../ui/CardState";
+import { CardError } from "../../ui/CardError";
+import { LoadingFrame } from "../../ui/LoadingFrame";
+import { Bone, Skeleton } from "../../ui/Skeleton";
 import { Select } from "../../ui/Select";
 import { SegmentedControl } from "../../ui/SegmentedControl";
 import { StepDots } from "../../ui/StepDots";
@@ -23,6 +25,7 @@ import type { PrefsPatch } from "../../lib/prefsPatch";
 import { ServerScreen, ServerTag } from "./ServerScreen";
 import { SecurityScreen } from "./SecurityScreen";
 import { BankScreen } from "./BankScreen";
+import { ConnectionGuide } from "../connections/ConnectionGuide";
 import { WelcomeFooter, WelcomeSkip } from "./WelcomeFooter";
 import { groupState, realtimeSet, serverGroups, serverParts, type ServerPart } from "./serverSetup";
 
@@ -47,17 +50,83 @@ function AdminWelcome() {
   const keys = useApiKeys();
   const providers = useProviders();
   if (keys.data && providers.data) return <WelcomeFlow server={{ keys: keys.data, providers: providers.data }} />;
+  if (keys.isError || providers.isError) {
+    return (
+      <WelcomeShell>
+        <CardError
+          onRetry={() => {
+            void keys.refetch();
+            void providers.refetch();
+          }}
+          className="h-64"
+        />
+      </WelcomeShell>
+    );
+  }
+  return <AdminWelcomeLoading />;
+}
+
+/** The screen the flow will open on, off, while the server's keys load: they
+ *  decide its other screens. The bank screen can't be shown yet (it finishes
+ *  a connection once), so its shape stands for it: back from a bank, the
+ *  bank's row; else the guide, as BankScreen guesses. */
+function AdminWelcomeLoading() {
+  const { t } = useTranslation();
+  const { user } = useAuth();
+  const search = route.useSearch();
+  const bank = search.step === "bank";
+  const noop = () => {};
   return (
     <WelcomeShell>
-      <CardState
-        variant={keys.isError || providers.isError ? "error" : "loading"}
-        onRetry={() => {
-          void keys.refetch();
-          void providers.refetch();
-        }}
-        className="h-64"
-      />
+      <LoadingFrame loading>
+        <WelcomeHeader
+          dots={<DotsBone />}
+          title={bank ? t("welcome.bank.title") : t("welcome.title", { name: user?.name ?? "" })}
+        />
+        {bank && search.callback !== undefined ? (
+          <>
+            <Skeleton>
+              <Bone className="h-10 rounded-xl" />
+            </Skeleton>
+            <WelcomeFooter onBack={noop}>
+              <Button>{t("common.next")}</Button>
+            </WelcomeFooter>
+          </>
+        ) : bank ? (
+          <>
+            <ConnectionGuide providers={[]} loading />
+            <WelcomeFooter onBack={noop}>
+              <WelcomeSkip onClick={noop} />
+              <Button>{t("welcome.bank.connect")}</Button>
+            </WelcomeFooter>
+          </>
+        ) : (
+          <PrefsScreen onNext={noop} />
+        )}
+      </LoadingFrame>
     </WelcomeShell>
+  );
+}
+
+/** The step dots while their number is unknown. */
+function DotsBone() {
+  return (
+    <Skeleton>
+      <Bone className="h-1.5 w-30 rounded-full" />
+    </Skeleton>
+  );
+}
+
+/** Where the flow is and the screen's title, with a tag beside it. */
+function WelcomeHeader({ dots, title, tag }: { dots: ReactNode; title: string; tag?: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-3">
+      {dots}
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="text-xl font-semibold text-fg">{title}</h1>
+        {tag}
+      </div>
+    </div>
   );
 }
 
@@ -176,6 +245,7 @@ function WelcomeFlow({ server }: { server: Server | null }) {
       <BankScreen
         keysMissing={server !== null && groupState("bank", server.keys, server.providers) !== "ready"}
         last={last}
+        finishing={finishing}
         onBack={back}
         onNext={afterBank}
         onSetUpKeys={() => setIndex(screens.findIndex((s) => s.section === "server" && s.group === "bank"))}
@@ -195,20 +265,26 @@ function WelcomeFlow({ server }: { server: Server | null }) {
           <button
             type="button"
             onClick={() => void finish()}
-            className="-mt-4 cursor-pointer text-sm text-fg-faint transition-colors duration-140 hover:text-fg-dim"
+            disabled={finishing}
+            className="-mt-4 cursor-pointer text-sm text-fg-faint transition-colors duration-140 enabled:hover:text-fg-dim"
           >
-            {t("welcome.skipAll")}
+            {t(finishing ? "common.busy.saving" : "welcome.skipAll")}
           </button>
         )
       }
     >
-      <div className="flex flex-col gap-3">
-        <StepDots current={sections.indexOf(screen.section)} total={sections.length} />
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold text-fg">{title}</h1>
-          {tag}
-        </div>
-      </div>
+      <WelcomeHeader
+        // Whether an AI screen comes last is the AI status's to say.
+        dots={
+          aiKnown ? (
+            <StepDots current={sections.indexOf(screen.section)} total={sections.length} />
+          ) : (
+            <DotsBone />
+          )
+        }
+        title={title}
+        tag={tag}
+      />
       {body}
     </WelcomeShell>
   );
@@ -314,7 +390,7 @@ function AiScreen({ onBack, onFinish, finishing }: { onBack: () => void; onFinis
         <p>{t("welcome.ai.suggestions")}</p>
       </div>
       <WelcomeFooter onBack={onBack}>
-        <Button onClick={onFinish} disabled={finishing}>{t("welcome.finish")}</Button>
+        <Button onClick={onFinish} busy={finishing} busyLabel={t("common.busy.saving")}>{t("welcome.finish")}</Button>
       </WelcomeFooter>
     </>
   );

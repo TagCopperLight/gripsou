@@ -49,6 +49,7 @@ const BASE = {
   counts: { matching: 1, total: 400, uncategorized: 300, selectable: 1, matchingTotal: "0", fxMissing: false },
   filtered: false,
   loading: false,
+  stale: false,
   error: false,
   onRetry: vi.fn(),
   hasNextPage: false,

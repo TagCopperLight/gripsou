@@ -2,14 +2,17 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { ChevronRight, KeyRound, Monitor, Plus, Settings, Smartphone } from "lucide-react";
+import { boneWidths } from "../../../ui/boneWidths";
 
 import { Surface } from "../../../ui/Surface";
 import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { Button } from "../../../ui/Button";
 import { Avatar } from "../../../ui/Avatar";
 import { Toggle } from "../../../ui/Toggle";
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
 import { Tag } from "../../../ui/Tag";
+import { LoadingFrame } from "../../../ui/LoadingFrame";
+import { Bone, Skeleton, TextBone } from "../../../ui/Skeleton";
 import { DeleteAccountModal } from "./DeleteAccountModal";
 import { SessionDetailModal } from "../security/SessionDetailModal";
 import { EditProfileModal } from "./EditProfileModal";
@@ -49,6 +52,30 @@ export function SettingsAccount() {
   const revokeOthers = useRevokeOtherSessions();
   const hasOthers = sessions.some((s) => !s.current);
 
+  const passkeyAction = (
+    <div className="flex items-center gap-3">
+      {hasPasskeys && (
+        <button
+          type="button"
+          onClick={() => setPasskeysOpen(true)}
+          aria-label={t("settings.account.manage")}
+          className={ICON_BUTTON}
+        >
+          <Settings className="size-4.5" strokeWidth={2} />
+        </button>
+      )}
+      {/* As wide as the two-factor switch above, so the gears line up. */}
+      <button
+        type="button"
+        onClick={addPasskey}
+        aria-label={t("passkeys.addPasskey")}
+        className="flex h-7.5 w-11 cursor-pointer items-center justify-center rounded-lg text-fg-dim transition-colors duration-140 enabled:hover:bg-surface-3 enabled:hover:text-fg"
+      >
+        <Plus className="size-5" strokeWidth={2} />
+      </button>
+    </div>
+  );
+
   const navigate = useNavigate();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [detail, setDetail] = useState<Session | null>(null);
@@ -72,7 +99,7 @@ export function SettingsAccount() {
       </Surface>
 
       <SettingsSurface title={t("settings.account.security")}>
-        <div className="flex flex-col gap-3">
+        <LoadingFrame loading={mfa.isPending} className="flex flex-col gap-3">
           <SecurityRow
             icon={<KeyRound className="size-4.5" strokeWidth={2} />}
             title={t("settings.account.password")}
@@ -101,7 +128,7 @@ export function SettingsAccount() {
                     type="button"
                     onClick={() => setManaging("menu")}
                     aria-label={t("settings.account.manage")}
-                    className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
+                    className={ICON_BUTTON}
                   >
                     <Settings className="size-4.5" strokeWidth={2} />
                   </button>
@@ -114,33 +141,19 @@ export function SettingsAccount() {
                 />
               </div>
             }
-          />
-          <PasskeyRow
-            action={
-              <div className="flex items-center gap-3">
-                {hasPasskeys && (
-                  <button
-                    type="button"
-                    onClick={() => setPasskeysOpen(true)}
-                    aria-label={t("settings.account.manage")}
-                    className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
-                  >
-                    <Settings className="size-4.5" strokeWidth={2} />
-                  </button>
-                )}
-                {/* As wide as the two-factor switch above, so the gears line up. */}
-                <button
-                  type="button"
-                  onClick={addPasskey}
-                  aria-label={t("passkeys.addPasskey")}
-                  className="flex h-7.5 w-11 cursor-pointer items-center justify-center rounded-lg text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
-                >
-                  <Plus className="size-5" strokeWidth={2} />
-                </button>
-              </div>
+            pending={
+              <Skeleton>
+                <Bone className="h-6 w-11 rounded-full" />
+              </Skeleton>
             }
           />
-        </div>
+          <PasskeyRow
+            action={passkeyAction}
+            // Adding a passkey needs no status: the button stands, off with the
+            // rest of the card, and the gear joins it once there are passkeys.
+            pending={passkeyAction}
+          />
+        </LoadingFrame>
       </SettingsSurface>
 
       <SettingsSurface
@@ -149,8 +162,9 @@ export function SettingsAccount() {
           <Button
             variant="ghost"
             onClick={() => revokeOthers.mutate()}
-            disabled={revokeOthers.isPending}
-            className="-my-2 text-red hover:bg-red/12 hover:text-red"
+            busy={revokeOthers.isPending}
+            busyLabel={t("common.busy.loggingOut")}
+            className="-my-2 text-red enabled:hover:bg-red/12 enabled:hover:text-red"
           >
             {t("settings.account.logOutOtherSessions")}
           </Button>
@@ -158,12 +172,9 @@ export function SettingsAccount() {
       >
         {/* Not an empty list while it loads or when it can't: there is always
             at least this session. */}
-        {!sessionsQuery.data && (
-          <CardState
-            variant={sessionsQuery.isError ? "error" : "loading"}
-            onRetry={() => sessionsQuery.refetch()}
-            className="h-32"
-          />
+        {sessionsQuery.isPending && <SessionsSkeleton />}
+        {sessionsQuery.isError && (
+          <CardError onRetry={() => sessionsQuery.refetch()} className="h-32" />
         )}
         {/* Phone: one fixed-height summary row per session, details on tap. */}
         <div className="flex flex-col gap-3 md:hidden">
@@ -231,7 +242,9 @@ export function SettingsAccount() {
                     variant="ghost"
                     onClick={() => revokeSession.mutate(s.id)}
                     disabled={revokeSession.isPending}
-                    className="shrink-0 text-red opacity-0 transition-opacity duration-140 hover:bg-red/12 hover:text-red focus-visible:opacity-100 group-hover:opacity-100"
+                    busy={revokeSession.isPending && revokeSession.variables === s.id}
+                    busyLabel={t("common.busy.loggingOut")}
+                    className="shrink-0 text-red opacity-0 transition-opacity duration-140 enabled:hover:bg-red/12 enabled:hover:text-red focus-visible:opacity-100 group-hover:opacity-100 aria-busy:opacity-100"
                   >
                     {t("settings.account.revokeSession")}
                   </Button>
@@ -294,6 +307,40 @@ export function SettingsAccount() {
         />
       )}
     </div>
+  );
+}
+
+const ICON_BUTTON =
+  "cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 enabled:hover:bg-surface-3 enabled:hover:text-fg";
+
+/** The sessions while they load: two rows (this device and one more), in
+ *  each layout's shape. */
+function SessionsSkeleton() {
+  const rows = boneWidths(2);
+  return (
+    <Skeleton>
+      <div className="flex flex-col gap-3 md:hidden">
+        {rows.map((w) => (
+          <div key={w} className="flex items-center gap-3 rounded-xl bg-surface-2 px-4 py-3">
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <TextBone text="text-[15px]" style={{ width: `${w}%` }} />
+              <TextBone text="text-sm" style={{ width: `${w + 20}%` }} />
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="hidden overflow-hidden rounded-2xl bg-surface-2 md:block">
+        {rows.map((w) => (
+          <div key={w} className="flex items-center gap-3.5 border-t border-surface-3 px-3.5 py-3 first:border-t-0">
+            <Bone className="size-9 shrink-0 rounded-lg" />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <TextBone text="text-[15px]" style={{ width: `${w * 0.6}%` }} />
+              <TextBone text="text-sm" style={{ width: `${w}%` }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Skeleton>
   );
 }
 

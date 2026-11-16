@@ -12,6 +12,21 @@
       "hue": "Teinte",
       "hex": "Code hexadécimal"
     },
+    "busy": {
+      "saving": "Enregistrement…",
+      "deleting": "Suppression…",
+      "creating": "Création…",
+      "adding": "Ajout…",
+      "applying": "Application…",
+      "verifying": "Vérification…",
+      "connecting": "Connexion…",
+      "signingIn": "Connexion…",
+      "retrying": "Nouvel essai…",
+      "loggingOut": "Déconnexion…",
+      "turningOff": "Désactivation…",
+      "syncing": "Synchronisation…",
+      "opening": "Ouverture…"
+    },
     "loading": "Chargement…",
     "retry": "Réessayer",
     "stepOf": "Étape {{step}} sur {{total}}",
@@ -86,8 +101,7 @@
       "colorLabel": "Couleur {{color}}",
       "customColor": "Couleur personnalisée",
       "saveError": "Impossible d'enregistrer le compte",
-      "save": "Enregistrer",
-      "saving": "Enregistrement…"
+      "save": "Enregistrer"
     }
   },
   "fx": {
@@ -455,7 +469,6 @@
       "deleteAccountBody": "Votre compte, vos connexions et toutes les données synchronisées seront définitivement supprimés. Cette action est irréversible.",
       "deleteAccountConfirmLabel": "Saisissez votre mot de passe pour confirmer",
       "deleteAccountConfirm": "Supprimer mon compte",
-      "deleteAccountPending": "Suppression…",
       "deleteAccountError": "Impossible de supprimer votre compte",
       "removeImage": "Supprimer",
       "editProfile": "Modifier le profil",
@@ -495,7 +508,6 @@
       },
       "removeUser": {
         "title": "Supprimer {{name}}",
-        "deleting": "Suppression…",
         "body": "L'utilisateur et toutes ses données seront définitivement supprimés.",
         "warning": "Tous ses comptes, ses positions et son historique seront effacés. Cette action est irréversible.",
         "confirm": "Saisissez {{email}} pour confirmer",
@@ -558,7 +570,6 @@
       "deleteConnection": "Supprimer la connexion",
       "deleteConnectionTitle": "Supprimer {{name}} ?",
       "deleteConnectionBody": "Ses comptes, positions et opérations, et leur historique, sont supprimés aussi. Cette action est irréversible.",
-      "deletingConnection": "Suppression…",
       "deleteConnectionError": "Impossible de supprimer la connexion",
       "status": {
         "syncing": "Synchronisation en cours…",

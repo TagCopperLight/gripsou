@@ -4,6 +4,7 @@ import { router } from "./router";
 import { useAuth } from "./auth/context";
 import { setUnauthorizedHandler } from "./api/client";
 import { ErrorToasts } from "./shell/ErrorToasts";
+import { ShellSkeleton } from "./shell/RootLayout";
 
 function InnerApp() {
   const auth = useAuth();
@@ -33,7 +34,7 @@ export function App() {
   }, [auth]);
 
   if (auth.isBootstrapping) {
-    return <div className="h-screen bg-bg" />;
+    return <ShellSkeleton />;
   }
 
   return (

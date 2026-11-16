@@ -12,6 +12,21 @@
       "hue": "Hue",
       "hex": "Hex code"
     },
+    "busy": {
+      "saving": "Saving…",
+      "deleting": "Deleting…",
+      "creating": "Creating…",
+      "adding": "Adding…",
+      "applying": "Applying…",
+      "verifying": "Verifying…",
+      "connecting": "Connecting…",
+      "signingIn": "Signing in…",
+      "retrying": "Retrying…",
+      "loggingOut": "Logging out…",
+      "turningOff": "Turning off…",
+      "syncing": "Syncing…",
+      "opening": "Opening…"
+    },
     "loading": "Loading…",
     "retry": "Retry",
     "stepOf": "Step {{step}} of {{total}}",
@@ -86,8 +101,7 @@
       "colorLabel": "Colour {{color}}",
       "customColor": "Custom colour",
       "saveError": "Couldn't save the account",
-      "save": "Save changes",
-      "saving": "Saving…"
+      "save": "Save changes"
     }
   },
   "fx": {
@@ -455,7 +469,6 @@
       "deleteAccountBody": "This permanently deletes your account, your connections, and all synced data. This action cannot be undone.",
       "deleteAccountConfirmLabel": "Enter your password to confirm",
       "deleteAccountConfirm": "Delete my account",
-      "deleteAccountPending": "Deleting…",
       "deleteAccountError": "Couldn't delete your account",
       "removeImage": "Remove",
       "editProfile": "Edit profile",
@@ -495,7 +508,6 @@
       },
       "removeUser": {
         "title": "Remove {{name}}",
-        "deleting": "Deleting…",
         "body": "This permanently deletes the user and all their data.",
         "warning": "All accounts, holdings and history belonging to this user will be erased. This cannot be undone.",
         "confirm": "Type {{email}} to confirm",
@@ -558,7 +570,6 @@
       "deleteConnection": "Delete connection",
       "deleteConnectionTitle": "Delete {{name}}?",
       "deleteConnectionBody": "Its accounts, holdings and transactions, and their history, are deleted too. This can't be undone.",
-      "deletingConnection": "Deleting…",
       "deleteConnectionError": "Couldn't delete the connection",
       "status": {
         "syncing": "Syncing…",

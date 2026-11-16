@@ -73,3 +73,22 @@ input[type="password"] {
   font-size: 0.7rem;
   letter-spacing: 0.22em;
 }
+
+/* Every control dims when it is off, whoever turned it off: its own caller,
+   or a `LoadingFrame` around it while its card's data loads. In the base layer
+   so a control that dims differently says so with a `disabled:` utility. */
+@layer base {
+  button:disabled, input:disabled, select:disabled, textarea:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+}
+
+/* A skeleton's grey block (`Bone`). In the components layer so a size or
+   `rounded-*` utility the caller passes always wins over it. */
+@layer components {
+  .bone {
+    border-radius: var(--radius-md);
+    background-color: var(--color-surface-3);
+  }
+}

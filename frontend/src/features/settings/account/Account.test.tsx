@@ -58,6 +58,25 @@ describe("SettingsAccount layout", () => {
   });
 });
 
+describe("SettingsAccount security card", () => {
+  it("keeps its buttons off until two-factor's status arrives", async () => {
+    let answer: (r: Response) => void = () => {};
+    stubFetch((input: RequestInfo | URL) => {
+      const path = String(input).replace(/^\/api/, "");
+      if (path === "/auth/mfa/status") return new Promise<Response>((resolve) => (answer = resolve));
+      return Promise.resolve(path === "/auth/sessions" ? jsonResponse(SESSIONS) : new Response(null, { status: 204 }));
+    });
+    renderAccount();
+    expect(screen.getByRole("button", { name: "Change" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add passkey" })).toBeDisabled();
+
+    answer(jsonResponse({ totp: false, recoveryRemaining: 10, passkeys: [] }));
+    await twoFactorSwitch();
+    expect(screen.getByRole("button", { name: "Change" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add passkey" })).toBeEnabled();
+  });
+});
+
 describe("SettingsAccount two-factor row", () => {
   it("shows the switch off and no gear when two-factor is off", async () => {
     stubAccount(false);

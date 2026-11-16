@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { AuthPage } from "../../ui/AuthPage";
 import { Button } from "../../ui/Button";
+import { LoadingFrame } from "../../ui/LoadingFrame";
 import { showError } from "../../lib/errorToasts";
 import { useAuth } from "../../auth/context";
 import { useTokenGuard } from "../../auth/useTokenGuard";
@@ -23,9 +24,6 @@ export function Invite() {
   const [account, setAccount] = useState<NewAccount>(EMPTY_ACCOUNT);
   const [error, setError] = useState<FieldProblem | null>(null);
   const [pending, setPending] = useState(false);
-
-  // Render nothing until the token is confirmed valid (else the guard redirects).
-  if (guard.status !== "valid") return null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,11 +54,14 @@ export function Invite() {
         onInput={() => setError(null)}
         className="flex flex-col gap-4 rounded-3xl bg-surface p-6"
       >
-        <div className="pb-1 text-lg font-semibold text-fg">{t("auth.createAccount")}</div>
-        <NewAccountFields account={account} onChange={setAccount} error={error} />
-        <Button type="submit" disabled={pending} className="mt-1">
-          {t("auth.createAccountButton")}
-        </Button>
+        {/* Off until the link is known to be valid; else the guard leaves. */}
+        <LoadingFrame loading={guard.status !== "valid"}>
+          <div className="pb-1 text-lg font-semibold text-fg">{t("auth.createAccount")}</div>
+          <NewAccountFields account={account} onChange={setAccount} error={error} />
+          <Button type="submit" busy={pending} busyLabel={t("common.busy.creating")} className="mt-1">
+            {t("auth.createAccountButton")}
+          </Button>
+        </LoadingFrame>
       </form>
     </AuthPage>
   );

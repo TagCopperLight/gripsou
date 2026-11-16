@@ -40,7 +40,7 @@ function IconAction({ icon: Icon, label, ...props }: IconActionProps) {
     <Button
       variant="ghost"
       padded={false}
-      className="p-2 hover:bg-fg/6 disabled:cursor-not-allowed disabled:opacity-40"
+      className="p-2 hover:bg-fg/6"
       title={label}
       aria-label={label}
       {...props}

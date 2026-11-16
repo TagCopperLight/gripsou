@@ -32,7 +32,8 @@ export function AiBanner() {
           variant="outline"
           padded={false}
           className="rounded-lg! px-2.75 py-1.5 text-xs"
-          disabled={retry.isPending}
+          busy={retry.isPending}
+          busyLabel={t("common.busy.retrying")}
           onClick={() => retry.mutate()}
         >
           {t("budget.ai.retry")}

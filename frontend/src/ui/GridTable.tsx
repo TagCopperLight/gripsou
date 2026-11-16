@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { HEAD_ROW, gridColumns, type Track } from "./gridTable";
+import { staleRowsClass } from "./stale";
 
 type GridTableProps = {
   /** The column tracks, in column order. Below the sum of their minimums the
@@ -11,17 +12,22 @@ type GridTableProps = {
   head: ReactNode;
   /** The rows (`ROW_CELLS`). */
   children: ReactNode;
+  /** True while its rows are `BoneRows`. */
+  busy?: boolean;
+  /** The rows are out of date while their replacement loads (`staleClass`):
+   *  they dim, the header doesn't. */
+  stale?: boolean;
 };
 
 /** A table on a CSS grid (see `gridTable.ts`). `display: contents` drops the
  *  groups out of the layout so the rows themselves are the grid's items, and
  *  with them their implicit ARIA roles, which is why every element here names
  *  its own. */
-export function GridTable({ tracks, head, children }: GridTableProps) {
+export function GridTable({ tracks, head, children, busy = false, stale = false }: GridTableProps) {
   const { template, minWidth } = gridColumns(tracks);
   return (
     <div className="overflow-x-auto">
-      <table role="table" className="grid w-full text-sm" style={{ gridTemplateColumns: template, minWidth }}>
+      <table role="table" aria-busy={busy || undefined} className={`grid w-full text-sm ${staleRowsClass(stale)}`} style={{ gridTemplateColumns: template, minWidth }}>
         <thead role="rowgroup" className="contents">
           <tr role="row" className={HEAD_ROW}>
             {head}
@@ -55,7 +61,7 @@ export function SortHeader({ label, active, asc, right = false, onClick, testId 
       // resets `text-transform`, so it is not inherited from the row.
       className={`inline-flex h-4 cursor-pointer items-center gap-1 align-middle uppercase transition-colors duration-140 ${
         right ? "flex-row-reverse" : ""
-      } ${active ? "text-fg" : "text-fg-dim hover:text-fg"}`}
+      } ${active ? "text-fg" : "text-fg-dim enabled:hover:text-fg"}`}
     >
       {label}
       {active && (asc ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />)}

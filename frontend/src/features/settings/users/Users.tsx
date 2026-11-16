@@ -1,16 +1,19 @@
 import { useState, type ComponentPropsWithoutRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Key, Trash2, ChevronRight } from "lucide-react";
+import { boneWidths } from "../../../ui/boneWidths";
 
 import { Surface } from "../../../ui/Surface";
 import { Button } from "../../../ui/Button";
 import { Avatar } from "../../../ui/Avatar";
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
 import { useUsers, useCreateInvite, useSetUserRole } from "../../../api/admin";
 import { useErrorToast } from "../../../lib/errorToasts";
 import { GridTable } from "../../../ui/GridTable";
 import { HEAD_CELL, ROW_CELLS, ROW_HOVER, type Track } from "../../../ui/gridTable";
 import { Tag } from "../../../ui/Tag";
+import { LoadingFrame } from "../../../ui/LoadingFrame";
+import { Bone, BoneRows, Skeleton, TextBone } from "../../../ui/Skeleton";
 import { LinkModal } from "./LinkModal";
 import { ResetLinkModal } from "./ResetLinkModal";
 import { DeleteUserModal } from "./DeleteUserModal";
@@ -28,8 +31,7 @@ const TRACKS: Track[] = [
 
 export function SettingsUsers() {
   const { t } = useTranslation();
-  const { data, isError, refetch } = useUsers();
-  const ready = data !== undefined;
+  const { data, isPending, isError, refetch } = useUsers();
   const users = data ?? [];
 
   const invite = useCreateInvite();
@@ -53,7 +55,7 @@ export function SettingsUsers() {
   return (
     <div className="pb-8 md:mt-13">
       <Surface className="w-full">
-        <div className="flex flex-col p-4 md:p-5">
+        <LoadingFrame loading={isPending} className="flex flex-col p-4 md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h2 className="text-fg font-semibold text-sm">{t("settings.users.title")}</h2>
             <Button onClick={openInvite} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
@@ -62,16 +64,13 @@ export function SettingsUsers() {
             </Button>
           </div>
 
-          {!ready ? (
-            <CardState
-              variant={isError ? "error" : "loading"}
-              onRetry={() => refetch()}
-              className="mt-4 h-64"
-            />
+          {isError ? (
+            <CardError onRetry={() => refetch()} className="mt-4 h-64" />
           ) : (
             <>
             {/* Phone: one summary row per user; the rest lives in a modal. */}
             <div className="mt-4 flex flex-col gap-2 md:hidden">
+              {isPending && <PhoneRowsSkeleton />}
               {users.map((u) => {
                 const role = roleOf(u);
                 return (
@@ -101,6 +100,7 @@ export function SettingsUsers() {
 
             <div className="mt-4 hidden md:block">
               <GridTable
+                busy={isPending}
                 tracks={TRACKS}
                 head={
                   <>
@@ -111,6 +111,7 @@ export function SettingsUsers() {
                   </>
                 }
               >
+                {isPending && <TableRowsSkeleton />}
                 {users.map((u) => {
                   const role = roleOf(u);
                   const label = t(role === "admin" ? "roles.admin" : "roles.member");
@@ -135,6 +136,8 @@ export function SettingsUsers() {
                             label={label}
                             as="button"
                             title={t("settings.users.changeRole")}
+                            // A badge whose text is the role: it goes off while
+                            // the change saves rather than reading "Saving…".
                             disabled={setRole.isPending}
                             onClick={() => toggleRole(u)}
                           />
@@ -162,12 +165,13 @@ export function SettingsUsers() {
             </div>
             </>
           )}
-        </div>
+        </LoadingFrame>
       </Surface>
       {detail && (
         <UserDetailModal
           user={detail}
           role={roleOf(detail)}
+          roleSaving={setRole.isPending}
           onToggleRole={() => toggleRole(detail)}
           onReset={
             detail.isSelf
@@ -258,7 +262,7 @@ function RoleBadge({
   const base = "inline-block rounded-md px-2.5 py-1 text-xs font-medium";
   const color = role === "admin" ? "bg-green-soft text-green" : "bg-surface-3 text-fg-dim";
   if (as === "button") {
-    const hover = role === "admin" ? "hover:bg-green/25" : "hover:bg-surface-2 hover:text-fg";
+    const hover = role === "admin" ? "enabled:hover:bg-green/25" : "enabled:hover:bg-surface-2 enabled:hover:text-fg";
     return (
       <button
         type="button"
@@ -272,4 +276,47 @@ function RoleBadge({
     );
   }
   return <span className={`${base} ${color}`}>{label}</span>;
+}
+
+/** The phone list while it loads: three summary rows. */
+function PhoneRowsSkeleton() {
+  return (
+    <Skeleton className="flex flex-col gap-2">
+      {boneWidths(2).map((w) => (
+        <div key={w} className="flex items-center gap-3 rounded-xl bg-surface-2 px-3 py-2.5">
+          <Bone className="size-9 shrink-0 rounded-full" />
+          <span className="min-w-0 flex-1">
+            <TextBone text="text-sm" style={{ width: `${w}%` }} />
+          </span>
+          <Bone className="h-6 w-16 shrink-0" />
+        </div>
+      ))}
+    </Skeleton>
+  );
+}
+
+/** The table's rows while they load, on the table's own columns. */
+function TableRowsSkeleton() {
+  return (
+    <BoneRows rows={2} className={ROW_CELLS}>
+      {(w) => (
+        <>
+          <td role="cell" className="gap-3 px-3 py-2.5">
+            <Bone className="size-9 shrink-0 rounded-full" />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <TextBone text="text-sm leading-tight" style={{ width: `${w}%` }} />
+              <TextBone text="text-xs" style={{ width: `${w + 25}%` }} />
+            </div>
+          </td>
+          <td role="cell" className="px-3">
+            <Bone className="h-6 w-16" />
+          </td>
+          <td role="cell" className="px-3 text-sm">
+            <TextBone text="text-sm" className="w-20" />
+          </td>
+          <td role="cell" className="px-3" />
+        </>
+      )}
+    </BoneRows>
+  );
 }

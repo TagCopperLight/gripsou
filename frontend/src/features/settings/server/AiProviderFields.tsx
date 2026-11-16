@@ -4,7 +4,8 @@ import { useErrorToast } from "../../../lib/errorToasts";
 
 import { SegmentedControl } from "../../../ui/SegmentedControl";
 import { Select } from "../../../ui/Select";
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
+import { Bone, Skeleton } from "../../../ui/Skeleton";
 import { TextInput } from "../../../ui/TextInput";
 import {
   useBudgetAiModels,
@@ -16,6 +17,9 @@ import {
  *  model. Keys are saved with the API keys; a provider without one is never
  *  offered. The model is picked from the provider's own list; when that list
  *  cannot be had, it is typed instead. */
+const ROW = "flex flex-wrap items-center gap-4";
+const FIELD = "flex items-center gap-3 text-sm text-fg";
+
 export function AiProviderFields() {
   const { t } = useTranslation();
   const query = useBudgetAiSettings();
@@ -29,13 +33,27 @@ export function AiProviderFields() {
   const [draft, setDraft] = useState<{ base: string | null; value: string } | null>(null);
 
   const body = (() => {
+    if (query.isError) {
+      return <CardError onRetry={() => void query.refetch()} className="h-24" />;
+    }
     if (!settings) {
+      // The fields' frame, their values unknown. The model field shows only
+      // once a provider is chosen; it stands here for the usual case.
       return (
-        <CardState
-          variant={query.isError ? "error" : "loading"}
-          onRetry={() => void query.refetch()}
-          className="h-24"
-        />
+        <div className={ROW}>
+          <div className={FIELD}>
+            <span>{t("settings.server.budgetAiProvider")}</span>
+            <Skeleton>
+              <Bone className="h-7.5 w-24 rounded-xl" />
+            </Skeleton>
+          </div>
+          <div className={FIELD}>
+            <span>{t("settings.server.budgetAiModel")}</span>
+            <Skeleton>
+              <Bone className="h-9.5 w-72 rounded-xl" />
+            </Skeleton>
+          </div>
+        </div>
       );
     }
     const provider = settings.provider ?? "";
@@ -63,8 +81,8 @@ export function AiProviderFields() {
     };
 
     return (
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-3 text-sm text-fg">
+      <div className={ROW}>
+        <div className={FIELD}>
           <span>{t("settings.server.budgetAiProvider")}</span>
           <SegmentedControl
             value={provider}
@@ -76,7 +94,7 @@ export function AiProviderFields() {
           />
         </div>
         {settings.provider && (
-          <div className="flex items-center gap-3 text-sm text-fg">
+          <div className={FIELD}>
             <label htmlFor={modelId} onClick={(e) => e.preventDefault()}>{t("settings.server.budgetAiModel")}</label>
             {models.isError || models.data?.length === 0 ? (
               <TextInput

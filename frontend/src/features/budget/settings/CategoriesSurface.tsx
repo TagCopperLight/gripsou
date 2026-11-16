@@ -7,7 +7,9 @@ import {
 
 import { Surface } from "../../../ui/Surface";
 import { Button } from "../../../ui/Button";
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
+import { LoadingFrame } from "../../../ui/LoadingFrame";
+import { Bone, BoneRows, TextBone } from "../../../ui/Skeleton";
 import { useBudgetCategories, useReorderBudgetCategories, useUpdateBudgetCategory, categoryBody } from "../../../api/budget";
 import type { BudgetCategory } from "../../../api/wire";
 import {
@@ -49,13 +51,13 @@ const ARROWS =
 /** Small, and dead-looking at the ends of a kind rather than hidden, so the
  *  column keeps its width and the rows stay aligned. */
 const ARROW_BTN =
-  "p-0.5 rounded text-fg-faint hover:text-fg transition-colors duration-140 cursor-pointer disabled:opacity-25 disabled:cursor-not-allowed disabled:hover:text-fg-faint";
+  "p-0.5 rounded text-fg-faint hover:text-fg transition-colors duration-140 cursor-pointer disabled:opacity-25 disabled:hover:text-fg-faint";
 
 const ACTION_BTN =
-  "p-1.5 rounded-lg text-fg hover:bg-surface-3 transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
+  "p-1.5 rounded-lg text-fg hover:bg-surface-3 transition-colors duration-140 cursor-pointer";
 
 const DELETE_BTN =
-  "p-1.5 rounded-lg text-red hover:bg-surface-3 transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
+  "p-1.5 rounded-lg text-red hover:bg-surface-3 transition-colors duration-140 cursor-pointer";
 
 /** Sized like `ACTION_BTN` so a locked slot keeps the column aligned. */
 function SystemLock({ testId, title }: { testId: string; title: string }) {
@@ -72,7 +74,7 @@ function SystemLock({ testId, title }: { testId: string; title: string }) {
 
 export function CategoriesSurface() {
   const { t } = useTranslation();
-  const { data, isLoading, isError, refetch } = useBudgetCategories();
+  const { data, isPending, isError, refetch } = useBudgetCategories();
   const update = useUpdateBudgetCategory();
   const reorder = useReorderBudgetCategories();
 
@@ -149,7 +151,7 @@ export function CategoriesSurface() {
   return (
     <div>
       <Surface className="w-full">
-        <div className="flex flex-col p-4 md:p-5">
+        <LoadingFrame loading={isPending} className="flex flex-col p-4 md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h2 className="text-fg font-semibold text-sm">{t("settings.budget.categories.title")}</h2>
             <Button
@@ -162,17 +164,15 @@ export function CategoriesSurface() {
             </Button>
           </div>
 
-          {isLoading ? (
-            <CardState variant="loading" className="mt-4 h-64" />
-          ) : isError ? (
-            <CardState variant="error" onRetry={() => refetch()} className="mt-4 h-64" />
-          ) : rows.length === 0 ? (
+          {isError ? (
+            <CardError onRetry={() => refetch()} className="mt-4 h-64" />
+          ) : !isPending && rows.length === 0 ? (
             <p className="text-sm text-fg-faint py-10 text-center">
               {t("settings.budget.categories.empty")}
             </p>
           ) : (
             <>
-              <div className="mt-4 overflow-x-auto">
+              <div className="mt-4 overflow-x-auto" aria-busy={isPending || undefined}>
                 <table className="w-full text-sm border-separate border-spacing-y-0.5">
                   <thead>
                     <tr className={`text-left ${HEAD_TEXT}`}>
@@ -193,6 +193,41 @@ export function CategoriesSurface() {
                     </tr>
                   </thead>
                   <tbody>
+                    {isPending && (
+                      <BoneRows rows={4}>
+                        {(w) => (
+                          <>
+                            <td className={`${CELL} pl-1.5 pr-3`}>
+                              {/* The reorder arrows, hidden until hover, set the row's height. */}
+                              <span className="block h-8 w-4.5" />
+                            </td>
+                            <td className={`${CELL} ${GAP_NAME}`}>
+                              <div className="flex items-center gap-2">
+                                <Bone className="size-7 shrink-0 rounded-lg" />
+                                <TextBone text="text-sm" style={{ width: w * 2.4 }} />
+                              </div>
+                            </td>
+                            <td className={`${CELL} ${GAP_KIND}`}>
+                              {/* The kind badge: an 11px line in py-0.5. */}
+                              <Bone className="h-5 w-14" />
+                            </td>
+                            <td className={`${CELL} pr-3 w-full max-w-0`}>
+                              <TextBone text="text-[12.5px]" style={{ width: `${w}%` }} />
+                            </td>
+                            <td className={`${CELL} pr-3`}>
+                              <TextBone text="text-sm" className="ml-auto w-5" />
+                            </td>
+                            <td className={`${CELL} pr-3`}>
+                              <div className="flex items-center justify-end gap-1">
+                                <Bone className="size-7 rounded-lg" />
+                                <Bone className="size-7 rounded-lg" />
+                                <Bone className="size-7 rounded-lg" />
+                              </div>
+                            </td>
+                          </>
+                        )}
+                      </BoneRows>
+                    )}
                     {visibleRows.map((c) => {
                       const isSystem = c.systemKey !== null;
                       const label = categoryLabel(t, c);
@@ -349,7 +384,7 @@ export function CategoriesSurface() {
               )}
             </>
           )}
-        </div>
+        </LoadingFrame>
       </Surface>
 
       {editing && (

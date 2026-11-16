@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import ReactECharts from "../../../ui/EChart";
 import type { EChartsOption, EChartsType } from "echarts";
 import { useTranslation } from "react-i18next";
+import { boneWidths } from "../../../ui/boneWidths";
 
 import { Surface } from "../../../ui/Surface";
 import { CategoryChip } from "../CategoryChip";
@@ -14,17 +15,61 @@ import { sliceChip, sliceColor, sliceKey, sliceLabel } from "../../../lib/slice"
 import { SURFACE } from "../../../lib/theme";
 import { AXIS_GRID, CHART_BASE, categoryAxis, chartTooltip, tooltipCard, tooltipRow, valueAxis } from "../../../lib/chartTheme";
 import type { BudgetTrend } from "../../../api/wire";
+import { Bone, ChartBone, Skeleton } from "../../../ui/Skeleton";
+import { staleClass } from "../../../ui/stale";
 
 type TooltipParam = { dataIndex: number };
 
-export function TrendSurface({
-  trend, onSelectMonth, masked = false,
-}: {
+const HEIGHT = 300;
+
+type TrendSurfaceProps =
+  | {
+    trend: BudgetTrend;
+    onSelectMonth: (month: string) => void;
+    /** Private mode: the tooltip's amounts and the axis hidden; the bars keep
+     *  their shape. */
+    masked?: boolean;
+    /** The trend is a previous anchor month's, while this one's loads. */
+    stale?: boolean;
+  }
+  /** Still loading: the title, and bones for the chart and its legend. */
+  | { trend?: undefined; onSelectMonth?: undefined; masked?: undefined; stale?: undefined };
+
+export function TrendSurface({ trend, onSelectMonth, masked = false, stale = false }: TrendSurfaceProps) {
+  const { t } = useTranslation();
+  return (
+    <Surface className="w-full">
+      <div className="flex flex-col p-5">
+        <h2 className="text-fg font-semibold text-sm">{t("budget.overview.trend.title")}</h2>
+        {trend === undefined ? (
+          <>
+            <ChartBone style={{ height: HEIGHT }} />
+            {/* A legend chip is a text-xs line in py-1. */}
+            <Skeleton className="mt-3 flex flex-wrap gap-2">
+              {boneWidths(4).map((w) => <Bone key={w} className="h-6 rounded-xl" style={{ width: w * 2.4 }} />)}
+            </Skeleton>
+          </>
+        ) : (
+          <div className={staleClass(stale)}>
+            <TrendChart trend={trend} onSelectMonth={onSelectMonth} masked={masked} />
+            {/* Wraps freely: French labels run longer and a renamed category can be
+                any length, so the legend must never assume a row fits. */}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {trend.series.map((s) => (
+                <CategoryChip key={sliceKey(s.slice)} category={sliceChip(t, s.slice)} />
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </Surface>
+  );
+}
+
+function TrendChart({ trend, onSelectMonth, masked }: {
   trend: BudgetTrend;
   onSelectMonth: (month: string) => void;
-  /** Private mode: the tooltip's amounts and the axis hidden; the bars keep
-   *  their shape. */
-  masked?: boolean;
+  masked: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const money = (v: string, opts?: MoneyFormatOptions) => formatMaskedMoney(v, masked, opts);
@@ -122,24 +167,12 @@ export function TrendSurface({
   }, [trend, columns, onSelectMonth]);
 
   return (
-    <Surface className="w-full">
-      <div className="flex flex-col p-5">
-        <h2 className="text-fg font-semibold text-sm">{t("budget.overview.trend.title")}</h2>
-        <ReactECharts
-          option={option}
-          opts={{ renderer: "svg" }}
-          notMerge
-          onEvents={onEvents}
-          style={{ height: 300, width: "100%" }}
-        />
-        {/* Wraps freely: French labels run longer and a renamed category can be
-            any length, so the legend must never assume a row fits. */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {trend.series.map((s) => (
-            <CategoryChip key={sliceKey(s.slice)} category={sliceChip(t, s.slice)} />
-          ))}
-        </div>
-      </div>
-    </Surface>
+    <ReactECharts
+      option={option}
+      opts={{ renderer: "svg" }}
+      notMerge
+      onEvents={onEvents}
+      style={{ height: HEIGHT, width: "100%" }}
+    />
   );
 }

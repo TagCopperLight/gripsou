@@ -4,8 +4,9 @@ import { Landmark, Plus } from "lucide-react";
 
 import { Surface } from "../../ui/Surface";
 import { Button } from "../../ui/Button";
-import { CardState } from "../../ui/CardState";
-import { ConnectionRow } from "./ConnectionRow";
+import { CardError } from "../../ui/CardError";
+import { LoadingFrame } from "../../ui/LoadingFrame";
+import { ConnectionRow, ConnectionRowsSkeleton } from "./ConnectionRow";
 import { AddConnectionModal } from "./AddConnectionModal";
 import { ConnectionGuide } from "./ConnectionGuide";
 import { Dialog } from "../../ui/Dialog";
@@ -16,19 +17,19 @@ import type { SyncConnection } from "../../api/wire";
 
 export function SettingsConnections() {
   const { t } = useTranslation();
-  const { data, isLoading, isError, refetch } = useConnections();
+  const { data, isPending, isError, refetch } = useConnections();
   const flow = useStartConnection({
     returnTo: "/settings/connections",
     errorMessage: t("settings.connections.connectError"),
   });
-  const { data: providers, isLoading: providersLoading } = flow.providers;
+  const { data: providers, isPending: providersPending } = flow.providers;
   const groups = data ?? [];
   const conns = groups.flatMap((g) =>
     g.connections.map((c) => ({ ...c, providerName: g.providerName })),
   );
   const connCount = conns.length;
   // Nothing connected (once known): the empty state carries the button.
-  const empty = !isLoading && !isError && connCount === 0;
+  const empty = !isPending && !isError && connCount === 0;
 
   const [guideOpen, setGuideOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SyncConnection | null>(null);
@@ -37,17 +38,18 @@ export function SettingsConnections() {
   return (
     <div className="pb-8 md:mt-13">
       <Surface className="w-full">
-        <div className="flex flex-col p-4 md:p-5">
+        <LoadingFrame loading={isPending} className="flex flex-col p-4 md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h2 className="text-fg font-semibold text-sm">{t("settings.connections.title")}</h2>
             <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center md:gap-4">
-              {connCount > 0 && (
+              {/* Most users have connections: kept while the list loads. */}
+              {(isPending || connCount > 0) && (
                 <Button variant="ghost" padded={false} className="text-xs" onClick={() => setGuideOpen(true)}>
                   {t("connectionGuide.howItWorks")}
                 </Button>
               )}
               {!empty && (
-                <Button onClick={flow.start} disabled={providersLoading || flow.pending} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
+                <Button onClick={flow.start} disabled={providersPending} busy={flow.pending} busyLabel={t("common.busy.connecting")} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
                   <Plus className="size-4" />
                   {t("settings.connections.addConnection")}
                 </Button>
@@ -55,11 +57,12 @@ export function SettingsConnections() {
             </div>
           </div>
 
-          {isLoading ? (
-            <CardState variant="loading" className="mt-4 h-64" />
+          {isPending ? (
+            <div className="mt-4">
+              <ConnectionRowsSkeleton deletable />
+            </div>
           ) : isError ? (
-            <CardState
-              variant="error"
+            <CardError
               onRetry={() => refetch()}
               className="mt-4 h-64"
             />
@@ -71,14 +74,14 @@ export function SettingsConnections() {
                 <Landmark className="size-6 text-fg-faint" />
                 <p className="text-sm font-medium text-fg">{t("settings.connections.empty.title")}</p>
                 <p className="max-w-md text-sm text-fg-faint">{t("settings.connections.empty.body")}</p>
-                <Button onClick={flow.start} disabled={providersLoading || flow.pending} className="mt-2.5 inline-flex items-center gap-1.5">
+                <Button onClick={flow.start} disabled={providersPending} busy={flow.pending} busyLabel={t("common.busy.connecting")} className="mt-2.5 inline-flex items-center gap-1.5">
                   <Plus className="size-4" />
                   {t("settings.connections.addConnection")}
                 </Button>
               </div>
               <div className="border-t border-surface-3 pt-5.5">
                 <p className="mb-4 text-xs text-fg-faint">{t("settings.connections.empty.guide")}</p>
-                <ConnectionGuide providers={providers ?? []} />
+                <ConnectionGuide providers={providers ?? []} loading={providersPending} />
               </div>
             </>
           ) : (
@@ -92,7 +95,7 @@ export function SettingsConnections() {
               ))}
             </div>
           )}
-        </div>
+        </LoadingFrame>
       </Surface>
 
       {flow.pickerOpen && <AddConnectionModal onClose={flow.closePicker} />}
@@ -103,7 +106,7 @@ export function SettingsConnections() {
           onClose={() => setGuideOpen(false)}
           footer={<Button onClick={() => setGuideOpen(false)}>{t("connectionGuide.gotIt")}</Button>}
         >
-          <ConnectionGuide providers={providers ?? []} />
+          <ConnectionGuide providers={providers ?? []} loading={providersPending} />
         </Dialog>
       )}
       {deleteTarget && (

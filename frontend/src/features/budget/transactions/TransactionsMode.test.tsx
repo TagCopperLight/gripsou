@@ -150,6 +150,15 @@ describe("TransactionsMode", () => {
     stubServer();
   });
 
+  it("keeps the search and the column headers, off, while the first page loads", async () => {
+    stubFetch(() => new Promise<Response>(() => {}));
+    renderMode();
+    expect(await screen.findByRole("searchbox")).toBeDisabled();
+    expect(screen.getByTestId("select-all-shown")).toBeDisabled();
+    expect(screen.getByRole("columnheader", { name: "Date" })).toBeVisible();
+    expect(screen.getAllByTestId("skeleton-row")).toHaveLength(4);
+  });
+
   it("in private mode, hides the amounts behind one eye by the title", async () => {
     const client = renderMode({ ...DEFAULT_PREFS, privateMode: true });
     await settle(client);

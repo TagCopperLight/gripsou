@@ -15,7 +15,8 @@ import { afterPrefsSaved } from "../api/invalidate";
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  // Without a stored token there is no session to check.
+  const [isBootstrapping, setIsBootstrapping] = useState(() => getAuthToken() !== null);
   // The user as shown, readable by two saves made in the same tick.
   const shown = useRef<SessionUser | null>(null);
   const prefsSaves = useRef<Promise<unknown>>(Promise.resolve());
@@ -38,11 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true;
 
     async function bootstrap() {
-      const token = getAuthToken();
-      if (!token) {
-        if (active) setIsBootstrapping(false);
-        return;
-      }
+      if (!getAuthToken()) return;
       try {
         const u = await authApi.me();
         if (active) applyUser(u);

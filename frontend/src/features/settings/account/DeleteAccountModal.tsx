@@ -33,11 +33,8 @@ export function DeleteAccountModal({
     <ConfirmDialog
       title={t("settings.account.deleteAccountTitle")}
       body={t("settings.account.deleteAccountBody")}
-      confirmLabel={
-        remove.isPending
-          ? t("settings.account.deleteAccountPending")
-          : t("settings.account.deleteAccountConfirm")
-      }
+      confirmLabel={t("settings.account.deleteAccountConfirm")}
+      busyLabel={t("common.busy.deleting")}
       busy={remove.isPending}
       confirmDisabled={password === ""}
       onConfirm={confirm}

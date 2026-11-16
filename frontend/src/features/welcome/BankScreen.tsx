@@ -4,6 +4,8 @@ import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { Check, CircleAlert, Landmark, LoaderCircle } from "lucide-react";
 
 import { Button } from "../../ui/Button";
+import { LoadingFrame } from "../../ui/LoadingFrame";
+import { Bone, Skeleton } from "../../ui/Skeleton";
 import { AddConnectionModal } from "../connections/AddConnectionModal";
 import { ConnectionGuide } from "../connections/ConnectionGuide";
 import { useConnections } from "../../api/connections";
@@ -20,12 +22,14 @@ const route = getRouteApi("/signedIn/welcome");
  *  (`/welcome?step=bank`), where the connection is finished. `onNext` is
  *  undefined while it isn't known whether a screen follows. */
 export function BankScreen({
-  keysMissing, last, onBack, onNext, onSetUpKeys,
+  keysMissing, last, finishing, onBack, onNext, onSetUpKeys,
 }: {
   /** An admin whose server has no working bank keys: connecting would fail. */
   keysMissing: boolean;
   /** No screen follows: the button finishes the welcome flow. */
   last: boolean;
+  /** The welcome flow is being finished (from this screen's last button). */
+  finishing: boolean;
   onBack: () => void;
   onNext: (() => void) | undefined;
   onSetUpKeys: () => void;
@@ -33,7 +37,8 @@ export function BankScreen({
   const { t } = useTranslation();
   const search = route.useSearch();
   const navigate = useNavigate();
-  const connections = flattenConnections(useConnections().data);
+  const connectionsQuery = useConnections();
+  const connections = flattenConnections(connectionsQuery.data);
   const flow = useStartConnection({ returnTo: "/welcome?step=bank", errorMessage: t("welcome.bank.connectError") });
   const providers = flow.providers.data;
 
@@ -57,36 +62,50 @@ export function BankScreen({
   };
 
   const hasBank = connections.some((c) => !isPending(c.status));
-  const connectDisabled = connecting || flow.pending || providers === undefined;
+  const connectDisabled = connecting || providers === undefined;
   const next = (
-    <Button onClick={onNext} disabled={!onNext || connecting}>
+    <Button onClick={onNext} disabled={!onNext || connecting} busy={finishing} busyLabel={t("common.busy.saving")}>
       {t(last ? "welcome.finish" : "common.next")}
     </Button>
   );
   const skip = <WelcomeSkip onClick={onNext} disabled={!onNext || connecting} />;
+  const loading = connectionsQuery.isPending || flow.providers.isPending;
+  // Back stays usable while the step loads, as a window's Cancel does.
   const footer = (
     <WelcomeFooter onBack={onBack}>
-      {hasBank ? (
-        <>
-          <Button variant="ghostStrong" padded={false} onClick={connectBank} disabled={connectDisabled}>
-            {t("welcome.bank.addAnother")}
-          </Button>
-          {next}
-        </>
-      ) : (
-        <>
-          {skip}
-          <Button onClick={connectBank} disabled={connectDisabled}>
-            {t(bankFailed ? "welcome.bank.tryAgain" : "welcome.bank.connect")}
-          </Button>
-        </>
-      )}
+      <LoadingFrame loading={loading}>
+        {hasBank ? (
+          <>
+            <Button variant="ghostStrong" padded={false} onClick={connectBank} disabled={connectDisabled} busy={flow.pending} busyLabel={t("common.busy.connecting")}>
+              {t("welcome.bank.addAnother")}
+            </Button>
+            {next}
+          </>
+        ) : (
+          <>
+            {skip}
+            <Button onClick={connectBank} disabled={connectDisabled} busy={flow.pending} busyLabel={t("common.busy.connecting")}>
+              {t(bankFailed ? "welcome.bank.tryAgain" : "welcome.bank.connect")}
+            </Button>
+          </>
+        )}
+      </LoadingFrame>
     </WelcomeFooter>
   );
 
+  // Until the user's banks are known, whether the guide or the banks show is
+  // a guess: back from a bank, its row; else, on a first visit, the guide.
   return (
     <>
-      {!hasBank && <ConnectionGuide providers={providers ?? []} />}
+      {connectionsQuery.isPending && callback.status !== "idle" ? (
+        <Skeleton>
+          <Bone className="h-10 rounded-xl" />
+        </Skeleton>
+      ) : connectionsQuery.isPending ? (
+        <ConnectionGuide providers={[]} loading />
+      ) : (
+        !hasBank && <ConnectionGuide providers={providers ?? []} loading={flow.providers.isPending} />
+      )}
       {connections.length > 0 && (
         <div className="flex flex-col gap-2">
           {connections.map((c) => <BankRow key={c.id} connection={c} />)}

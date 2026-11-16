@@ -15,7 +15,7 @@ export function Toggle({ checked, onChange, disabled = false, offClassName = "bg
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition duration-140 cursor-pointer ${
         checked ? "bg-green" : offClassName
       }`}
       {...rest}

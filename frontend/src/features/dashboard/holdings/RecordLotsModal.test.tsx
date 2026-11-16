@@ -183,7 +183,7 @@ describe("RecordLotsModal", () => {
     holdPreviewResolution = true;
     txns = [lot("a", "buy", "10", "20")];
     await renderModal(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-    expect(screen.getByTestId("figure-invested")).toHaveTextContent("—");
+    expect(screen.queryByTestId("figure-invested")).not.toBeInTheDocument();
     await releaseHeldPreview();
     expect(screen.getByTestId("figure-invested")).toHaveTextContent("375");
   });
@@ -512,17 +512,17 @@ describe("RecordLotsModal", () => {
     expect(screen.getAllByTestId("lot-quantity")[0]).toHaveValue("17");
   });
 
-  it("keeps a row added while the lots load, beside the lots", async () => {
-    const user = userEvent.setup();
+  it("keeps Add entry off until the lots load, but Cancel on", async () => {
     txns = [lot("a", "buy", "10", "20")];
     let release = () => {};
     lotsGate = new Promise((done) => { release = done; });
     renderWithApp(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
 
-    await user.click(screen.getByRole("button", { name: /^add entry$/i }));
+    expect(screen.getByRole("button", { name: /^add entry$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^cancel$/i })).toBeEnabled();
     release();
-    await waitFor(() => expect(screen.getAllByTestId("lot-row")).toHaveLength(2));
-    expect(accountedLine()).toBe("10 / 20 shares accounted for");
+    await waitFor(() => expect(screen.getByRole("button", { name: /^add entry$/i })).toBeEnabled());
+    expect(screen.getAllByTestId("lot-row")).toHaveLength(1);
   });
 
   it("keeps the modal open and reports the error when the save fails", async () => {

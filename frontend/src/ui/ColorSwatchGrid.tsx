@@ -46,7 +46,7 @@ export function ColorSwatchGrid<C extends string | null>({
   // reads as selected when the current colour is not one of the presets.
   const custom = shown !== null && !BUDGET_PALETTE.includes(shown);
   const s = SIZES[size];
-  const swatch = `${s.swatch} flex items-center justify-center cursor-pointer transition-transform duration-140 disabled:opacity-40 disabled:cursor-not-allowed`;
+  const swatch = `${s.swatch} flex items-center justify-center cursor-pointer transition-transform duration-140`;
 
   return (
     <div className={s.row}>

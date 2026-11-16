@@ -3,6 +3,8 @@ import { useTranslation } from "react-i18next";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { AuthPage } from "../../ui/AuthPage";
 import { Button } from "../../ui/Button";
+import { LoadingFrame } from "../../ui/LoadingFrame";
+import { Skeleton, TextBone } from "../../ui/Skeleton";
 import { FieldError } from "../../ui/FieldError";
 import { Field } from "../../ui/Field";
 import { TextInput } from "../../ui/TextInput";
@@ -28,8 +30,6 @@ export function Reset() {
   // What was refused, and which field it's about (none: the form as a whole).
   const [error, setError] = useState<{ text: string; field: "password" | "confirm" | null } | null>(null);
   const [pending, setPending] = useState(false);
-
-  if (guard.status !== "valid") return null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,38 +70,49 @@ export function Reset() {
         <div className="pb-1 text-lg font-semibold text-fg">{t("auth.resetPassword")}</div>
         {/* Whose password it is; the hidden copy tells a password manager
             which saved login to update. */}
-        <div className="truncate rounded-xl bg-surface-2 px-4 py-2.5 text-sm text-fg-dim">{email}</div>
+        <div className="truncate rounded-xl bg-surface-2 px-4 py-2.5 text-sm text-fg-dim">
+          {guard.status === "valid" ? (
+            email
+          ) : (
+            <Skeleton>
+              <TextBone text="text-sm" className="w-48" />
+            </Skeleton>
+          )}
+        </div>
         <input type="email" autoComplete="username" value={email} readOnly hidden />
-        <Field
-          label={t("auth.newPassword")}
-          labelClassName="text-fg-dim"
-          error={error?.field === "password" && error.text}
-         htmlFor={`${id}-password`}>
-          <TextInput id={`${id}-password`}
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            invalid={error?.field === "password" || error?.field === "confirm"}
-          />
-        </Field>
-        <Field
-          label={t("auth.confirmPassword")}
-          labelClassName="text-fg-dim"
-          error={error?.field === "confirm" && error.text}
-         htmlFor={`${id}-confirm`}>
-          <TextInput id={`${id}-confirm`}
-            type="password"
-            autoComplete="new-password"
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            invalid={error?.field === "confirm"}
-          />
-        </Field>
-        {error?.field === null && <FieldError>{error.text}</FieldError>}
-        <Button type="submit" disabled={pending} className="mt-1">
-          {t("auth.updatePasswordButton")}
-        </Button>
+        {/* Off until the link is known to be valid; else the guard leaves. */}
+        <LoadingFrame loading={guard.status !== "valid"}>
+          <Field
+            label={t("auth.newPassword")}
+            labelClassName="text-fg-dim"
+            error={error?.field === "password" && error.text}
+           htmlFor={`${id}-password`}>
+            <TextInput id={`${id}-password`}
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              invalid={error?.field === "password" || error?.field === "confirm"}
+            />
+          </Field>
+          <Field
+            label={t("auth.confirmPassword")}
+            labelClassName="text-fg-dim"
+            error={error?.field === "confirm" && error.text}
+           htmlFor={`${id}-confirm`}>
+            <TextInput id={`${id}-confirm`}
+              type="password"
+              autoComplete="new-password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              invalid={error?.field === "confirm"}
+            />
+          </Field>
+          {error?.field === null && <FieldError>{error.text}</FieldError>}
+          <Button type="submit" busy={pending} busyLabel={t("common.busy.saving")} className="mt-1">
+            {t("auth.updatePasswordButton")}
+          </Button>
+        </LoadingFrame>
       </form>
     </AuthPage>
   );

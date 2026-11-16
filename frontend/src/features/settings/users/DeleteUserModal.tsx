@@ -26,7 +26,8 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
       large
       title={t("settings.users.removeUser.title", { name: user.name })}
       body={t("settings.users.removeUser.body")}
-      confirmLabel={remove.isPending ? t("settings.users.removeUser.deleting") : t("settings.users.deleteUser")}
+      confirmLabel={t("settings.users.deleteUser")}
+      busyLabel={t("common.busy.deleting")}
       busy={remove.isPending}
       confirmDisabled={!matches}
       onConfirm={() => remove.mutate({ id: user.id, email: email.trim() }, { onSuccess: onDeleted })}

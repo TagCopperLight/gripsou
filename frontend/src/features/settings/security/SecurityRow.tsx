@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Fingerprint, Loader2, ShieldCheck, Smartphone } from "lucide-react";
+import { Fingerprint, ShieldCheck, Smartphone } from "lucide-react";
 
 import { Button } from "../../../ui/Button";
+import { Bone, Skeleton } from "../../../ui/Skeleton";
 import { useMfaStatus } from "../../../api/auth";
 
 export function SecurityRow({
@@ -37,27 +38,31 @@ export function SecurityRow({
   );
 }
 
+/** What a row's action is while two-factor's status loads: by default a bone
+ *  the size of a text button. */
+type PendingAction = { pending?: ReactNode };
+
 /** The authenticator app's row. `action` shows once two-factor's status is
  *  known. */
-export function TotpRow({ action }: { action: ReactNode }) {
+export function TotpRow({ action, pending }: { action: ReactNode } & PendingAction) {
   const { t } = useTranslation();
   const on = useMfaStatus().data?.totp ?? false;
   const Icon = on ? ShieldCheck : Smartphone;
-  return <MfaRow icon={<Icon className="size-4.5" strokeWidth={2} />} on={on} title={t("settings.account.twoFactor")} action={action} />;
+  return <MfaRow icon={<Icon className="size-4.5" strokeWidth={2} />} on={on} title={t("settings.account.twoFactor")} action={action} pending={pending} />;
 }
 
 /** The passkeys' row. `action` shows once two-factor's status is known. */
-export function PasskeyRow({ hint, action }: { hint?: ReactNode; action: ReactNode }) {
+export function PasskeyRow({ hint, action, pending }: { hint?: ReactNode; action: ReactNode } & PendingAction) {
   const { t } = useTranslation();
   const on = (useMfaStatus().data?.passkeys.length ?? 0) > 0;
   return (
-    <MfaRow icon={<Fingerprint className="size-4.5" strokeWidth={2} />} on={on} title={t("passkeys.title")} hint={hint} action={action} />
+    <MfaRow icon={<Fingerprint className="size-4.5" strokeWidth={2} />} on={on} title={t("passkeys.title")} hint={hint} action={action} pending={pending} />
   );
 }
 
-/** A row whose state comes from two-factor's status: a spinner while it
+/** A row whose state comes from two-factor's status: `pending` while it
  *  loads, a retry once it failed. */
-function MfaRow({ hint, action, ...row }: { icon: ReactNode; on: boolean; title: string; hint?: ReactNode; action: ReactNode }) {
+function MfaRow({ hint, action, pending, ...row }: { icon: ReactNode; on: boolean; title: string; hint?: ReactNode; action: ReactNode } & PendingAction) {
   const { t } = useTranslation();
   const mfa = useMfaStatus();
   return (
@@ -72,7 +77,11 @@ function MfaRow({ hint, action, ...row }: { icon: ReactNode; on: boolean; title:
             {t("common.retry")}
           </Button>
         ) : (
-          <Loader2 aria-label={t("common.loading")} className="size-4.5 animate-spin text-fg-faint" />
+          pending ?? (
+            <Skeleton>
+              <Bone className="h-9.5 w-20 rounded-xl" />
+            </Skeleton>
+          )
         )
       }
     />

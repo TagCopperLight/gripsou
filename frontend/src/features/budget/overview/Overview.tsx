@@ -1,7 +1,8 @@
 import { useCallback } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import type { UseQueryResult } from "@tanstack/react-query";
 
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
 import { PeriodLine } from "./PeriodLine";
 import { FiguresSurface } from "./FiguresSurface";
 import { SankeySurface } from "./SankeySurface";
@@ -16,8 +17,9 @@ import {
 import { anchorMonth, currentMonth, periodBounds, type Period } from "../../../lib/period";
 import { addMonths } from "../../../lib/month";
 import { hasFlow } from "../../../lib/sankeyGraph";
-import type { Slice } from "../../../api/wire";
+import type { BudgetSummary, Slice } from "../../../api/wire";
 import { usePrivacy } from "../../../auth/usePrivacy";
+import { staleClass } from "../../../ui/stale";
 
 export function BudgetOverview() {
   const { period: picked } = useBudget();
@@ -30,22 +32,35 @@ export function BudgetOverview() {
   const period: Period | undefined =
     picked ?? (latest.isPending ? undefined : { mode: "month", month: lastMonth ?? currentMonth() });
 
-  if (period === undefined) return <CardState variant="loading" className="h-40" />;
-  return <OverviewOf period={period} lastMonth={lastMonth} />;
+  return period === undefined
+    ? <OverviewPage lastMonth={lastMonth} />
+    : <OverviewOf period={period} lastMonth={lastMonth} />;
 }
 
 function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string | null }) {
+  const summary = useBudgetSummary(period);
+  return <OverviewPage period={period} lastMonth={lastMonth} summary={summary} />;
+}
+
+/** The whole page, drawn before its period is known (`period` undefined, while
+ *  the latest month with data loads) and before its summary is (`summary`
+ *  undefined or pending): the frame renders, bones stand in for the figures and
+ *  charts. */
+function OverviewPage({ period, lastMonth, summary }: {
+  period?: Period;
+  lastMonth: string | null;
+  summary?: UseQueryResult<BudgetSummary>;
+}) {
   const navigate = useNavigate();
   const { setPeriod, patchFilters } = useBudget();
   // One eye, in the period line, for every amount of the page.
   const privacy = usePrivacy();
 
-  const summary = useBudgetSummary(period);
-
-  const data = summary.data;
+  const data = summary?.data;
+  const stale = Boolean(summary?.isPlaceholderData);
   const empty = data !== undefined && data.txnCount === 0;
 
-  const month = period.mode === "month" ? period.month : null;
+  const month = period?.mode === "month" ? period.month : null;
   // Back is always open: a month before the first transaction is an empty
   // month like any other (user's call).
   const canStepBack = month !== null;
@@ -67,6 +82,8 @@ function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string |
    *  the list would come back always-empty. Search, account and tag filters
    *  are the reader's own narrowing and stay. */
   const openTransactions = (slice?: Slice) => {
+    // Only a loaded summary links here, and a summary has a period.
+    if (period === undefined) return;
     const { from, to } = periodBounds(period);
     const base = {
       categoryIds: [] as string[],
@@ -107,35 +124,48 @@ function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string |
 
       <AiBanner />
 
-      {data === undefined ? (
-        <CardState
-          variant={summary.isError ? "error" : "loading"}
-          onRetry={() => void summary.refetch()}
-          className="h-40"
-        />
+      {summary?.isError && data === undefined ? (
+        <CardError onRetry={() => void summary.refetch()} className="h-40" />
       ) : (
-        <FiguresSurface summary={data} masked={privacy.masked} />
-      )}
-
-      {empty ? (
-        <EmptyPeriodSurface />
-      ) : (
-        data && (
-          <>
-            {hasFlow(data.sankey) && (
-              <SankeySurface sankey={data.sankey} onSeeTransactions={() => openTransactions()} masked={privacy.masked} />
+        <>
+          {/* A step to another month keeps this month's data, dimmed, until
+              the new one lands. The trend dims on its own query. */}
+          <div className="flex flex-col gap-5">
+            <FiguresSurface summary={data} masked={privacy.masked} stale={stale} />
+            {data === undefined ? (
+              <>
+                <SankeySurface />
+                <BreakdownSurface />
+              </>
+            ) : empty ? (
+              <div className={staleClass(stale)}>
+                <EmptyPeriodSurface />
+              </div>
+            ) : (
+              <>
+                {hasFlow(data.sankey) && (
+                  <SankeySurface sankey={data.sankey} onSeeTransactions={() => openTransactions()} masked={privacy.masked} stale={stale} />
+                )}
+                {data.breakdown.length > 0 && (
+                  <BreakdownSurface
+                    rows={data.breakdown}
+                    expensesTotal={data.figures.expenses.amount}
+                    onOpen={openTransactions}
+                    masked={privacy.masked}
+                    stale={stale}
+                  />
+                )}
+              </>
             )}
-            {data.breakdown.length > 0 && (
-              <BreakdownSurface
-                rows={data.breakdown}
-                expensesTotal={data.figures.expenses.amount}
-                onOpen={openTransactions}
-                masked={privacy.masked}
-              />
-            )}
-            <TrendSection anchor={anchorMonth(period)} onSelectMonth={selectMonth} masked={privacy.masked} />
-          </>
-        )
+          </div>
+          {data === undefined ? (
+            <TrendSurface />
+          ) : (
+            !empty && period && (
+              <TrendSection anchor={anchorMonth(period)} onSelectMonth={selectMonth} masked={privacy.masked} />
+            )
+          )}
+        </>
       )}
     </div>
   );
@@ -151,13 +181,12 @@ function TrendSection({
   masked: boolean;
 }) {
   const trend = useBudgetTrend(anchor);
+  if (trend.isError && trend.data === undefined) {
+    return <CardError onRetry={() => void trend.refetch()} className="h-60" />;
+  }
   return trend.data === undefined ? (
-    <CardState
-      variant={trend.isError ? "error" : "loading"}
-      onRetry={() => void trend.refetch()}
-      className="h-60"
-    />
+    <TrendSurface />
   ) : (
-    <TrendSurface trend={trend.data} onSelectMonth={onSelectMonth} masked={masked} />
+    <TrendSurface trend={trend.data} onSelectMonth={onSelectMonth} masked={masked} stale={trend.isPlaceholderData} />
   );
 }

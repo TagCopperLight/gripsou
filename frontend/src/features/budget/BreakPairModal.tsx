@@ -28,6 +28,7 @@ export function BreakPairModal({ count, busy = false, onConfirm, onClose }: Brea
       title={t("budget.transactions.breakPair.title")}
       body={t("budget.transactions.breakPair.body", { count })}
       confirmLabel={t("budget.transactions.breakPair.confirm")}
+      busyLabel={t("common.busy.saving")}
       busy={busy}
       onConfirm={onConfirm}
       onClose={onClose}

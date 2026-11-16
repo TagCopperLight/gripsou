@@ -12,6 +12,8 @@ type UserDetailModalProps = {
   /** The member's role; `onToggleRole` saves the other one. */
   role: Role;
   onToggleRole: () => void;
+  /** A role change is saving: the badge is off until it lands. */
+  roleSaving: boolean;
   /** Both omitted for yourself — you can't reset or delete your own account here. */
   onReset?: () => void;
   onDelete?: () => void;
@@ -24,6 +26,7 @@ export function UserDetailModal({
   user,
   role,
   onToggleRole,
+  roleSaving,
   onReset,
   onDelete,
   onClose,
@@ -78,8 +81,9 @@ export function UserDetailModal({
             <button
               type="button"
               onClick={onToggleRole}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium cursor-pointer transition-colors duration-140 ${roleColor} ${
-                role === "admin" ? "hover:bg-green/25" : "hover:bg-surface-2 hover:text-fg"
+              disabled={roleSaving}
+              className={`rounded-md px-2.5 py-1 text-xs font-medium cursor-pointer transition-colors duration-140 disabled:cursor-wait disabled:opacity-60 ${roleColor} ${
+                role === "admin" ? "enabled:hover:bg-green/25" : "enabled:hover:bg-surface-2 enabled:hover:text-fg"
               }`}
             >
               {roleLabel}

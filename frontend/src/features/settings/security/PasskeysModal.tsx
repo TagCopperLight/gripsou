@@ -9,6 +9,9 @@ import { useDeletePasskey, useMfaStatus, useRenamePasskey } from "../../../api/a
 import { PASSKEY_NAME_MAX_CHARS, type Passkey } from "../../../api/wire";
 import { formatDate, formatRelative } from "../../../lib/date";
 
+const ROW_ICON =
+  "cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 enabled:hover:bg-surface-3";
+
 /** The saved passkeys: rename in place, delete after a confirmation asked in
  *  the row, and the way to add another. Closes itself when the last one is deleted. */
 export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: () => void }) {
@@ -62,6 +65,7 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
       <div className="mb-2 overflow-hidden rounded-2xl bg-surface-2">
         {passkeys.map((p) => {
           const asking = deleting?.id === p.id;
+          const savingName = rename.isPending && rename.variables.id === p.id;
           return (
             <div key={p.id} className="group flex items-center gap-3.5 border-t border-surface-3 px-3.5 py-3 first:border-t-0">
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-3 text-fg-dim">
@@ -113,10 +117,10 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
                   className="flex shrink-0 items-center gap-1 whitespace-nowrap"
                 >
                   <span className="mr-1 text-[13px] text-red">{t("passkeys.deleteAsk")}</span>
-                  <Button variant="ghost" padded={false} className="px-2.5 py-1.5 text-[13px]" onClick={() => setDeleting(null)} disabled={remove.isPending}>
+                  <Button variant="ghost" padded={false} className="px-2.5 py-1.5 text-[13px]" onClick={() => setDeleting(null)}>
                     {t("common.cancel")}
                   </Button>
-                  <Button variant="danger" padded={false} className="px-2.5 py-1.5 text-[13px]" onClick={() => void confirmDelete(p)} disabled={remove.isPending} autoFocus>
+                  <Button variant="danger" padded={false} className="px-2.5 py-1.5 text-[13px]" onClick={() => void confirmDelete(p)} busy={remove.isPending} busyLabel={t("common.busy.deleting")} autoFocus>
                     {t("passkeys.delete")}
                   </Button>
                 </div>
@@ -128,8 +132,9 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
                   <button
                     type="button"
                     onClick={() => startRename(p)}
+                    disabled={savingName}
                     aria-label={t("passkeys.rename")}
-                    className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-fg"
+                    className={`${ROW_ICON} enabled:hover:text-fg`}
                   >
                     <Pencil className="size-4" strokeWidth={2} />
                   </button>
@@ -139,8 +144,9 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
                       setRenaming(null);
                       setDeleting(p);
                     }}
+                    disabled={savingName}
                     aria-label={t("passkeys.delete")}
-                    className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-red"
+                    className={`${ROW_ICON} enabled:hover:text-red`}
                   >
                     <Trash2 className="size-4" strokeWidth={2} />
                   </button>

@@ -6,7 +6,7 @@ import { showError, useErrorToast } from "../../lib/errorToasts";
 import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink, CircleAlert, TriangleAlert } from "lucide-react";
 
 import { HoldingBadge } from "../../ui/HoldingBadge";
-import { useManageConnection, useSyncConnection } from "../../api/connections";
+import { useManageConnection, useSyncAllPending, useSyncConnection } from "../../api/connections";
 import { AlertDot } from "./AlertDot";
 import {
   connectionAlert,
@@ -19,6 +19,7 @@ import {
 import { formatDate, formatRelative } from "../../lib/date";
 import { formatMoney } from "../../lib/money";
 import { FxAsterisk, FxFootnote } from "../../ui/FxNote";
+import { Bone, Skeleton, TextBone } from "../../ui/Skeleton";
 import type { SyncConnection } from "../../api/wire";
 
 // Shared collapsible connection row used by the settings page and the sync
@@ -34,6 +35,7 @@ export function ConnectionRow({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const sync = useSyncConnection();
+  const syncAllPending = useSyncAllPending();
   useErrorToast(sync.isError && t("sync.startFailed"));
   const manage = useManageConnection();
   const [manageError, setManageError] = useState<string | null>(null);
@@ -83,6 +85,8 @@ export function ConnectionRow({
     setOpen((o) => !o);
   };
   const syncing = isSyncing(conn.status);
+  // The icon spins from the click on, not only once the server says so.
+  const syncSpins = syncing || sync.isPending || syncAllPending;
   const isError = conn.status === "error";
   const isPending = conn.status === "pending";
 
@@ -136,9 +140,9 @@ export function ConnectionRow({
           <IconButton
             onClick={stop(() => sync.mutate(conn.id))}
             aria-label={t("settings.connections.syncConnection")}
-            disabled={syncing}
+            disabled={syncSpins}
           >
-            <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} />
+            <RefreshCw className={`size-4 ${syncSpins ? "animate-spin" : ""}`} />
           </IconButton>
           {onDelete && (
             <IconButton
@@ -239,17 +243,17 @@ export function ConnectionRow({
           <div className="mt-2 flex flex-wrap items-center gap-4 border-t border-surface-3 pt-2.5 md:hidden">
             {conn.canManage && (
               <button type="button" onClick={stop(() => { void openManage(); })} disabled={manage.isPending || syncing || isPending}
-                className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-fg-dim disabled:opacity-40 disabled:cursor-not-allowed">
-                <ExternalLink className="size-3.5" />{t("settings.connections.manage")}
+                className="flex shrink-0 cursor-pointer items-center gap-1.5 text-xs text-fg-dim">
+                <ExternalLink className="size-3.5" />{t(manage.isPending ? "common.busy.opening" : "settings.connections.manage")}
               </button>
             )}
             <button
               type="button"
               onClick={stop(() => sync.mutate(conn.id))}
-              disabled={syncing}
-              className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-fg-dim disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={syncSpins}
+              className="flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-xs text-fg-dim"
             >
-              <RefreshCw className={`size-3.5 ${syncing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`size-3.5 ${syncSpins ? "animate-spin" : ""}`} />
               {t("settings.connections.syncConnection")}
             </button>
             {onDelete && (
@@ -299,6 +303,34 @@ export function ConnectionRow({
       </p>
     );
   }
+}
+
+/** The connection rows still loading: a few, each as tall as a row, with as
+ *  many icon buttons as the rows will have (`deletable`: a trash icon too). */
+export function ConnectionRowsSkeleton({ deletable }: { deletable: boolean }) {
+  return (
+    <Skeleton className="flex flex-col gap-2.5">
+      {Array.from({ length: 2 }, (_, row) => (
+        <div key={row} className="flex items-center gap-3 rounded-2xl bg-surface-2 px-4 py-3.5">
+          <Bone className="size-9 shrink-0 rounded-lg" />
+          <div className="min-w-0 flex-1">
+            <TextBone text="text-[15px]" className="w-32" />
+            <TextBone text="mt-0.5 text-xs" className="w-24" />
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <div className="hidden items-center gap-1.5 md:flex">
+              {Array.from({ length: deletable ? 3 : 2 }, (_, i) => (
+                <span key={i} className="flex size-8 items-center justify-center">
+                  <Bone className="size-4" />
+                </span>
+              ))}
+            </div>
+            <ChevronRight aria-hidden className="size-4 text-fg-faint" />
+          </div>
+        </div>
+      ))}
+    </Skeleton>
+  );
 }
 
 function IconButton({

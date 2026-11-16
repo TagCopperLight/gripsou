@@ -22,8 +22,9 @@ const NO_PASSWORD_MANAGER = {
   "data-form-type": "other",
 };
 
-/** Saves the field; `onSaved` runs once the server took it. */
-type Save = (value: string | null, onSaved?: () => void) => void;
+/** Saves the field; `onSaved` runs once the server took it. Settles when the
+ *  request is over. */
+type Save = (value: string | null, onSaved?: () => void) => Promise<void>;
 
 /** A provider's fields: the plain ones side by side, then each secret. */
 export function KeyFieldList({ fields, save }: { fields: ApiKeyField[]; save: SaveKey }) {
@@ -58,7 +59,7 @@ function PlainField({ label, value, save }: { label: string; value: string | nul
     if (typed === null) return;
     const next = typed.trim() || null;
     if (next === value) setDraft(null);
-    else save(next);
+    else void save(next);
   };
 
   return (
@@ -91,6 +92,13 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
   const id = useId();
   const [replacing, setReplacing] = useState(false);
   const [text, setText] = useState("");
+  // Which request is running, for that button alone: two fields' saves share
+  // one mutation, so its `isPending` can't tell them apart.
+  const [running, setRunning] = useState<"save" | "remove" | null>(null);
+  const run = (kind: "save" | "remove", value: string | null, onSaved: () => void) => {
+    setRunning(kind);
+    void save(value, onSaved).finally(() => setRunning(null));
+  };
 
   const close = () => {
     setReplacing(false);
@@ -98,15 +106,14 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
   };
   const submit = () => {
     const next = text.trim();
-    if (!next) return;
-    save(next, () => {
+    if (!next || running) return;
+    run("save", next, () => {
       showDone(t("settings.server.apiKeys.savedToast"));
       close();
     });
     // On failure the error toast shows and the field stays open to try again.
   };
-  const remove = () =>
-    save(null, () => showDone(t("settings.server.apiKeys.removedToast")));
+  const remove = () => run("remove", null, () => showDone(t("settings.server.apiKeys.removedToast")));
 
   if (isSet && !replacing) {
     return (
@@ -129,7 +136,8 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
             type="button"
             aria-label={t("settings.server.apiKeys.remove", { name: label })}
             onClick={remove}
-            className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 hover:bg-surface-3 hover:text-red"
+            disabled={running === "remove"}
+            className="cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 enabled:hover:bg-surface-3 enabled:hover:text-red"
           >
             <Trash2 className="size-4.5" />
           </button>
@@ -160,14 +168,17 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
           }}
         />
         {(replacing || text) && (
-          <button
-            type="button"
+          <Button
+            variant="ghostStrong"
+            padded={false}
             disabled={!text.trim()}
+            busy={running === "save"}
+            busyLabel={t("common.busy.saving")}
             onClick={submit}
-            className="absolute top-1/2 right-1.5 -translate-y-1/2 cursor-pointer rounded-lg bg-surface-3 px-2.5 py-1 text-xs font-medium text-fg transition-colors duration-140 hover:bg-surface-3/70 disabled:cursor-not-allowed disabled:opacity-40"
+            className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-lg! bg-surface-3 px-2.5 py-1 text-xs"
           >
             {t("common.save")}
-          </button>
+          </Button>
         )}
       </div>
     </Field>

@@ -12,7 +12,10 @@ import { RangeSelector } from "../../../ui/RangeSelector";
 import { GainPill } from "../../../ui/GainPill";
 import { ChartLegend } from "../../../ui/ChartLegend";
 import { ValueChart, type ChartSeries, type ChartUnit } from "../../../ui/ValueChart";
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
+import { LoadingFrame } from "../../../ui/LoadingFrame";
+import { Bone, ChartBone, Skeleton, TextBone } from "../../../ui/Skeleton";
+import { staleClass } from "../../../ui/stale";
 import { CompositionSurface } from "./CompositionSurface";
 import { HoldingModalHeader } from "./HoldingModalHeader";
 import { Modal } from "../../../ui/Modal";
@@ -87,14 +90,15 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const masked = privacy.masked;
   const body = useRef<HTMLDivElement>(null);
 
-  const { data: priceData, isError: pricesError, refetch: refetchPrices } =
+  const { data: priceData, isPending: pricesLoading, isPlaceholderData: pricesStale, refetch: refetchPrices } =
     useHoldingPrices(holding.id, range);
-  const { data: txnData, isError: txnError, refetch: refetchTxn } =
+  const { data: txnData, isPending: txnLoading, refetch: refetchTxn } =
     useHoldingLots(holding.id);
   const prices = useMemo(() => priceData ?? [], [priceData]);
-  const purchases = useMemo(() => txnData ?? [], [txnData]);
 
   const chartReady = priceData !== undefined;
+  // A new range keeps the last one's chart and gain on screen, dimmed.
+  const stale = staleClass(pricesStale);
 
   const up = Number(holding.gl) >= 0;
   const chartCurrency = mode === "asset" ? holding.priceCurrency : holding.accountCurrency;
@@ -169,20 +173,37 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         {/* Side by side from xl (a chart of at least ~580 px beside the 512 px
             column); below, the chart on top and the stats under it. */}
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-        <div className="flex min-w-0 flex-col rounded-2xl bg-surface-2 p-4 md:p-5 xl:flex-1">
+        <LoadingFrame loading={pricesLoading} className="flex min-w-0 flex-col rounded-2xl bg-surface-2 p-4 md:p-5 xl:flex-1">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
               <span className="text-fg-faint text-sm">{chartLabel}</span>
               {/* Both headerValue and gainAbs follow the chart: price
                   domain in asset mode, amount domain in purchases mode.
                   Reporting currency only behind the unit switch — see the file header. */}
-              <MaskedMoney
-                masked={masked && mode === "purchases"}
-                value={headerValue}
-                currency={shownCurrency}
-                className="text-fg text-2xl font-semibold tracking-tight"
-              />
-              <GainPill value={gainAbs} pct={gainPct} masked={masked && mode === "purchases"} currency={shownCurrency} />
+              {/* The asset's own price is known up front; the position's value
+                  and every gain come from the prices. */}
+              {pricesLoading && mode === "purchases" ? (
+                <Skeleton>
+                  <TextBone text="text-2xl" className="w-36" />
+                </Skeleton>
+              ) : (
+                <MaskedMoney
+                  masked={masked && mode === "purchases"}
+                  value={headerValue}
+                  currency={shownCurrency}
+                  className={`text-fg text-2xl font-semibold tracking-tight ${mode === "purchases" ? stale : ""}`}
+                />
+              )}
+              {pricesLoading ? (
+                <Skeleton>
+                  {/* The pill's own height: a text-sm line and its py-1. */}
+                  <Bone className="h-7 w-44 rounded-lg" />
+                </Skeleton>
+              ) : (
+                <div className={`self-start ${stale}`}>
+                  <GainPill value={gainAbs} pct={gainPct} masked={masked && mode === "purchases"} currency={shownCurrency} />
+                </div>
+              )}
             </div>
             <div className="flex flex-col items-end gap-3">
               {!percentOnly && (
@@ -202,12 +223,13 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
               unit={chartUnit}
               percentLabel={t("common.return")}
               height={340}
-              className="mt-4"
+              className={`mt-4 ${stale}`}
               currency={shownCurrency}
             />
+          ) : pricesLoading ? (
+            <ChartBone className="mt-4 h-85" />
           ) : (
-            <CardState
-              variant={pricesError ? "error" : "loading"}
+            <CardError
               onRetry={() => refetchPrices()}
               className="mt-4 h-85"
             />
@@ -216,7 +238,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
           <div className="mt-3 flex justify-center overflow-x-auto">
             <RangeSelector value={range} onChange={setRange} />
           </div>
-        </div>
+        </LoadingFrame>
 
         <div className="flex w-full flex-col gap-4 xl:w-lg xl:shrink-0">
           <StatsSurface
@@ -229,11 +251,10 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
             <AboutSurface holding={holding} netWorth={netWorth} />
           ) : (
             <PurchaseHistorySurface
-              purchases={purchases}
+              purchases={txnData}
               currency={holding.accountCurrency}
               masked={masked}
-              ready={txnData !== undefined}
-              isError={txnError}
+              loading={txnLoading}
               onRetry={() => refetchTxn()}
             />
           )}
@@ -388,28 +409,26 @@ function PurchaseHistorySurface({
   purchases,
   currency,
   masked,
-  ready,
-  isError,
+  loading,
   onRetry,
 }: {
-  purchases: Lot[];
+  /** Undefined while loading or after a failure. */
+  purchases: Lot[] | undefined;
   currency: string;
   masked: boolean;
-  ready: boolean;
-  isError: boolean;
+  loading: boolean;
   onRetry: () => void;
 }) {
   const { t } = useTranslation();
   return (
     <div className="bg-surface-2 rounded-2xl p-5">
       <h3 className="text-fg font-semibold text-sm">{t("dashboard.assetModal.purchaseHistory")}</h3>
-      {!ready ? (
-        <CardState
-          variant={isError ? "error" : "loading"}
+      {purchases === undefined && !loading ? (
+        <CardError
           onRetry={onRetry}
           className="mt-4 h-32"
         />
-      ) : purchases.length === 0 ? (
+      ) : purchases?.length === 0 ? (
         <p className="text-fg-faint text-sm mt-4">{t("dashboard.assetModal.noPurchases")}</p>
       ) : (
         <div className="mt-3 -mx-3">
@@ -424,7 +443,8 @@ function PurchaseHistorySurface({
               </>
             }
           >
-            {purchases.map((p) => {
+            {purchases === undefined && <HistoryRowsSkeleton />}
+            {purchases?.map((p) => {
               const Icon = p.side === "sell" ? TrendingDown : TrendingUp;
               return (
                 <tr key={p.id} role="row" className={`${ROW_CELLS} font-mono`}>
@@ -450,4 +470,21 @@ function PurchaseHistorySurface({
       )}
     </div>
   );
+}
+
+/** Three rows in the history's columns while the lots load. The table's body
+ *  can't hold a `Skeleton`, so each row pulses on its own and is hidden from
+ *  screen readers. */
+function HistoryRowsSkeleton() {
+  return Array.from({ length: 3 }, (_, i) => (
+    <tr key={i} role="row" aria-hidden className={`${ROW_CELLS} motion-safe:animate-pulse`}>
+      <td role="cell" className="gap-2 py-2 pl-3 pr-4">
+        <TextBone text="text-sm" className="w-20" />
+        <Bone className="h-5 w-12 rounded" />
+      </td>
+      <td role="cell" className="justify-end pr-4"><Bone className="h-3 w-8" /></td>
+      <td role="cell" className="justify-end pr-4"><Bone className="h-3 w-16" /></td>
+      <td role="cell" className="justify-end pr-3"><Bone className="h-3 w-18" /></td>
+    </tr>
+  ));
 }

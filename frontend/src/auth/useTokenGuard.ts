@@ -7,8 +7,8 @@ type Guard = { status: "loading" | "valid"; info: TokenInfo | null };
 
 /**
  * Validate an invite/reset token on mount. Any failure (404, network, …) sends
- * the user to `/` — the page renders nothing until then, so an invalid token is
- * never shown a form.
+ * the user to `/`. Until the token is known valid, the page keeps its form off,
+ * so nothing is typed into a dead link.
  */
 export function useTokenGuard(token: string): Guard {
   const navigate = useNavigate();
