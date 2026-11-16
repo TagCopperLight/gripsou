@@ -14,227 +14,128 @@ function renderSurface() {
   return renderWithApp(<TagsSurface />);
 }
 
+const writes = (method: string) =>
+  vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method === method);
+
+/** Opens the window of a new tag and types its name. */
+async function newTag(name: string) {
+  renderSurface();
+  await screen.findByText("Holiday");
+  fireEvent.click(screen.getByRole("button", { name: "Add tag" }));
+  const input = within(screen.getByRole("dialog", { name: "New tag" })).getByLabelText("Name");
+  fireEvent.change(input, { target: { value: name } });
+  return input;
+}
+
 describe("TagsSurface", () => {
   beforeEach(() => {
     stubFetch(async () => jsonResponse(TAGS));
   });
 
-  it("adds a trimmed tag and clears only the submitted draft", async () => {
-    renderSurface();
-    await screen.findByText("Holiday");
-    const add = screen.getByRole("button", { name: "Add" });
-    expect(add).toBeDisabled(); // blank draft
-    fireEvent.change(screen.getByLabelText("Tag name"), { target: { value: "  Trip  " } });
-    fireEvent.click(add);
+  it("creates a trimmed tag, with no colour unless one is picked, and closes the window", async () => {
+    await newTag("  Trip  ");
+    fireEvent.click(screen.getByRole("button", { name: "Create tag" }));
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
         "/api/budget/tags",
         expect.objectContaining({ method: "POST", body: JSON.stringify({ name: "Trip", color: null }) }),
       ),
     );
-    await waitFor(() => expect(screen.getByLabelText("Tag name")).toHaveValue(""));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("saves the new tag on Enter too", async () => {
-    renderSurface();
-    await screen.findByText("Holiday");
-    const input = screen.getByLabelText("Tag name");
-    fireEvent.change(input, { target: { value: "Trip" } });
+  it("refuses a blank name", async () => {
+    await newTag("   ");
+    expect(screen.getByRole("button", { name: "Create tag" })).toBeDisabled();
+  });
+
+  it("saves on Enter too", async () => {
+    const input = await newTag("Trip");
     fireEvent.keyDown(input, { key: "Enter" });
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith("/api/budget/tags", expect.objectContaining({ method: "POST" })),
-    );
+    await waitFor(() => expect(writes("POST")).toHaveLength(1));
   });
 
-  it("keeps the draft and names the conflict on 409", async () => {
+  it("keeps the window and the name, and names the conflict, on 409", async () => {
     vi.mocked(fetch).mockImplementation(async (_u, init) =>
-      (init as RequestInit | undefined)?.method === "POST"
-        ? new Response("dup", { status: 409 })
-        : jsonResponse(TAGS),
+      (init as RequestInit | undefined)?.method === "POST" ? new Response("dup", { status: 409 }) : jsonResponse(TAGS),
     );
-    renderSurface();
-    await screen.findByText("Holiday");
-    fireEvent.change(screen.getByLabelText("Tag name"), { target: { value: "Holiday" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    const input = await newTag("Holiday");
+    fireEvent.click(screen.getByRole("button", { name: "Create tag" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("A tag with this name already exists.");
-    expect(screen.getByLabelText("Tag name")).toHaveValue("Holiday");
+    expect(input).toHaveValue("Holiday");
   });
 
-  it("explains a 404 on create as a sentence, not the raw translation key", async () => {
+  it("explains a 404 as a sentence, not the raw translation key", async () => {
     vi.mocked(fetch).mockImplementation(async (_u, init) =>
-      (init as RequestInit | undefined)?.method === "POST"
-        ? new Response("gone", { status: 404 })
-        : jsonResponse(TAGS),
+      (init as RequestInit | undefined)?.method === "POST" ? new Response("gone", { status: 404 }) : jsonResponse(TAGS),
     );
-    renderSurface();
-    await screen.findByText("Holiday");
-    fireEvent.change(screen.getByLabelText("Tag name"), { target: { value: "Trip" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This tag no longer existsRefresh the page.",
-    );
+    await newTag("Trip");
+    fireEvent.click(screen.getByRole("button", { name: "Create tag" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("This tag no longer existsRefresh the page.");
   });
 
-  it("renames in place: the chip becomes an input, Escape cancels and sends nothing", async () => {
+  it("edits name and colour in one full write, and only once something changed", async () => {
     renderSurface();
-    await screen.findByText("Holiday");
-    fireEvent.click(screen.getByRole("button", { name: "Modify Holiday" }));
-    const input = screen.getByDisplayValue("Holiday");
-    fireEvent.change(input, { target: { value: "Vacation" } });
-    fireEvent.keyDown(input, { key: "Escape" });
-    expect(screen.queryByDisplayValue("Vacation")).toBeNull();
-    expect(screen.getAllByTestId("tag-chip")[0]).toHaveTextContent("Holiday");
-    expect(vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method !== "GET")).toHaveLength(0);
-  });
+    fireEvent.click(await screen.findByRole("button", { name: "Modify Holiday" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit tag" });
+    const save = within(dialog).getByRole("button", { name: "Save changes" });
+    expect(save).toBeDisabled();
 
-  it("sends the full body on a rename, keeping the current colour", async () => {
-    renderSurface();
-    await screen.findByText("Holiday");
-    fireEvent.click(screen.getByRole("button", { name: "Modify Holiday" }));
-    fireEvent.change(screen.getByDisplayValue("Holiday"), { target: { value: " Vacation " } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: " Vacation " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "No colour" }));
+    fireEvent.click(save);
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
         "/api/budget/tags/t1",
-        expect.objectContaining({
-          method: "PATCH",
-          body: JSON.stringify({ name: "Vacation", color: "#5b9bf0" }),
-        }),
+        expect.objectContaining({ method: "PATCH", body: JSON.stringify({ name: "Vacation", color: null }) }),
       ),
     );
   });
 
-  it("keeps the draft mounted when a rename fails", async () => {
+  it("keeps the window open with the edits when a save fails", async () => {
     vi.mocked(fetch).mockImplementation(async (_u, init) =>
-      (init as RequestInit | undefined)?.method === "PATCH"
-        ? new Response("boom", { status: 500 })
-        : jsonResponse(TAGS),
+      (init as RequestInit | undefined)?.method === "PATCH" ? new Response("boom", { status: 500 }) : jsonResponse(TAGS),
     );
     renderSurface();
-    await screen.findByText("Holiday");
-    fireEvent.click(screen.getByRole("button", { name: "Modify Holiday" }));
-    fireEvent.change(screen.getByDisplayValue("Holiday"), { target: { value: "Vacation" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Modify Holiday" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit tag" });
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Vacation" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save the tag");
-    expect(screen.getByDisplayValue("Vacation")).toBeVisible();
+    expect(within(dialog).getByLabelText("Name")).toHaveValue("Vacation");
   });
 
-  it("explains a 404 on rename as a sentence, not the raw translation key", async () => {
-    vi.mocked(fetch).mockImplementation(async (_u, init) =>
-      (init as RequestInit | undefined)?.method === "PATCH"
-        ? new Response("gone", { status: 404 })
-        : jsonResponse(TAGS),
-    );
+  it("deletes from the window only after confirmation, and survives a failed delete", async () => {
     renderSurface();
-    await screen.findByText("Holiday");
-    fireEvent.click(screen.getByRole("button", { name: "Modify Holiday" }));
-    fireEvent.change(screen.getByDisplayValue("Holiday"), { target: { value: "Vacation" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This tag no longer existsRefresh the page.",
-    );
-  });
-
-  it("changes a colour without renaming, and clears it with null", async () => {
-    renderSurface();
-    await screen.findByText("Holiday");
-    expect(vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method !== "GET")).toHaveLength(0);
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Colour #4dd0b1" })[0]);
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(
-        "/api/budget/tags/t1",
-        expect.objectContaining({ body: JSON.stringify({ name: "Holiday", color: "#4dd0b1" }) }),
-      ),
-    );
-
-    fireEvent.click(screen.getAllByRole("button", { name: "No colour" })[0]);
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(
-        "/api/budget/tags/t1",
-        expect.objectContaining({ body: JSON.stringify({ name: "Holiday", color: null }) }),
-      ),
-    );
-  });
-
-  it("saves the custom colour once, when the picker closes, not on every step", async () => {
-    // jsdom draws nothing; the colour area just has no picture.
-    HTMLCanvasElement.prototype.getContext = (() => null) as never;
-    renderSurface();
-    await screen.findByText("Holiday");
-    fireEvent.click(
-      within(screen.getByRole("group", { name: "Colour of Holiday" })).getByRole("button", { name: "Custom colour" }),
-    );
-    const writes = () =>
-      vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method === "PATCH");
-
-    // Moving the hue: one colour per step, none of which may reach the server.
-    const hue = screen.getByRole("slider", { name: "Hue" });
-    for (let n = 0; n < 3; n++) fireEvent.keyDown(hue, { key: "ArrowRight", shiftKey: true });
-    expect(writes()).toHaveLength(0);
-    const shown = screen.getByRole("textbox", { name: "Hex code" }) as HTMLInputElement;
-    const last = `#${shown.value}`;
-
-    // Closing the picker saves the last colour, once.
-    fireEvent.keyDown(hue, { key: "Escape" });
-    await waitFor(() => expect(writes()).toHaveLength(1));
-    expect(writes()[0][1]).toEqual(
-      expect.objectContaining({ body: JSON.stringify({ name: "Holiday", color: last }) }),
-    );
-  });
-
-  it("disables one row's controls while that row has a write in flight", async () => {
-    let resolve!: (r: Response) => void;
-    vi.mocked(fetch).mockImplementation(async (_u, init) =>
-      (init as RequestInit | undefined)?.method === "PATCH"
-        ? new Promise<Response>((r) => {
-            resolve = r;
-          })
-        : jsonResponse(TAGS),
-    );
-    renderSurface();
-    await screen.findByText("Holiday");
-    fireEvent.click(screen.getByRole("button", { name: "Modify Holiday" }));
-    fireEvent.change(screen.getByDisplayValue("Holiday"), { target: { value: "Vacation" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-    await waitFor(() => expect(screen.getByRole("button", { name: "Delete Holiday" })).toBeDisabled());
-    expect(screen.getByRole("button", { name: "Modify Work" })).toBeEnabled();
-    resolve(jsonResponse({ id: "t1", name: "Vacation", color: "#5b9bf0", txCount: 4 }));
-  });
-
-  it("deletes only after confirmation, and survives a failed delete", async () => {
-    renderSurface();
-    await screen.findByText("Holiday");
-    fireEvent.click(screen.getByRole("button", { name: "Delete Holiday" }));
-    expect(screen.getByRole("dialog")).toHaveAccessibleName("Delete tag");
+    fireEvent.click(await screen.findByRole("button", { name: "Modify Holiday" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Edit tag" })).getByRole("button", { name: "Delete" }));
+    expect(screen.getByRole("dialog", { name: "Delete tag" })).toBeVisible();
     expect(screen.getByText(/removed from 4 transactions/)).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(
-      vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method === "DELETE"),
-    ).toHaveLength(0);
+    expect(writes("DELETE")).toHaveLength(0);
 
     vi.mocked(fetch).mockImplementation(async (_u, init) =>
-      (init as RequestInit | undefined)?.method === "DELETE"
-        ? new Response("no", { status: 500 })
-        : jsonResponse(TAGS),
+      (init as RequestInit | undefined)?.method === "DELETE" ? new Response("no", { status: 500 }) : jsonResponse(TAGS),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Delete Holiday" }));
+    fireEvent.click(screen.getByRole("button", { name: "Modify Holiday" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Edit tag" })).getByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete tag" }));
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith("/api/budget/tags/t1", expect.objectContaining({ method: "DELETE" })),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't delete the tag");
-    expect(screen.getByRole("dialog")).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "Delete tag" })).toBeVisible();
   });
 
   it("has its own loading, error-with-retry and empty states", async () => {
     vi.mocked(fetch).mockImplementation(async () => new Response("no", { status: 500 }));
     renderSurface();
     const retry = await screen.findByRole("button", { name: /retry|réessayer/i });
+    expect(screen.getByRole("button", { name: "Add tag" })).toBeDisabled();
     vi.mocked(fetch).mockImplementation(async () => jsonResponse([]));
     fireEvent.click(retry);
-    expect(await screen.findByText(/No tags yet\./)).toBeVisible();
+    expect(await screen.findByText("No tags yet.")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Add tag" })).toBeEnabled();
   });
 });

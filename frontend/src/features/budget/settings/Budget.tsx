@@ -8,8 +8,8 @@ export function SettingsBudget() {
     <div className="pb-8 md:mt-13 flex flex-col gap-5">
       <AiSurface />
       <ListPrefsSurface />
-      <CategoriesSurface />
       <TagsSurface />
+      <CategoriesSurface />
     </div>
   );
 }

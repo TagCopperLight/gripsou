@@ -1,4 +1,4 @@
-import { useState, type ComponentPropsWithoutRef } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Plus, Key, Trash2, ChevronRight } from "lucide-react";
 import { boneWidths } from "../../../ui/boneWidths";
@@ -12,6 +12,7 @@ import { useErrorToast } from "../../../lib/errorToasts";
 import { GridTable } from "../../../ui/GridTable";
 import { HEAD_CELL, ROW_CELLS, ROW_HOVER, type Track } from "../../../ui/gridTable";
 import { Tag } from "../../../ui/Tag";
+import { IconButton } from "../../../ui/IconButton";
 import { LoadingFrame } from "../../../ui/LoadingFrame";
 import { Bone, BoneRows, Skeleton, TextBone } from "../../../ui/Skeleton";
 import { LinkModal } from "./LinkModal";
@@ -228,19 +229,6 @@ function YouTag() {
     <Tag tone="green">
       {t("settings.users.you")}
     </Tag>
-  );
-}
-
-/** A row's action, as on a connection row: the icon alone until hovered. */
-function IconButton({ danger = false, ...props }: ComponentPropsWithoutRef<"button"> & { danger?: boolean }) {
-  return (
-    <button
-      type="button"
-      className={`flex size-8 cursor-pointer items-center justify-center rounded-lg text-fg-faint transition-colors duration-140 hover:bg-surface-2 ${
-        danger ? "hover:text-red" : "hover:text-fg"
-      }`}
-      {...props}
-    />
   );
 }
 

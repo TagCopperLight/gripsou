@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Check, Pencil } from "lucide-react";
 
 import { ColorPicker } from "./ColorPicker";
@@ -14,46 +13,54 @@ type ColorSwatchGridProps<C extends string | null> = {
   swatchLabel: (color: string) => string;
   /** Accessible name of the free-pick swatch. */
   customLabel: string;
-  /** `grid` fills a form's width; `inline` is a row of small squares that
-   *  sits on a list line. */
-  size?: "grid" | "inline";
-  /** Given, a "no colour" swatch leads the row (`onChange(null)`). */
+  /** Given, a "no colour" swatch ends the row (`onChange(null)`). */
   clearLabel?: string;
-  /** False when every change is a write: the picker then previews here while
-   *  it is dragged (it reports every step) and changes the value once, when it
-   *  closes. */
-  live?: boolean;
 };
 
-const SIZES = {
-  grid: { row: "grid grid-cols-[repeat(18,minmax(0,1fr))] gap-2", swatch: "aspect-square w-full rounded-lg", icon: "size-3.5" },
-  inline: { row: "flex items-center gap-1", swatch: "size-4.5 rounded-md", icon: "size-3" },
-} as const;
-
 /** One row of preset swatches, then a swatch that opens our colour picker
- *  for anything off the palette. */
+ *  for anything off the palette. The row fills a form's width. */
 export function ColorSwatchGrid<C extends string | null>({
-  value, onChange, disabled = false, swatchLabel, customLabel, size = "grid", clearLabel, live = true,
+  value, onChange, disabled = false, swatchLabel, customLabel, clearLabel,
 }: ColorSwatchGridProps<C>) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const shown = draft ?? value;
-  const picker = usePopover(() => {
-    setDraft(null);
-    if (draft !== null && draft.toLowerCase() !== value?.toLowerCase()) onChange(draft);
-  });
+  const picker = usePopover();
   const open = picker.key !== null;
   // The picker swatch stands in for "a colour off the palette", so it only
   // reads as selected when the current colour is not one of the presets.
-  const custom = shown !== null && !BUDGET_PALETTE.includes(shown);
-  const s = SIZES[size];
-  const swatch = `${s.swatch} flex items-center justify-center cursor-pointer transition-transform duration-140`;
+  const custom = value !== null && !BUDGET_PALETTE.includes(value);
+  const swatch = "aspect-square w-full rounded-lg flex items-center justify-center cursor-pointer transition-transform duration-140";
+  // The palette, the free pick and, when offered, the "no colour" swatch.
+  const count = BUDGET_PALETTE.length + 1 + (clearLabel === undefined ? 0 : 1);
 
   return (
-    <div className={s.row}>
+    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}>
+      {BUDGET_PALETTE.map((c) => (
+        <button
+          key={c}
+          type="button"
+          disabled={disabled}
+          aria-label={swatchLabel(c)}
+          aria-pressed={c === value}
+          onClick={() => onChange(c)}
+          className={`${swatch} ${c === value ? "ring-2 ring-fg" : "hover:scale-105"}`}
+          style={{ background: c }}
+        >
+          {c === value && <Check className={`size-3.5 text-black/80`} />}
+        </button>
+      ))}
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={customLabel}
+        aria-expanded={open}
+        onClick={(e) => picker.toggle("open", e.currentTarget)}
+        className={`${swatch} bg-surface-2 ${custom || open ? "ring-2 ring-fg" : "hover:scale-105"}`}
+        style={{ background: custom ? safeBudgetColor(value) : undefined }}
+      >
+        <Pencil className={`size-3.5 ${custom ? "text-black/80" : "text-fg-faint"}`} />
+      </button>
       {clearLabel !== undefined && (
-        // "No colour" drawn as an empty square struck through: the absence of
-        // a colour still needs a swatch to sit in, otherwise the colours
-        // start at a different x on every row.
+        // "No colour" drawn as an empty square struck through, last, so the
+        // colours sit at the same place in every picker, with or without it.
         <button
           type="button"
           disabled={disabled}
@@ -67,35 +74,10 @@ export function ColorSwatchGrid<C extends string | null>({
           </svg>
         </button>
       )}
-      {BUDGET_PALETTE.map((c) => (
-        <button
-          key={c}
-          type="button"
-          disabled={disabled}
-          aria-label={swatchLabel(c)}
-          aria-pressed={c === value}
-          onClick={() => onChange(c)}
-          className={`${swatch} ${c === value ? "ring-2 ring-fg" : "hover:scale-105"}`}
-          style={{ background: c }}
-        >
-          {c === value && <Check className={`${s.icon} text-black/80`} />}
-        </button>
-      ))}
-      <button
-        type="button"
-        disabled={disabled}
-        aria-label={customLabel}
-        aria-expanded={open}
-        onClick={(e) => picker.toggle("open", e.currentTarget)}
-        className={`${swatch} bg-surface-2 ${custom || open ? "ring-2 ring-fg" : "hover:scale-105"}`}
-        style={{ background: custom ? safeBudgetColor(shown) : undefined }}
-      >
-        <Pencil className={`${s.icon} ${custom ? "text-black/80" : "text-fg-faint"}`} />
-      </button>
       {picker.anchor && (
         <ColorPicker
-          value={shown ?? "#000000"}
-          onChange={live ? onChange : setDraft}
+          value={value ?? "#000000"}
+          onChange={onChange}
           anchor={picker.anchor}
           onClose={picker.close}
         />

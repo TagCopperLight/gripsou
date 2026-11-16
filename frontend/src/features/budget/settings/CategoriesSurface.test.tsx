@@ -49,16 +49,15 @@ describe("CategoriesSurface", () => {
     expect(screen.queryByText("Old category")).toBeNull();
   });
 
-  it("locks archive and delete on the system row but keeps it editable", async () => {
+  it("marks the system row, and leaves archive and delete out of its window", async () => {
     renderSurface();
-    const row = (await screen.findByText("Internal transfer")).closest("tr")!;
-    expect(within(row).getByText("SYSTEM")).toBeVisible();
-    expect(within(row).queryByRole("button", { name: "Archive Internal transfer" })).toBeNull();
-    expect(within(row).queryByRole("button", { name: "Delete Internal transfer" })).toBeNull();
-    // One lock per refused action, so the row keeps three aligned slots.
-    expect(within(row).getByTestId("system-lock-archive")).toBeVisible();
-    expect(within(row).getByTestId("system-lock-delete")).toBeVisible();
-    expect(within(row).getByRole("button", { name: "Modify Internal transfer" })).toBeEnabled();
+    const row = (await screen.findByText("Internal transfer")).closest<HTMLElement>("[role=listitem]")!;
+    expect(within(row).getByTestId("system-lock")).toHaveTextContent("System");
+    fireEvent.click(within(row).getByRole("button", { name: "Modify Internal transfer" }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).queryByRole("button", { name: "Archive" })).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(within(dialog).getByTitle(/only its name, colour and icon/)).toBeVisible();
   });
 
   describe("reordering", () => {
@@ -171,16 +170,14 @@ describe("CategoriesSurface", () => {
   it("reveals archived rows behind the toggle and restores one with the full stored body", async () => {
     const { client } = renderSurface();
     await screen.findByText("Groceries");
+    expect(screen.queryByText("Old category")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show archived (1)" }));
     expect(screen.getByText("Old category")).toBeVisible();
-    const archivedRow = screen.getByText("Old category").closest("tr")!;
-    expect(within(archivedRow).getByText("ARCHIVED")).toBeVisible();
-    // The chip marks only the archived row, not every row on screen.
-    expect(
-      within(screen.getByText("Groceries").closest("tr")!).queryByText("ARCHIVED"),
-    ).toBeNull();
+    // Archived rows can't be moved: the order only ranks the active ones.
+    expect(screen.queryByRole("button", { name: "Move Old category up" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Restore Old category" }));
+    fireEvent.click(screen.getByRole("button", { name: "Modify Old category" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Restore" }));
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
         "/api/budget/categories/old",
@@ -193,19 +190,14 @@ describe("CategoriesSurface", () => {
         }),
       ),
     );
-    // Let the write AND the cache-invalidation refetch it triggers both
-    // settle (row re-enabled) before the test returns, so no state update
-    // from either fires against an unmounted/next test.
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Restore Old category" })).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitForFullSettle(client);
   });
 
   it("archives a seeded row without ever sending its translated label as the name", async () => {
     const { client } = renderSurface();
-    await screen.findByText("Groceries");
-    fireEvent.click(screen.getByRole("button", { name: "Archive Groceries" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Modify Groceries" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Archive" }));
     await waitFor(() => {
       const body = JSON.parse(
         (vi.mocked(fetch).mock.calls.find((c) => String(c[0]).endsWith("/gro"))![1] as RequestInit).body as string,
@@ -215,18 +207,10 @@ describe("CategoriesSurface", () => {
         hint: "Supermarkets and corner shops", kind: "expense", archived: true,
       });
     });
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Archive Groceries" })).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitForFullSettle(client);
   });
 
-  // In English the "groceries" default-key translation is byte-identical to
-  // the stored name, so this exact assertion above would still pass even if
-  // the implementation sent `categoryLabel(t, c)` instead of `c.name` — it
-  // would not catch a regression. French genuinely diverges ("Courses" vs.
-  // the stored "Groceries"), which is what actually exercises the rule that
-  // an archive/restore PATCH must carry the raw stored name.
   describe("in French, where the displayed label diverges from the stored name", () => {
     afterEach(async () => {
       // The surface is still mounted at this point (this hook runs before
@@ -238,13 +222,13 @@ describe("CategoriesSurface", () => {
       });
     });
 
-    it("archives 'Courses' by sending the stored name 'Groceries', not the displayed label", async () => {
+      it("archives 'Courses' by sending the stored name 'Groceries', not the displayed label", async () => {
       await act(async () => {
         await i18n.changeLanguage("fr");
       });
       const { client } = renderSurface();
-      await screen.findByText("Courses");
-      fireEvent.click(screen.getByRole("button", { name: "Archiver Courses" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Modifier Courses" }));
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Archiver" }));
       await waitFor(() => {
         const body = JSON.parse(
           (vi.mocked(fetch).mock.calls.find((c) => String(c[0]).endsWith("/gro"))![1] as RequestInit).body as string,
@@ -254,91 +238,43 @@ describe("CategoriesSurface", () => {
           hint: "Supermarkets and corner shops", kind: "expense", archived: true,
         });
       });
-      await waitFor(() =>
-        expect(screen.getByRole("button", { name: "Archiver Courses" })).toBeEnabled(),
-      );
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
       await waitForFullSettle(client);
     });
   });
 
-  it("reports a failed action inline and keeps the table usable", async () => {
+  it("keeps the window open and says so when archiving fails", async () => {
     vi.mocked(fetch).mockImplementation(async (_url, init) =>
       (init as RequestInit | undefined)?.method === "PATCH"
         ? new Response("boom", { status: 500 })
         : jsonResponse(ROWS),
     );
     renderSurface();
-    await screen.findByText("Groceries");
-    fireEvent.click(screen.getByRole("button", { name: "Archive Groceries" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Couldn't save the change",
-    );
-    expect(screen.getByText("Groceries")).toBeVisible();
+    fireEvent.click(await screen.findByRole("button", { name: "Modify Groceries" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Archive" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save the category");
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  it("deletes from the window only after confirmation", async () => {
+    renderSurface();
+    fireEvent.click(await screen.findByRole("button", { name: "Modify Groceries" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+    expect(screen.getByRole("dialog", { name: "Delete category" })).toBeVisible();
+    expect(screen.getByText(/137 transactions are kept/)).toBeVisible();
+    expect(
+      vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method === "DELETE"),
+    ).toHaveLength(0);
   });
 
   it("has its own loading, error-with-retry and empty states", async () => {
     vi.mocked(fetch).mockImplementation(async () => new Response("no", { status: 500 }));
     renderSurface();
     const retry = await screen.findByRole("button", { name: /retry|réessayer/i });
+    expect(screen.getByRole("button", { name: "Add category" })).toBeDisabled();
     vi.mocked(fetch).mockImplementation(async () => jsonResponse([]));
     fireEvent.click(retry);
     expect(await screen.findByText("No categories yet.")).toBeVisible();
   });
-
-  it("keeps a row disabled until its OWN write settles, independent of another row's in-flight write", async () => {
-    const resolvers: Record<string, (r: Response) => void> = {};
-    vi.mocked(fetch).mockImplementation(async (url, init) => {
-      if ((init as RequestInit | undefined)?.method === "PATCH") {
-        const id = String(url).split("/").pop()!;
-        return new Promise<Response>((resolve) => {
-          resolvers[id] = resolve;
-        });
-      }
-      return jsonResponse(ROWS);
-    });
-    const { client } = renderSurface();
-    await screen.findByText("Groceries");
-
-    fireEvent.click(screen.getByRole("button", { name: "Archive Groceries" })); // id "gro"
-    fireEvent.click(screen.getByRole("button", { name: "Archive Ignore" })); // id "ign"
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Archive Groceries" })).toBeDisabled();
-      expect(screen.getByRole("button", { name: "Archive Ignore" })).toBeDisabled();
-    });
-
-    // Groceries' write settles first...
-    resolvers["gro"](jsonResponse(ROWS));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Archive Groceries" })).toBeEnabled(),
-    );
-    // ...but Ignore's write is still in flight, so it must stay disabled.
-    expect(screen.getByRole("button", { name: "Archive Ignore" })).toBeDisabled();
-
-    resolvers["ign"](jsonResponse(ROWS));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Archive Ignore" })).toBeEnabled(),
-    );
-    await waitForFullSettle(client);
-  });
-
-  it("clears the sticky action error on the next surface interaction, not just the next archive attempt", async () => {
-    vi.mocked(fetch).mockImplementation(async (_url, init) =>
-      (init as RequestInit | undefined)?.method === "PATCH"
-        ? new Response("boom", { status: 500 })
-        : jsonResponse(ROWS),
-    );
-    const { client } = renderSurface();
-    await screen.findByText("Groceries");
-
-    fireEvent.click(screen.getByRole("button", { name: "Archive Groceries" }));
-    expect(await screen.findByRole("alert")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Show archived (1)" }));
-    expect(screen.queryByRole("alert")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: "Archive Groceries" }));
-    expect(await screen.findByRole("alert")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Modify Groceries" }));
-    expect(screen.queryByRole("alert")).toBeNull();
-    await waitForFullSettle(client);
-  });
 });
+

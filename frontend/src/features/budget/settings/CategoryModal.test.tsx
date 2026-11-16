@@ -25,7 +25,7 @@ const SYSTEM = cat({
 });
 
 function renderModal(props: { category?: BudgetCategory; onClose?: () => void } = {}) {
-  return renderWithApp(<CategoryModal category={props.category} onClose={props.onClose ?? vi.fn()} />);
+  return renderWithApp(<CategoryModal category={props.category} onClose={props.onClose ?? vi.fn()} onDelete={vi.fn()} />);
 }
 
 describe("CategoryModal — create", () => {
@@ -175,7 +175,6 @@ describe("CategoryModal — edit", () => {
     const kind = screen.getByLabelText("Kind");
     expect(kind).toBeDisabled();
     expect(kind).toHaveTextContent("Neutral");
-    expect(screen.getByText("The type of a system category cannot be changed.")).toBeVisible();
 
     expect(screen.getByLabelText("Hint for the AI")).toBeDisabled();
 

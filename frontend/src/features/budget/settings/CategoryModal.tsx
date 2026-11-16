@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Archive, ArchiveRestore, Lock, Trash2 } from "lucide-react";
 
 import { Dialog } from "../../../ui/Dialog";
 import { ColorSwatchGrid } from "../../../ui/ColorSwatchGrid";
@@ -14,18 +15,29 @@ import type { BudgetCategory, CategoryBody, CategoryKind } from "../../../api/wi
 import { BUDGET_KINDS, categoryLabel, safeBudgetColor } from "../../../lib/budget";
 import { BUDGET_ICONS, BUDGET_ICON_NAMES } from "../budgetIcons";
 import { budgetErrorKey, useBudgetErrorToast } from "../budgetErrors";
+import { ListBadge } from "./SettingsList";
 import { ACCOUNT_PALETTE } from "../../../lib/palette";
 import { withAlpha } from "../../../lib/color";
+
+/** An icon choice. The selected one is marked by a border, not a ring: a
+ *  ring is a shadow, which the browser doesn't snap to screen pixels, so at a
+ *  fractional display scale its sides come out unequal. */
+const ICON_SWATCH =
+  "size-8 rounded-xl border-[1.5px] flex items-center justify-center cursor-pointer transition-transform duration-140 bg-surface-2";
 
 type CategoryModalProps = {
   category?: BudgetCategory;
   onClose: () => void;
+  /** Asks to delete the category: the caller confirms first. */
+  onDelete: (category: BudgetCategory) => void;
 };
 
-export function CategoryModal({ category, onClose }: CategoryModalProps) {
+export function CategoryModal({ category, onClose, onDelete }: CategoryModalProps) {
   const { t } = useTranslation();
   const create = useCreateBudgetCategory();
   const update = useUpdateBudgetCategory();
+  // Its own mutation, so only the button that was pressed says it is busy.
+  const archive = useUpdateBudgetCategory();
   const mutation = category ? update : create;
 
   // The label shown when the form opened. Comparing against it is what tells a
@@ -73,7 +85,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
     else create.mutate(body, { onSuccess: onClose });
   };
 
-  const busy = mutation.isPending;
+  const busy = mutation.isPending || archive.isPending;
   // The system row stays editable for the things that are purely presentation —
   // name, colour, icon. Its kind is fixed, and its hint would never be read.
   const locked = Boolean(category?.systemKey);
@@ -81,6 +93,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
 
   const failure = mutation.isError ? budgetErrorKey(mutation.error) : null;
   useBudgetErrorToast(failure, "settings.budget.categories", "duplicate");
+  useBudgetErrorToast(archive.isError ? budgetErrorKey(archive.error) : null, "settings.budget.categories", "duplicate");
 
   return (
     <Dialog
@@ -88,13 +101,23 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
       busy={busy}
       title={t(category ? "settings.budget.categories.editTitle" : "settings.budget.categories.newTitle")}
       heading={
-        <span data-testid="category-preview" className="truncate">
-          {trimmed ||
-            t(
-              category
-                ? "settings.budget.categories.editTitle"
-                : "settings.budget.categories.newTitle",
-            )}
+        <span className="flex min-w-0 items-center gap-2.5">
+          <span data-testid="category-preview" className="truncate">
+            {trimmed ||
+              t(
+                category
+                  ? "settings.budget.categories.editTitle"
+                  : "settings.budget.categories.newTitle",
+              )}
+          </span>
+          {locked && (
+            <ListBadge icon={<Lock aria-hidden />} title={t("settings.budget.categories.systemLocked")}>
+              {t("settings.budget.categories.system")}
+            </ListBadge>
+          )}
+          {category?.archived && (
+            <ListBadge icon={<Archive aria-hidden />}>{t("settings.budget.categories.archivedBadge")}</ListBadge>
+          )}
         </span>
       }
       onClose={onClose}
@@ -110,6 +133,31 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
       }
       footer={
         <>
+          {/* The system row can be renamed and restyled, never archived or
+              deleted. */}
+          {category && !locked && (
+            <span className="mr-auto flex items-center gap-1">
+              <Button
+                variant="ghost"
+                busy={archive.isPending}
+                busyLabel={t("common.busy.saving")}
+                onClick={() =>
+                  archive.mutate(
+                    { id: category.id, body: categoryBody(category, { archived: !category.archived }) },
+                    { onSuccess: onClose },
+                  )
+                }
+                className="inline-flex items-center gap-1.5"
+              >
+                {category.archived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+                {t(category.archived ? "settings.budget.categories.restore" : "settings.budget.categories.archive")}
+              </Button>
+              <Button variant="ghostDanger" onClick={() => onDelete(category)} className="inline-flex items-center gap-1.5">
+                <Trash2 className="size-4" />
+                {t("settings.budget.categories.delete")}
+              </Button>
+            </span>
+          )}
           <Button variant="ghost" onClick={onClose}>
             {t("common.cancel")}
           </Button>
@@ -153,9 +201,6 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
             onChange={(v) => setKind(v as CategoryKind)}
             options={BUDGET_KINDS.map((k) => ({ value: k, label: t(`budget.kinds.${k}`) }))}
           />
-          {locked && (
-            <p className="text-fg-faint text-xs mt-1">{t("settings.budget.categories.kindLocked")}</p>
-          )}
         </Field>
 
         <Field label={t("settings.budget.categories.fieldColor")}>
@@ -172,11 +217,10 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
             <button
               type="button"
               aria-label={t("budget.icons.none")}
+              title={t("budget.icons.none")}
               aria-pressed={icon === null}
               onClick={() => setIcon(null)}
-              className={`size-8 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 bg-surface-2 ${
-                icon === null ? "ring-2 ring-fg" : "hover:scale-105"
-              }`}
+              className={`${ICON_SWATCH} ${icon === null ? "border-fg" : "border-transparent hover:scale-105"}`}
             >
               <FilledDot className="size-4 text-fg-faint" />
             </button>
@@ -187,11 +231,10 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
                   key={n}
                   type="button"
                   aria-label={t(`budget.icons.${n}`)}
+                  title={t(`budget.icons.${n}`)}
                   aria-pressed={icon === n}
                   onClick={() => setIcon(n)}
-                  className={`size-8 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 bg-surface-2 ${
-                    icon === n ? "ring-2 ring-fg" : "hover:scale-105"
-                  }`}
+                  className={`${ICON_SWATCH} ${icon === n ? "border-fg" : "border-transparent hover:scale-105"}`}
                 >
                   <IconCmp className="size-4 text-fg" />
                 </button>
