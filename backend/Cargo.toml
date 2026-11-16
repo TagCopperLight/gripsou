@@ -4,7 +4,7 @@ members = ["core", "providers", "jobs", "api", "test-macros"]
 
 [workspace.package]
 edition = "2024"
-version = "1.8.1"
+version = "1.9.0"
 license = "MIT"
 
 [workspace.dependencies]
