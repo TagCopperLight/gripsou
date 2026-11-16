@@ -1,6 +1,3 @@
-//! Sessions: issuing one at sign-in, and resolving the bearer token of every
-//! authenticated request into [`AuthUser`].
-
 use axum::extract::{FromRef, FromRequestParts, Request, State};
 use axum::http::header::AUTHORIZATION;
 use axum::http::request::Parts;
@@ -15,11 +12,9 @@ use crate::error::ApiError;
 use gripsou_core::repo::session;
 use gripsou_core::repo::user::Role;
 
-/// Re-touch a session at most this often, so a request doesn't always write.
 const TOUCH_THROTTLE_SECS: i64 = 5 * 60;
 
-/// Issue a session for `user_id` and build the login-shaped response. Logs
-/// nothing: each sign-in words its own line.
+/// Logs nothing: each sign-in words its own line.
 pub async fn issue(
     pool: &sqlx::PgPool,
     client: &Client,
@@ -45,8 +40,6 @@ pub async fn issue(
     })
 }
 
-/// The authenticated principal, resolved from the opaque bearer token by DB
-/// lookup. Carries the session id so handlers can mark/skip the current session.
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub user_id: Uuid,
@@ -89,8 +82,6 @@ where
     }
 }
 
-/// The admin making the request. Only [`require_admin`] creates one, so a
-/// handler can only get it behind the admin check.
 #[derive(Debug, Clone)]
 pub struct AdminUser {
     pub user_id: Uuid,
@@ -108,9 +99,6 @@ impl<S: Send + Sync> FromRequestParts<S> for AdminUser {
     }
 }
 
-/// Lets a request through only from an admin, else 403. Server config,
-/// providers and user management are admin-only: `app_settings` is the
-/// admin-tunable config.
 pub async fn require_admin(
     State(pool): State<sqlx::PgPool>,
     request: Request,
@@ -136,7 +124,6 @@ mod tests {
 
     use gripsou_core::testkit::seed_user;
 
-    /// Build request parts, optionally with a Bearer token header.
     fn make_parts(bearer: Option<&str>) -> Parts {
         let mut builder = Request::builder();
         if let Some(token) = bearer {
@@ -199,8 +186,7 @@ mod tests {
         assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
     }
 
-    /// A database outage is a server error, not "you are logged out": a 401
-    /// would make the SPA drop the session.
+    /// A database outage is a 5xx, not a 401, which would make the SPA drop the session.
     #[gripsou_core::testkit::db_test]
     async fn session_lookup_failure_is_a_server_error(pool: PgPool) {
         pool.close().await;

@@ -5,8 +5,6 @@ import { Field } from "../../ui/Field";
 import { TextInput } from "../../ui/TextInput";
 import type { FieldProblem, NewAccount, NewAccountField } from "./newAccount";
 
-/** Email, name, password and its confirmation, as the invite and setup pages
- *  ask for them. A refused value shows under its field. */
 export function NewAccountFields({
   account,
   onChange,
@@ -36,7 +34,6 @@ export function NewAccountFields({
     <>
       {field("email", t("auth.email"), "email", "username")}
       {field("name", t("auth.name"), "text", "name")}
-      {/* Two passwords that differ: either may be the wrong one. */}
       {field("password", t("auth.password"), "password", "new-password", error?.field === "password" || error?.field === "confirm")}
       {field("confirm", t("auth.confirmPassword"), "password", "new-password")}
     </>

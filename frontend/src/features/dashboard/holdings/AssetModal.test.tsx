@@ -5,8 +5,7 @@ import { AssetModal } from "./AssetModal";
 import type { Holding } from "../../../api/wire";
 import { renderWithApp, jsonResponse, stubFetch } from "../../../test/kit";
 
-// Real echarts crashes in jsdom's canvas stub when a mode switch re-renders
-// the chart mid-test.
+// Real echarts crashes in jsdom's canvas stub when a mode switch re-renders the chart.
 vi.mock("../../../ui/EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
 const BASE: Holding = {
@@ -22,12 +21,7 @@ const BASE: Holding = {
 };
 
 
-// The three domains must not be collapsed. Here they are deliberately all
-// different: the instrument is quoted in EUR (Powens' label), its price rows
-// come from a GBP listing, and it sits in a USD account. The unit price is
-// GBP-labelled; mean price per share — investedNative / qty, a cost-basis
-// figure — is USD-labelled. Labelling either with `holding.currency` (EUR)
-// silently misreports both.
+// The instrument is quoted in EUR, its price rows come from a GBP listing and it sits in a USD account: the unit price must read GBP, the mean price per share USD.
 describe("AssetModal currency domains", () => {
   beforeEach(() => {
     stubFetch(async () => jsonResponse([]));
@@ -45,30 +39,24 @@ describe("AssetModal currency domains", () => {
 
   it("labels the unit price with the price row's currency, not the instrument's", () => {
     renderWithApp(<AssetModal holding={MIXED} netWorth={5000} onClose={() => {}} />);
-    // headerValue = holding.price = 100, formatted in the price domain (GBP),
-    // NOT in holding.currency (EUR).
     expect(screen.getByText("100,00 £")).toBeInTheDocument();
   });
 
   it("labels mean price per share with the account's currency", () => {
     renderWithApp(<AssetModal holding={MIXED} netWorth={5000} onClose={() => {}} />);
-    // investedNative 800 / qty 10 = 80, an amount-domain figure -> USD.
     expect(screen.getByText("80,00 $")).toBeInTheDocument();
   });
 
   it("never labels anything with the instrument's quote currency", () => {
     renderWithApp(<AssetModal holding={MIXED} netWorth={5000} onClose={() => {}} />);
-    // EUR is both the instrument's quote currency and (by default prefs) the
-    // reporting currency, so it does appear — but only on reporting-domain
-    // figures. Nothing on the price or amount side may carry it.
+    // EUR is also the reporting currency, so it may appear only on reporting-domain figures.
     expect(screen.queryByText("100,00 €")).not.toBeInTheDocument();
     expect(screen.queryByText("80,00 €")).not.toBeInTheDocument();
   });
 });
 
 describe("AssetModal purchases chart", () => {
-  // A GBP quote in a USD account: the purchases chart values the position at
-  // the account-currency price, so it reads in USD like the invested line.
+  // A GBP quote in a USD account: the purchases chart values the position at the account-currency price.
   it("reads in the account's currency", async () => {
     stubFetch(async (url: string) =>
       jsonResponse(url.includes("/prices") ? [{ t: 1, price: "100", accountPrice: "120", qty: "10", invested: "800" }] : []));
@@ -79,14 +67,12 @@ describe("AssetModal purchases chart", () => {
         onClose={() => {}}
       />);
     await user.click(screen.getByRole("radio", { name: /purchases/i }));
-    // 10 shares x 120 USD.
     expect(await screen.findByText(/^1.200,00.\$$/)).toBeInTheDocument();
   });
 });
 
 describe("AssetModal purchases gain", () => {
-  // Five shares on day 1, five more on day 2, the price flat at 100: the
-  // position doubles in value, but only because money went in.
+  // Five shares on day 1, five more on day 2, flat price: the value doubles only because money went in.
   it("does not count a purchase as a gain", async () => {
     stubFetch(async (url: string) =>
       jsonResponse(url.includes("/prices")
@@ -98,7 +84,6 @@ describe("AssetModal purchases gain", () => {
     const user = userEvent.setup();
     renderWithApp(<AssetModal holding={BASE} netWorth={5000} onClose={() => {}} />);
     await user.click(screen.getByRole("radio", { name: /purchases/i }));
-    // Position value 1 000 €, gain zero, not +500 €.
     expect(await screen.findByText(/^\+?0,00.€$/)).toBeInTheDocument();
     expect(screen.queryByText(/^\+500,00.€$/)).not.toBeInTheDocument();
   });

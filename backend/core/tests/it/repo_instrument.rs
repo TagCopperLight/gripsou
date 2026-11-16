@@ -55,7 +55,6 @@ async fn rejects_unidentifiable_security(pool: PgPool) -> anyhow::Result<()> {
 
 #[gripsou_core::testkit::db_test]
 async fn resolves_symbol_only_idempotently(pool: PgPool) -> anyhow::Result<()> {
-    // Non-cash, no ISIN, symbol present -> the (kind, symbol) branch.
     let etf = InstrumentRef {
         kind: "etf".into(),
         symbol: Some("VWCE".into()),

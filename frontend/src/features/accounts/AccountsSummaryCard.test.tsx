@@ -35,7 +35,6 @@ describe("AccountsSummaryCard", () => {
   it("leaves out an account of 1 % or less, too thin to see", () => {
     const accounts = [account("a", "Livret A", "990"), account("b", "Tiny", "10"), account("c", "Small", "11")];
     render(<AccountsSummaryCard accounts={accounts} privacy={PRIVACY_OFF} />);
-    // 10 / 1011 is under 1 %; 11 / 1011 is just over.
     expect(screen.getAllByTestId("account-share")).toHaveLength(2);
   });
 

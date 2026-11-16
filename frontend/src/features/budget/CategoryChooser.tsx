@@ -8,25 +8,18 @@ import { BUDGET_KINDS, categoryLabel } from "../../lib/budget";
 type CategoryChooserProps = {
   selectedIds: string[];
   onClose: () => void;
-  /** The control that opened it — the chooser hangs under it. */
   anchor?: HTMLElement | null;
 } & (
   | { mode: "multi"; onToggle: (id: string) => void }
   | {
       mode: "pick";
       onPick: (id: string | null) => void;
-      /** Whether the "no category" line is offered at all. Defaults to `true`
-       *  — the row-assignment path has a legitimate one-click "clear this row"
-       *  use. The bulk path passes `false`: with "all shown" and no filters,
-       *  that same line would clear the category on the entire ledger with
-       *  one click and no confirmation. */
+      /** Defaults to true. The bulk path passes false: with "all shown" and no filters that line would clear every category in one click. */
       allowNone?: boolean;
     }
 );
 
-/** The same chooser serves every call site: filtering, assigning on a row,
- *  and both again from the selection bar. Archived categories never appear —
- *  they are kept for history, not for picking. */
+/** Archived categories never appear. */
 export function CategoryChooser(props: CategoryChooserProps) {
   const { selectedIds, onClose, anchor } = props;
   const { t } = useTranslation();

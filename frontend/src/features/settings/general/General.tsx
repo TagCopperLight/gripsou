@@ -28,7 +28,6 @@ const DECIMAL_OPTIONS = [
   { value: ",", label: "0,00" },
 ];
 
-/** A date pattern as the reader writes it: JJ/MM/AAAA in French. */
 function patternLabel(pattern: string, language: string): string {
   return language === "fr" ? pattern.replaceAll("D", "J").replaceAll("Y", "A") : pattern;
 }
@@ -37,7 +36,6 @@ export function SettingsGeneral() {
   const { t, i18n } = useTranslation();
   const { prefs, updatePrefs } = useAuth();
 
-  // Auto-save: every change persists that one setting and applies app-wide.
   const set = <K extends keyof UserPrefs>(key: K, value: UserPrefs[K]) =>
     void updatePrefs({ [key]: value });
 

@@ -4,17 +4,12 @@ import { sumDecimals } from "./decimal";
 import { FG_FAINT } from "./theme";
 import { MINT, ORANGE } from "./palette";
 
-/** `amount` is the exact decimal string a node's label and tooltip render —
- *  never ECharts' own float sums. Each non-hub node has exactly one link, so
- *  its amount is also its link's. */
+/** The exact decimal string labels and tooltips render, never ECharts' float sums. */
 export type SankeyNode = { name: string; label: string; color: string; amount: string };
-/** `value` may stay a `number`: it only drives relative band widths, never a
- *  rendered amount. */
+/** Only drives relative band widths, never a rendered amount. */
 export type SankeyLink = { source: string; target: string; value: number };
-/** `total` is the hub's amount: the exact decimal sum of everything in. */
 export type SankeyGraph = { nodes: SankeyNode[]; links: SankeyLink[]; total: string };
 
-/** Every node's text: a slice's label, plus the two nodes that are not slices. */
 export type SankeyLabels = {
   slice: (slice: Slice) => string;
   notSpent: string;
@@ -23,19 +18,11 @@ export type SankeyLabels = {
 
 export const HUB = "hub";
 
-/** Turn the payload into an ECharts sankey graph.
- *
- *  Every source links into one hub and the hub links out to every destination.
- *  Source-to-destination links are NOT drawn: nothing in the data says which
- *  euro of salary paid the rent, so their weights would be invented.
- *
- *  `notSpent` and `drawnFromSavings` appear in neither list the server sends —
- *  they live only in their own fields — so they are added here, as an extra
- *  destination and an extra source respectively. At a remainder of exactly zero
- *  neither is present: three states, not two.
- *
- *  Node names are side-prefixed because ECharts requires them unique and
- *  `uncategorised` legitimately appears on both sides. */
+/** Sources link into one hub, the hub out to destinations. `notSpent` and
+ *  `drawnFromSavings` are in neither server list, so they are added as an extra
+ *  destination and source (absent at a remainder of exactly zero). Node names
+ *  are side-prefixed because ECharts needs them unique and `uncategorised`
+ *  appears on both sides. */
 export function sankeyGraph(s: Sankey, labels: SankeyLabels): SankeyGraph {
   const nodes: SankeyNode[] = [];
   const links: SankeyLink[] = [];
@@ -63,8 +50,6 @@ export function sankeyGraph(s: Sankey, labels: SankeyLabels): SankeyGraph {
     ...(s.drawnFromSavings !== undefined ? [s.drawnFromSavings] : []),
   ]);
 
-  // The hub sits between the two sides, so it is inserted after every source
-  // and before every destination.
   nodes.push({ name: HUB, label: "", color: FG_FAINT, amount: total });
 
   for (const x of s.destinations) {
@@ -77,9 +62,6 @@ export function sankeyGraph(s: Sankey, labels: SankeyLabels): SankeyGraph {
   return { nodes, links, total };
 }
 
-/** Whether the period moved any money the diagram can draw. A period whose
- *  only rows net out (money moved back from savings, say) has none, and would
- *  otherwise draw a lone zero hub. */
 export function hasFlow(s: Sankey): boolean {
   return (
     s.sources.length > 0 ||

@@ -5,8 +5,6 @@ import { CardTitle } from "../../ui/CardTitle";
 import { Bone, Skeleton, TextBone } from "../../ui/Skeleton";
 import { boneWidths } from "../../ui/boneWidths";
 
-/** The accounts list while it loads: the summary card with its title, and
- *  one bank card of three rows, in the real cards' padding and line heights. */
 export function AccountsListSkeleton({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
   return (

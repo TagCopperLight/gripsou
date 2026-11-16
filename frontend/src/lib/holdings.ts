@@ -4,20 +4,15 @@ import { currencySymbol } from "./currency";
 import { sumDecimals } from "./decimal";
 import { ACCOUNT_PALETTE } from "./palette";
 
-/** An instrument kind's label. The server's kinds are open-ended text, so
- *  one this build has no label for shows as sent. */
+/** Kinds this build has no label for show as sent. */
 export function kindLabel(t: TFunction, kind: string): string {
   return t(`holdingKind.${kind}`, { defaultValue: kind });
 }
 
-/** A line of the holdings table: one holding, or the cash of one currency
- *  held in several accounts. Cash is the same instrument in every account (a
- *  euro is a euro), so the list shows it once, summed; the per-account split
- *  lives on the Accounts tab. */
+/** One holding, or one currency's cash merged across accounts. */
 export type HoldingLine = {
   key: string;
-  /** The line's holdings, all of the same instrument: the instrument fields
-   *  (name, ticker, kind, logo, price currency) are read off the first. */
+  /** All of the same instrument; instrument fields are read off the first. */
   holdings: [Holding, ...Holding[]];
   value: string;
   /** Null when any holding has no price at all. */
@@ -29,11 +24,8 @@ export type HoldingLine = {
   accountType: string | null;
 };
 
-/** The colour of the merged cash line's account swatch and of every cash badge. */
 export const CASH_COLOR = ACCOUNT_PALETTE[0];
 
-/** A cash line's badge text: its currency's symbol (`€`), or the badge's
- *  default for a currency without one. */
 export function cashGlyph(currency: string): string | undefined {
   const symbol = currencySymbol(currency);
   return symbol === currency ? undefined : symbol;
@@ -64,7 +56,6 @@ function line(holdings: [Holding, ...Holding[]]): HoldingLine {
   };
 }
 
-/** One line per holding, with each currency's cash merged into one. */
 export function holdingLines(holdings: Holding[]): HoldingLine[] {
   const lines: HoldingLine[] = [];
   const cash = new Map<string, [Holding, ...Holding[]]>();
@@ -79,8 +70,7 @@ export function holdingLines(holdings: Holding[]): HoldingLine[] {
 export type HoldingSortKey = "asset" | "qty" | "value" | "pnl";
 export type HoldingSort = { key: HoldingSortKey; dir: "asc" | "desc" };
 
-/** A new column starts in its natural direction (A→Z for names, largest
- *  first for figures); a second click flips it. */
+// A new column starts A→Z for names, largest first for figures.
 export function toggleHoldingSort(prev: HoldingSort | null, key: HoldingSortKey): HoldingSort {
   return prev?.key === key
     ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
@@ -112,13 +102,11 @@ function compare(a: HoldingLine, b: HoldingLine, sort: HoldingSort): number {
   }
 }
 
-/** How many of `holdings` a converted total leaves out for want of an
- *  exchange rate (they are worth zero in it). */
+/** Holdings a converted total leaves out for want of a rate (worth zero in it). */
 export function fxExcludedCount(holdings: Holding[]): number {
   return holdings.filter((h) => h.fxMissing).length;
 }
 
-/** The account types to filter by, read off the holdings themselves. */
 export function holdingAccountTypes(holdings: Holding[]): string[] {
   return [...new Set(holdings.map((h) => h.accountType))];
 }
@@ -129,9 +117,7 @@ export type HoldingFilter = {
   query: string;
 };
 
-/** The table's lines. Filtering comes before the cash merge, so a filtered
- *  list's cash line is that type's cash only (the PEA's own liquidity under
- *  "PEA"). */
+/** Filtering comes before the cash merge, so a filtered list's cash line is that type's cash only. */
 export function shownHoldingLines(holdings: Holding[], filter: HoldingFilter, sort: HoldingSort | null): HoldingLine[] {
   const q = filter.query.trim().toLowerCase();
   const lines = holdingLines(

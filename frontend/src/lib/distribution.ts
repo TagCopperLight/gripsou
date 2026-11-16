@@ -3,15 +3,11 @@ import { formatPercent } from "./money";
 
 export type DistributionRow = {
   account: Account;
-  /** Share of what the accounts own. Null for an account at or below zero:
-   *  an overdraft is not a slice of anything, and with nothing owned at all
-   *  there is no whole to take a share of. */
+  /** Null for an account at or below zero. */
   share: number | null;
 };
 
-/** The accounts as shares of what they own together, largest first. Only
- *  accounts above zero make up the whole, so the shares always add to 100 %
- *  even when one is overdrawn. */
+/** Only accounts above zero make up the whole, so shares add to 100 %. */
 export function distribution(accounts: Account[]): DistributionRow[] {
   const owned = accounts.reduce((sum, a) => sum + Math.max(0, Number(a.value)), 0);
   return [...accounts]
@@ -22,23 +18,18 @@ export function distribution(accounts: Account[]): DistributionRow[] {
     });
 }
 
-/** Each account's share (see `distribution`), by account id. */
 export function sharesById(accounts: Account[]): Map<string, number | null> {
   return new Map(distribution(accounts).map((r) => [r.account.id, r.share]));
 }
 
-/** Shares up to this one are too thin to draw: the ring and the bar leave
- *  them out (the others fill the space, being proportions of what's drawn),
- *  and the lists still name them with their real share. */
+/** Shares up to this are too thin to draw; the lists still name them. */
 export const MIN_DRAWN_SHARE = 0.01;
 
-/** Whether a share is wide enough to draw in a ring or a bar. */
 export function isDrawn(share: number | null): boolean {
   return share !== null && share > MIN_DRAWN_SHARE;
 }
 
-/** A share as a percentage, with "<0,1 %" for one too small to show rather
- *  than a "0 %" that reads as nothing. */
+/** "<0,1 %" for a share too small to show, not "0 %". */
 export function formatShare(share: number, fractionDigits: number): string {
   const smallest = 10 ** -(fractionDigits + 2);
   if (share > 0 && share < smallest / 2) return `<${formatPercent(smallest, { fractionDigits })}`;

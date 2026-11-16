@@ -33,12 +33,10 @@ export function TransactionsMode() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { prefs } = useAuth();
-  // One eye, by the title, for every amount of the list and the selection.
   const privacy = usePrivacy();
   const { filters, setFilters, selection, isSelected, toggleRow, selectAllShown, anySelected, clearSelection } =
     useBudget();
 
-  // The search box stays fully responsive; only the fetch waits.
   const [debouncedSearch, submitSearch] = useDebouncedValue(filters.search, 150);
   const query = toQuery({ ...filters, search: debouncedSearch });
 
@@ -48,16 +46,11 @@ export function TransactionsMode() {
   const patch = usePatchTransaction();
   const applyToDescription = useApplyToDescription();
   const bulk = useBulkTransactions();
-  // The stable pieces of the query and mutation results, so the callbacks the
-  // table hands to every row keep their identity across renders.
+  // Stable references keep the row callbacks' identity across renders.
   const { fetchNextPage, refetch } = list;
   const { mutate: patchRow } = patch;
 
-  // Both choosers hold the row's id, never a snapshot: they stay open across
-  // optimistic writes, so the row they act on is re-derived from `rows` on
-  // every render. A frozen `Transaction` goes stale after the first write —
-  // a second tag toggle would rebuild `tagIds` from the stale set and undo the
-  // first.
+  // Choosers hold the row id, not a snapshot: a stale row would make a second tag toggle undo the first.
   const chooser = usePopover<`category:${string}` | `tags:${string}`>();
   const [chooserKind, chooserId] = chooser.key?.split(":") ?? [];
   const [applyOffer, setApplyOffer] = useState<{ id: string; categoryId: string | null; count: number } | null>(null);
@@ -66,9 +59,7 @@ export function TransactionsMode() {
 
   const rows = useMemo(() => list.data?.pages.flat() ?? [], [list.data]);
 
-  // Two shapes, mirroring `count`: "all shown" is a set the client never
-  // enumerates, so only the server can total it; an explicit id selection is
-  // always a subset of the loaded rows, so it is summed here.
+  // "All shown" is totalled by the server; an explicit selection is summed here.
   const selectionTotal =
     selection.mode === "allShown"
       ? (counts.data?.matchingTotal ?? "0")
@@ -77,7 +68,6 @@ export function TransactionsMode() {
             .filter((r) => selection.ids.has(r.id) && r.amountReporting !== null)
             .map((r) => r.amountReporting!),
         );
-  // A row with no exchange rate is left out of that total: it says so.
   const selectionFxMissing =
     selection.mode === "allShown"
       ? Boolean(counts.data?.fxMissing)
@@ -92,8 +82,6 @@ export function TransactionsMode() {
         patchRow({ id: tx.id, body: { categoryId, confirmBreakPairs: confirm }, optimistic: true }, callbacks),
       {
         askFirst: breaksKnownPair(tx, categories.data?.find((c) => c.id === categoryId)) ? 1 : 0,
-        // The row is saved; this only offers to widen the correction to the
-        // rows that share the description.
         onDone: (res) => {
           const count = res.sameDescriptionCount ?? 0;
           if (count > 0) setApplyOffer({ id: tx.id, categoryId, count });
@@ -102,21 +90,13 @@ export function TransactionsMode() {
     );
   };
 
-  // Load-bearing: this is the DEBOUNCED `query`, the exact same value the
-  // list and counts are reading — never `toQuery(filters)` recomputed here.
-  // That equality is what makes "all shown" write to precisely the set the
-  // user is looking at; recomputing from `filters` would desync the view
-  // from the write the instant the debounce window hasn't closed yet.
+  // Must be the debounced `query` the list and counts read, so "all shown" writes the set on screen.
   const bulkTarget = () =>
     selection.mode === "allShown" ? { filter: query } : { ids: [...selection.ids] };
 
-  // `matching_transaction_ids` returns nothing for the lots bucket (and
-  // `counts.selectable` is 0 there) — a lot row carries no budget, so
-  // "select all shown" cannot mean anything in that bucket and must not be
-  // offered as if it did.
+  // Lot rows carry no budget, so "select all shown" is not offered for the lots bucket.
   const lotsBucketSelected = filters.bucket === "lots";
 
-  /** Widens a correction to every row sharing the description. */
   const runApplyToDescription = (id: string, categoryId: string | null) => {
     writes.write<WriteResult>(
       (confirm, callbacks) => applyToDescription.mutate({ id, categoryId, confirmBreakPairs: confirm }, callbacks),
@@ -125,14 +105,10 @@ export function TransactionsMode() {
   };
 
   const runBulk = (body: Pick<BulkBody, "categoryId" | "addTagIds" | "checked">) => {
-    // The target is captured once, so the confirmation re-sends the set the
-    // user actually looked at — re-deriving it after the modal could pick up a
-    // selection or filter that moved underneath.
+    // Captured once so the confirmation re-sends the set the user saw.
     const target = bulkTarget();
     writes.write<WriteResult>(
       (confirm, callbacks) => bulk.mutate({ ...target, ...body, confirmBreakPairs: confirm }, callbacks),
-      // Only an applied write clears the selection and says "N rows
-      // updated" in the corner; a refused one leaves both as they were.
       {
         onDone: (res) => {
           clearSelection();
@@ -211,8 +187,6 @@ export function TransactionsMode() {
                 tx={row}
                 showChecked={prefs.showChecked}
                 masked={privacy.masked}
-                // "All shown" covers the cash rows only: a buy or sale is never
-                // in a selection, so never lit as one.
                 selected={row.source !== "lot" && isSelected(row.id)}
                 anySelected={anySelected}
                 onToggleSelect={toggleRow}
@@ -251,10 +225,7 @@ export function TransactionsMode() {
         <TagChooser
           selectedIds={tagsFor.tags.map((tag) => tag.id)}
           onToggle={(id) => {
-            // `tagIds` is a FULL REPLACE server-side — there is no add/remove
-            // split on the row patch — so a toggle sends the whole new set,
-            // read from the live row so a rapid second toggle builds on the
-            // first one's optimistic result instead of a stale snapshot.
+            // `tagIds` is a full replace server-side: read the live row so a rapid second toggle builds on the first.
             const has = tagsFor.tags.some((tag) => tag.id === id);
             const current = tagsFor.tags.map((tag) => tag.id);
             const next = has ? current.filter((x) => x !== id) : [...current, id];

@@ -1,5 +1,4 @@
-// The review mode's in-memory database: one base dataset, built fresh by
-// `createStore`. The control (control.ts) holds the live one.
+// The review mode's in-memory database, built fresh by `createStore`.
 
 import type { AiStatus, ApiKeyField, ApiKeyProvider, BudgetAiSettings, BudgetAiUsage, LotSuggestion, SyncHealth } from "../src/api/wire.ts";
 import { baseData, type BaseData } from "./data/base.ts";
@@ -10,27 +9,18 @@ export type Store = BaseData & {
   aiSettings: BudgetAiSettings;
   aiUsage: BudgetAiUsage;
   aiStatus: AiStatus;
-  /** Settings → Server → API keys. Secrets are kept here only to answer
-   *  `set`; like the server, the routes never send them back. */
+  /** Secrets are kept only to answer `set`; the routes never send them back. */
   apiKeys: ApiKeyProvider[];
-  /** Rows the "record purchases" window pre-fills, per holding (none in the base data). */
   lotSuggestions: Record<string, LotSuggestion[]>;
-  /** Ledger buys the user deleted from the "record purchases" window. */
   deletedLots: string[];
-  /** Ledger lots a provider sent: listed locked, kept by the preview. */
   providerLots: string[];
-  /** An account's own bank-update health, when it differs from its connection's. */
   accountHealth: Record<string, SyncHealth>;
-  /** Signing in asks for the second step (a code, or a backup code). */
   loginMfa: boolean;
-  /** No account yet: the sign-in page sends to /setup. */
   setupNeeded: boolean;
-  /** Requests the active states make fail. */
   faults: Fault[];
 };
 
-/** Saved values: a public field's text, whether a secret is set; absent is unset.
- *  Brandfetch has none, so it starts not ready. */
+/** Absent is unset; a secret is a boolean. Brandfetch has none, so it starts not ready. */
 const SAVED_KEYS: Record<string, Record<string, string | boolean>> = {
   powens: { client_id: "48211093", domain: "myapp-sandbox.biapi.pro", client_secret: true },
   jev: { api_key: true },
@@ -65,7 +55,6 @@ export function createStore(): Store {
     apiKeys: apiKeys(),
     aiSettings: { provider: "jev", model: "jev-small", available: ["jev"], defaults: { jev: "jev-small" } },
     aiUsage: {
-      // As the server: AI prices and costs are in US dollars.
       currency: "USD",
       models: [{ model: "jev-small", runs: 14, runsWithoutUsage: 0, tokensIn: 412_300, tokensOut: 38_150, priceIn: "0.10", priceOut: "0.40", cost: "0.06" }],
       totalCost: "0.06",
@@ -74,7 +63,7 @@ export function createStore(): Store {
       configured: true,
       running: false,
       remaining: 0,
-      reviewCount: 0, // counted on read, from the rows
+      reviewCount: 0,
       lastRun: { outcome: "ok", error: null, startedAt: new Date(Date.now() - 2 * 3_600_000).toISOString() },
     },
   };

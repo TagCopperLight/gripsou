@@ -36,7 +36,6 @@ describe("AccountsList", () => {
     await screen.findByText("Account a");
     expect(screen.queryByText(/\d[\s\u202f]?\d{3}[,.]00/)).not.toBeInTheDocument();
     expect(screen.queryByText(/300[,.]00/)).not.toBeInTheDocument();
-    // Shares stay: they say nothing about the amounts.
     expect(screen.getAllByText(/80\s?%/).length).toBeGreaterThan(0);
 
     const eyes = screen.getAllByRole("button", { name: /show amount/i });

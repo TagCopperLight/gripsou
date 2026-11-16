@@ -19,7 +19,6 @@ describe("positionChart", () => {
 
 describe("windowReturn", () => {
   it("starts at 0 and reads the window's gain, not lifetime gain", () => {
-    // Already +100% at window start (100 value on 50 invested), then +10 value.
     const r = windowReturn([[1, 100], [2, 110]], [[1, 50], [2, 50]]);
     expect(r[0][1]).toBe(0);
     expect(r[1][1]).toBeCloseTo(0.1, 10);

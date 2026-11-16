@@ -16,8 +16,6 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
   const [current, setCurrent] = useState("");
   const [next, setNextValue] = useState("");
   const [confirm, setConfirm] = useState("");
-  // Set when Update is clicked with a new password breaking the length rule;
-  // editing the new password clears it.
   const [lengthError, setLengthError] = useState(false);
   const setNext = (v: string) => {
     setNextValue(v);
@@ -25,7 +23,7 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
   };
   const change = useChangePassword();
 
-  // The length rule is checked here first, so a 400 is the current password.
+  // The length rule is checked first, so a 400 means a wrong current password.
   const currentError = passwordError(t, change.error, "settings.account.currentPasswordIncorrect");
   const mismatch = confirm !== "" && next !== confirm;
   const canUpdate = current !== "" && next !== "" && next === confirm && !change.isPending;

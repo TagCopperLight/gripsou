@@ -9,19 +9,15 @@ import type { Role, User } from "../../../api/wire";
 
 type UserDetailModalProps = {
   user: User;
-  /** The member's role; `onToggleRole` saves the other one. */
   role: Role;
   onToggleRole: () => void;
-  /** A role change is saving: the badge is off until it lands. */
   roleSaving: boolean;
-  /** Both omitted for yourself — you can't reset or delete your own account here. */
   onReset?: () => void;
   onDelete?: () => void;
   onClose: () => void;
 };
 
-// The phone list shows one summary row per user; email, join date and the
-// per-user actions live here so those rows can stay a single line.
+// The phone list shows one summary row per user; the rest lives here so rows stay one line.
 export function UserDetailModal({
   user,
   role,
@@ -72,7 +68,6 @@ export function UserDetailModal({
       <div className="flex flex-col gap-3 text-sm">
         <div className="flex items-center justify-between gap-4">
           <span className="text-fg-faint">{t("settings.users.columns.role")}</span>
-          {/* Your own role is read-only here, as in the desktop table. */}
           {user.isSelf ? (
             <span className={`rounded-md px-2.5 py-1 text-xs font-medium ${roleColor}`}>
               {roleLabel}

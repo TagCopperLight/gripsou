@@ -35,8 +35,6 @@ describe("legendItems", () => {
   });
 
   it("follows the plotted return in percent mode, not the raw value", () => {
-    // The value rose (deposits), but the return over the window is negative:
-    // the chart draws a red return line, and the legend must say so too.
     const series = netWorth([100, 150], [100, 160]);
     expect(legendItems(plotSeries(series, "value"))[0].color).toBe(GREEN);
     expect(legendItems(plotSeries(series, "percent", "Return"))).toEqual([

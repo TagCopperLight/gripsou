@@ -17,9 +17,7 @@ const current = (m: BudgetAiModelUsage, side: Side) => (side === "in" ? m.priceI
 
 const TOTAL = "mt-4 flex items-baseline justify-between border-t border-surface-2 pt-4";
 
-/** Settings → Server: what AI categorisation has cost so far, per model. The
- *  admin types each model's price (per million tokens) from the provider's
- *  pricing page; the server multiplies it through the recorded token counts. */
+/** The admin types each model's price per million tokens; the server multiplies it through the recorded token counts. */
 export function AiCostSurface() {
   const { t, i18n } = useTranslation();
   const query = useBudgetAiUsage();
@@ -89,8 +87,7 @@ export function AiCostSurface() {
   }
 
   const tokens = new Intl.NumberFormat(i18n.language, { notation: "compact", maximumFractionDigits: 1 });
-  // Cents, unless the amount is under one: then 4 decimals, so a cost that
-  // isn't zero never reads as $0.00.
+  // Under one cent shows 4 decimals, so a nonzero cost never reads $0.00.
   const money = (v: string) => {
     const n = Math.abs(Number(v));
     return formatMoney(v, { currency: usage.currency, fractionDigits: n > 0 && n < 0.01 ? 4 : 2 });
@@ -113,9 +110,7 @@ export function AiCostSurface() {
       dropDraft(key);
       return;
     }
-    // The endpoint replaces the whole map: resend every model's prices, with
-    // this one side changed. A model with neither price set is left out; a
-    // model with one side set sends "0" for the other.
+    // The endpoint replaces the whole map: resend every model's prices with this side changed. A model with neither price is left out; with one side set, the other sends "0".
     const prices: BudgetAiPrices = {};
     for (const row of usage.models) {
       const pin = row.model === m.model && side === "in" ? value : row.priceIn;

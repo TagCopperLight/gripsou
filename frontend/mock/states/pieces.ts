@@ -1,6 +1,5 @@
 import type { Store } from "../store.ts";
 
-/** The pieces of the UI a state can show something on. */
 export const PIECES = [
   "Investments",
   "Net worth chart",
@@ -32,8 +31,7 @@ export type MockState = {
   id: string;
   label: string;
   pieces: Piece[];
-  /** States that can't be on together share a group; the panel shows the
-   *  group as one segmented control, each state as its `option`. */
+  /** States that can't be on together share a group, shown as one segmented control. */
   group?: string;
   option?: string;
   apply(store: Store): void;

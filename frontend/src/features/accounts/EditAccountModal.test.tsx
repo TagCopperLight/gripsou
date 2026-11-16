@@ -19,7 +19,6 @@ const ACCOUNT: Account = {
   fxMissing: false,
 };
 
-/** The modal once its account types have loaded and its form is on. */
 async function renderModal(onClose = () => {}) {
   renderWithApp(<EditAccountModal account={ACCOUNT} onClose={onClose} />);
   await screen.findByRole("button", { name: "Type" });

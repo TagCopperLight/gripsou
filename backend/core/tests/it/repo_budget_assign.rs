@@ -13,8 +13,7 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Seeds one account with `n` withdrawals, returning (user, category id of
-/// Groceries, transaction ids in insertion order).
+/// Returns (user, Groceries category id, transaction ids in insertion order).
 async fn fixture(pool: &PgPool, descriptions: &[&str]) -> anyhow::Result<(Uuid, Uuid, Vec<Uuid>)> {
     let (user_id, conn_id) = seed_user_and_connection(pool).await;
     let mut conn = pool.acquire().await?;
@@ -45,7 +44,6 @@ async fn fixture(pool: &PgPool, descriptions: &[&str]) -> anyhow::Result<(Uuid, 
     Ok((user_id, groceries, ids))
 }
 
-/// A single-row save carrying only these changes.
 async fn patch(
     pool: &PgPool,
     user_id: Uuid,
@@ -55,7 +53,7 @@ async fn patch(
     Ok(patch_transaction(pool, user_id, id, &patch, false).await?)
 }
 
-/// "Apply to every row with this description", unconfirmed; the ids written.
+/// Unconfirmed; returns the ids written.
 async fn apply_to_all(
     pool: &PgPool,
     user_id: Uuid,
@@ -209,7 +207,6 @@ async fn bulk_operations_touch_only_the_users_rows(pool: PgPool) -> anyhow::Resu
         bulk_apply(&pool, user_id, &ids, everything(), false).await?,
         WriteOutcome::Done(3)
     );
-    // Re-adding the same tag is idempotent, not an error.
     assert_eq!(
         bulk_apply(&pool, user_id, &ids, everything(), false).await?,
         WriteOutcome::Done(3)
@@ -239,9 +236,7 @@ async fn bulk_operations_touch_only_the_users_rows(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-/// The "N other transactions have this description" prompt: the count ignores
-/// the row being corrected, and matching is on the normalised string, so a card
-/// mask or a date in the wording does not split a merchant in two.
+/// The count ignores the corrected row and matches the normalised string, so card masks and dates don't split a merchant.
 #[gripsou_core::testkit::db_test]
 async fn same_description_counts_and_applies_across_wordings(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(
@@ -277,9 +272,6 @@ async fn same_description_counts_and_applies_across_wordings(pool: PgPool) -> an
     Ok(())
 }
 
-/// Regression: no tags to add means no transaction was
-/// touched by any definition, even though every id in `txn_ids` is this
-/// user's own and would otherwise count as "matched".
 #[gripsou_core::testkit::db_test]
 async fn a_bulk_adding_no_tags_touches_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, ids) = fixture(&pool, &["A", "B"]).await?;
@@ -304,11 +296,7 @@ async fn a_bulk_adding_no_tags_touches_nothing(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-/// Regression: applying to the same description must
-/// agree with `count_same_description` on which rows count as "the same
-/// merchant" — a blank (null) description never clusters with other blank
-/// descriptions, and an anchor whose own description is blank applies to
-/// nothing at all, not to every other blank-description row.
+/// Must agree with `count_same_description`: a blank description never clusters, and a blank anchor applies to nothing.
 #[gripsou_core::testkit::db_test]
 async fn applying_to_same_description_refuses_a_blank_anchor(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
@@ -356,12 +344,7 @@ async fn applying_to_same_description_refuses_a_blank_anchor(pool: PgPool) -> an
     Ok(())
 }
 
-/// Regression: `count_same_description` and
-/// `apply_to_description` must agree in both directions, not
-/// just on a blank/null anchor. `budget_norm_description` collapses any run
-/// of 2+ digits, so two *unrelated* digit-only descriptions ("12345",
-/// "98765") both normalise to `''` and must not cluster as the same
-/// merchant — a normalised-empty description carries no merchant identity.
+/// Must agree with `count_same_description` both ways: unrelated digit-only descriptions normalise to `''` and must not cluster.
 #[gripsou_core::testkit::db_test]
 async fn digit_only_descriptions_never_cluster_and_the_pair_agrees(
     pool: PgPool,
@@ -384,10 +367,7 @@ async fn digit_only_descriptions_never_cluster_and_the_pair_agrees(
     Ok(())
 }
 
-/// A blank (null) anchor with a digit-only sibling present. Both normalise to
-/// `''`, but they are not "the same description": `count_same_description`
-/// must not count the sibling, since `apply_to_description` refuses to touch
-/// it. The preview and the apply must show the same number: zero.
+/// A blank anchor with a digit-only sibling: both normalise to `''`, so preview and apply must both say zero.
 #[gripsou_core::testkit::db_test]
 async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
     pool: PgPool,
@@ -437,8 +417,7 @@ async fn blank_anchor_with_digit_only_sibling_agrees_on_nothing(
     Ok(())
 }
 
-/// Seeds a paired internal transfer across two accounts and returns
-/// `(user_id, groceries, outgoing, incoming)`.
+/// Returns `(user_id, groceries, outgoing, incoming)`.
 async fn paired_fixture(pool: &PgPool) -> anyhow::Result<(Uuid, Uuid, Uuid, Uuid)> {
     let (user_id, groceries, ids) = fixture(pool, &["VIREMENT A", "VIREMENT B"]).await?;
     sqlx::query("update transaction set transfer_pair_id = $2 where id = $1")
@@ -474,8 +453,7 @@ async fn an_unconfirmed_bulk_reports_the_pairs_it_would_break(pool: PgPool) -> a
     Ok(())
 }
 
-/// The guard runs before *any* write, so a call carrying tags alongside the
-/// category cannot half-apply while waiting for confirmation.
+/// The guard runs before any write, so tags can't half-apply while a confirmation is pending.
 #[gripsou_core::testkit::db_test]
 async fn an_unconfirmed_bulk_writes_nothing_at_all(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, out, _inn) = paired_fixture(&pool).await?;
@@ -534,8 +512,6 @@ async fn a_confirmed_bulk_writes_and_unlinks(pool: PgPool) -> anyhow::Result<()>
     Ok(())
 }
 
-/// Nothing to confirm when no pair is involved: the common case stays one
-/// round trip, with no modal in front of it.
 #[gripsou_core::testkit::db_test]
 async fn an_unpaired_bulk_needs_no_confirmation(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["LECLERC", "SPOTIFY"]).await?;
@@ -556,8 +532,6 @@ async fn an_unpaired_bulk_needs_no_confirmation(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-/// Tags and the checked flag never break a pair, so they are never gated —
-/// even on a row that is half of one.
 #[gripsou_core::testkit::db_test]
 async fn a_bulk_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, out, _inn) = paired_fixture(&pool).await?;
@@ -591,8 +565,6 @@ async fn row_state(pool: &PgPool, id: Uuid) -> (Option<Uuid>, bool, i64, Option<
     .unwrap()
 }
 
-/// A refused category must not leave the tags and ✓ of the same save
-/// written behind it.
 #[gripsou_core::testkit::db_test]
 async fn a_patch_with_a_foreign_category_writes_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
@@ -666,7 +638,6 @@ async fn a_patch_saves_every_field_together(pool: PgPool) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// Tags, ✓ and category on someone else's row: refused, and nothing moves.
 #[gripsou_core::testkit::db_test]
 async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::Result<()> {
     let (_user_id, groceries, ids) = fixture(&pool, &["LECLERC"]).await?;
@@ -718,8 +689,6 @@ async fn another_user_cannot_tag_check_or_patch_a_row(pool: PgPool) -> anyhow::R
     Ok(())
 }
 
-/// The single-row save guards a pair exactly like the bulk paths: refused
-/// and reported until confirmed, then written and unlinked.
 #[gripsou_core::testkit::db_test]
 async fn a_patch_on_a_paired_row_waits_for_confirmation(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, out, inn) = paired_fixture(&pool).await?;
@@ -747,7 +716,6 @@ async fn a_patch_on_a_paired_row_waits_for_confirmation(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-/// ✓ and tags break no pair, so a paired row takes them without a question.
 #[gripsou_core::testkit::db_test]
 async fn a_patch_without_a_category_is_never_gated(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _groceries, out, inn) = paired_fixture(&pool).await?;
@@ -854,10 +822,7 @@ async fn applying_to_a_description_is_checked_and_confirmed(pool: PgPool) -> any
     Ok(())
 }
 
-/// From the review queue, "apply to N others" widens a correction only to the
-/// rows still waiting in that queue: a category the user set, a guess already
-/// accepted and a guess confident enough to skip review are left alone. The
-/// anchor is resolved already, so it is neither counted nor rewritten.
+/// "Apply to N others" from review only widens to rows still in the queue. The resolved anchor is neither counted nor rewritten.
 #[gripsou_core::testkit::db_test]
 async fn review_scope_touches_only_rows_still_in_review(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, groceries, ids) = fixture(&pool, &["LECLERC"; 6]).await?;
@@ -923,7 +888,6 @@ async fn review_scope_touches_only_rows_still_in_review(pool: PgPool) -> anyhow:
         ]
     );
 
-    // The unscoped form still reaches every twin, the anchor included.
     assert_eq!(
         count_same_description(&pool, user_id, ids[0], SameDescription::All).await?,
         5
@@ -1029,8 +993,7 @@ async fn applying_a_neutral_category_to_a_description_keeps_the_pair(
     Ok(())
 }
 
-/// A budget write waits for a sync of the same user (which holds the user's
-/// write lock) instead of racing it for row locks, so the two cannot deadlock.
+/// A budget write waits for the user's sync lock instead of racing it for row locks.
 #[gripsou_core::testkit::db_test]
 async fn bulk_apply_waits_for_a_sync_in_progress(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _, ids) = fixture(&pool, &["LECLERC", "LIDL"]).await?;

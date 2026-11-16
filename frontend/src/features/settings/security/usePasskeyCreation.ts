@@ -6,19 +6,15 @@ import { usePasskeyRegisterOptions, useRegisterPasskey } from "../../../api/auth
 
 export type PasskeyOutcome =
   | { kind: "added"; name: string }
-  /** The password check is used up, or the browser window stayed open past
-   *  the challenge's 5 minutes. */
+  /** Password check used up, or the browser window stayed open past the challenge's 5 minutes. */
   | { kind: "expired" }
   | { kind: "alreadyAdded" }
   | { kind: "notAdded" }
   | { kind: "cancelled" };
 
-/** Adds a passkey through the browser's own window. `reauth` is the password
- *  check, left out during the welcome flow. */
 export function usePasskeyCreation() {
   const options = usePasskeyRegisterOptions();
   const register = useRegisterPasskey();
-  // Set by `cancel`, so a browser window still settling is ignored.
   const cancelled = useRef(false);
 
   const cancel = () => {
@@ -39,8 +35,7 @@ export function usePasskeyCreation() {
     } catch (err) {
       if (cancelled.current) return { kind: "cancelled" };
       if (err instanceof ApiError && (err.status === 403 || err.status === 410)) return { kind: "expired" };
-      // The browser refuses a device that already holds one of the user's
-      // passkeys (InvalidStateError); the server answers 409 for the same.
+      // The browser refuses a device that already holds one of the user's passkeys (InvalidStateError); the server answers 409 for the same.
       const already =
         (err instanceof Error && err.name === "InvalidStateError") ||
         (err instanceof ApiError && err.status === 409);

@@ -1,41 +1,22 @@
-//! The day axis a chart is computed over: clamped to real history, then
-//! sampled to a roughly constant number of points.
-
 use chrono::{Duration, NaiveDate};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::error::CoreError;
 
-/// Roughly how many points a chart should carry, whatever its range. A 4000-day
-/// line is drawn into about 800 pixels — five points per pixel of payload,
-/// parsing and rendering, for a line nobody can see the detail of.
+/// A 4000-day line is drawn into about 800 pixels.
 pub const CHART_TARGET_POINTS: usize = 400;
 
-/// The days a chart is computed on: at most `target + 1` of them, walking
-/// BACKWARD from `to`, returned ascending.
-///
-/// Backward, not forward, so `to` is always the final point and is exact — the
-/// headline current-net-worth figure reads it, and a forward walk would leave
-/// that figure on a stale sampled day. The cost is that the oldest partial
-/// interval is dropped rather than half-sampled, which is invisible on a chart
-/// and cannot mislead.
-///
-/// `from` is always the first point too, prepended if the backward walk didn't
-/// already land on it exactly. This is the same symmetry that makes `to`
-/// exact: the "gain over range" figure reads `first()`, and without this a
-/// max-range chart's baseline could drift up to `step - 1` days late. The cap
-/// is `target + 1` rather than `target` to make room for this one extra point.
-///
-/// Points are real observed days, never averages: a sampled point is that day's
-/// actual value, so peaks stay where they are.
+/// Walks BACKWARD from `to`, returned ascending, so `to` is exact (the headline net worth reads
+/// it). `from` is prepended when the walk misses it, so the gain-over-range baseline isn't up to
+/// `step - 1` days late; hence the cap of `target + 1`. Points are real observed days, never
+/// averages.
 pub fn sample_days(from: NaiveDate, to: NaiveDate, target: usize) -> Vec<NaiveDate> {
     let span = (to - from).num_days();
     if span <= 0 {
         return vec![to];
     }
     let points = (span + 1) as u64;
-    // ceil(points / target), never zero.
     let step = match target as u64 {
         0 => points,
         t => points.div_ceil(t).max(1),
@@ -54,12 +35,8 @@ pub fn sample_days(from: NaiveDate, to: NaiveDate, target: usize) -> Vec<NaiveDa
     days
 }
 
-/// The first day this user has any holding data for. `None` when they have
-/// none at all.
-///
-/// `range=max` means 4000 days regardless of how much history exists, so
-/// without this clamp roughly two thirds of a max-range chart is empty days
-/// generated, valued, joined, serialised and drawn.
+/// `range=max` is 4000 days whatever the history, so without this clamp most of a max-range
+/// chart is empty days.
 pub async fn history_start(pool: &PgPool, user_id: Uuid) -> Result<Option<NaiveDate>, CoreError> {
     let row = sqlx::query_scalar!(
         r#"
@@ -107,8 +84,7 @@ mod tests {
             );
             assert_eq!(*days.first().unwrap(), from, "span {span}");
 
-            // Every gap is the same, except the first one when `from` was
-            // prepended to the backward walk.
+            // Every gap is the same, except the first when `from` was prepended.
             let gaps: Vec<i64> = days.windows(2).map(|w| (w[1] - w[0]).num_days()).collect();
             let step = *gaps.last().unwrap();
             assert!(
@@ -118,8 +94,6 @@ mod tests {
         }
     }
 
-    /// The headline current-net-worth figure reads the last point. Sampling
-    /// forward from `from` would leave it on a stale day.
     #[test]
     fn the_last_point_is_always_the_end_date() {
         for span in [1i64, 7, 365, 4000] {
@@ -138,8 +112,6 @@ mod tests {
         assert_eq!(days, sorted);
     }
 
-    /// Never empty, even when from == to, or when from is after to (which a
-    /// clamp against a user with no history can produce).
     #[test]
     fn never_returns_an_empty_axis() {
         let day = d(2026, 8, 24);

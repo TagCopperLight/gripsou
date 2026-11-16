@@ -12,7 +12,6 @@ import { appWrapper, jsonResponse, requestsTo, stubFetch } from "../test/kit";
 const user: SessionUser = { id: "a", name: "Ann", email: "ann@example.test", role: "admin", prefs: DEFAULT_PREFS, welcomeDone: true };
 const { client: queryClient, wrapper } = appWrapper({ auth: "provider" });
 
-/** The server's answer to a prefs save, given the patch it was sent. */
 let answerPrefs: (patch: Record<string, unknown>) => Response | Promise<Response>;
 let fetchMock: ReturnType<typeof stubFetch>;
 
@@ -152,7 +151,6 @@ it("serializes preference autosaves, and shows a new currency only once the serv
     act(() => { usd = result.current.updatePrefs({ currency: "USD" }); });
     await waitFor(() => expect(requests).toBe(1));
     act(() => { gbp = result.current.updatePrefs({ currency: "GBP" }); });
-    // The server may still refuse it for want of a rate.
     expect(result.current.prefs.currency).toBe("EUR");
     expect(requests).toBe(1);
     await act(async () => { release(); await usd; await gbp; });

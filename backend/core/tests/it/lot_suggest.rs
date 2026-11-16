@@ -22,8 +22,6 @@ struct Fx {
     holding: Uuid,
 }
 
-/// A user with one account holding `held` shares of one ETF, priced 6.36 € on
-/// every day of the test window.
 async fn fixture(pool: &PgPool, held: &str) -> Fx {
     let (user, conn_id) = testkit::seed_user_and_connection(pool).await;
     let mut conn = pool.acquire().await.unwrap();
@@ -75,7 +73,6 @@ async fn lot(pool: &PgPool, holding: Uuid, side: &'static str, on: NaiveDate, qt
     testkit::seed_lot(pool, holding, lot).await;
 }
 
-/// 60 shares explained by an old lot, 83 held since Oct 8.
 async fn bought_23(pool: &PgPool) -> Fx {
     let fx = fixture(pool, "83").await;
     lot(
@@ -117,7 +114,6 @@ async fn an_amount_six_percent_off_is_not_a_candidate(pool: PgPool) {
 #[gripsou_core::testkit::db_test]
 async fn a_transaction_outside_the_window_is_not_a_candidate(pool: PgPool) {
     let fx = bought_23(&pool).await;
-    // Window is [Oct 5, Oct 11].
     txn(&pool, fx.account, "t1", "buy", "-146.17", 12).await;
     let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert!(got.is_empty());
@@ -147,7 +143,6 @@ async fn two_matching_transactions_suggest_nothing(pool: PgPool) {
 async fn a_lot_of_the_same_side_in_the_window_covers_the_jump(pool: PgPool) {
     let fx = bought_23(&pool).await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
-    // The user already recorded it, with a corrected quantity.
     lot(&pool, fx.holding, "buy", oct(7), "22").await;
     let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();
     assert!(got.is_empty());
@@ -202,7 +197,6 @@ async fn a_sale_down_to_zero_is_suggested(pool: PgPool) {
 async fn a_fully_explained_holding_gets_nothing(pool: PgPool) {
     let fx = bought_23(&pool).await;
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
-    // Lots explain all 83 shares, dated outside the jump's window.
     lot(
         &pool,
         fx.holding,
@@ -227,10 +221,8 @@ async fn another_users_holding_is_not_found(pool: PgPool) {
 
 #[gripsou_core::testkit::db_test]
 async fn a_covered_jump_still_claims_its_transaction(pool: PgPool) {
-    // ETF1's purchase is already recorded (a lot in its window).
     let fx = bought_23(&pool).await;
     lot(&pool, fx.holding, "buy", oct(8), "22").await;
-    // ETF2 rose by a similar value the same day, its own transaction missing.
     let other = testkit::seed_equity_holding(&pool, fx.account, "ETF2", dec("33")).await;
     let instrument: Uuid = sqlx::query_scalar("select instrument_id from holding where id = $1")
         .bind(other)
@@ -256,7 +248,6 @@ async fn a_covered_jump_still_claims_its_transaction(pool: PgPool) {
     .await;
     snap(&pool, other, 4, "10").await;
     snap(&pool, other, 8, "33").await;
-    // The only transaction belongs to ETF1.
     txn(&pool, fx.account, "t1", "buy", "-146.17", 8).await;
 
     let got = suggest_lots(&pool, fx.user, other).await.unwrap();
@@ -276,7 +267,6 @@ async fn a_long_sync_gap_widens_the_window_backwards(pool: PgPool) {
     .await;
     snap(&pool, fx.holding, 1, "60").await;
     snap(&pool, fx.holding, 10, "83").await;
-    // Window is [Oct 2, Oct 13]: Oct 3 is outside [Oct 7, Oct 13].
     txn(&pool, fx.account, "t1", "buy", "-146.17", 3).await;
 
     let got = suggest_lots(&pool, fx.user, fx.holding).await.unwrap();

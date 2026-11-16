@@ -9,7 +9,7 @@ use crate::repo::settings::{ModelPrice, budget_ai_prices};
 
 const PER: Decimal = Decimal::from_parts(1_000_000, 0, 0, false, 0);
 
-/// Cost of the given token counts at `price`. Full precision; callers round.
+/// Full precision; callers round.
 pub fn cost_of(tokens_in: i64, tokens_out: i64, price: &ModelPrice) -> Decimal {
     Decimal::from(tokens_in) / PER * price.input + Decimal::from(tokens_out) / PER * price.output
 }
@@ -21,16 +21,13 @@ pub struct ModelCost {
     pub runs_without_usage: i64,
     pub tokens_in: i64,
     pub tokens_out: i64,
-    /// `None` when no price was entered for this model.
     pub price: Option<ModelPrice>,
     pub cost: Option<Decimal>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UsageReport {
-    /// Only models that have runs, ordered by model key.
     pub models: Vec<ModelCost>,
-    /// Sum of the priced models' costs.
     pub total_cost: Decimal,
 }
 

@@ -1,5 +1,3 @@
-//! What the accounts and net-worth endpoints send and accept.
-
 use gripsou_providers::brandfetch::Logos;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -12,7 +10,6 @@ use crate::wire::{day_to_millis, ratio};
 #[serde(rename_all = "camelCase")]
 pub struct NetWorthPoint {
     pub t: i64,
-    /// Null when the reader's currency has no rate that day: a gap, not a zero.
     pub net_worth: Option<String>,
     pub invested: Option<String>,
 }
@@ -34,8 +31,6 @@ pub struct NetWorthResponse {
 }
 
 impl NetWorthResponse {
-    /// Build from net-worth rows. The headline is the last point; `gain*`
-    /// compares the first and last points that have a value.
     pub fn from_rows(rows: &[gripsou_core::repo::valuation::NetWorthRow]) -> Self {
         let points: Vec<NetWorthPoint> = rows
             .iter()
@@ -116,8 +111,6 @@ pub struct SeriesAccount {
 #[derive(Serialize, TS)]
 pub struct SeriesPoint {
     pub t: i64,
-    /// account id -> value (decimal string); null when the reader's currency
-    /// has no rate that day.
     pub values: std::collections::HashMap<String, Option<String>>,
 }
 
@@ -129,20 +122,13 @@ pub struct AccountSeriesResponse {
 }
 
 impl AccountSeriesResponse {
-    /// Pivot flat (account, day, value) rows into account list + per-day value maps.
-    /// Rows must be ordered by day ascending (the query guarantees this).
-    ///
-    /// The `accounts` list is then sorted by each account's latest in-window value
-    /// descending, so the stacked chart draws the largest account on the stable
-    /// zero-baseline and matches the value-ranked order of the accounts grid.
+    /// Rows must be day-ascending. Accounts are sorted by latest value descending, as in the accounts grid.
     pub fn from_rows(rows: Vec<gripsou_core::repo::valuation::AccountSeriesRow>) -> Self {
         use std::collections::{HashMap, HashSet};
         let mut accounts: Vec<SeriesAccount> = Vec::new();
         let mut seen: HashSet<uuid::Uuid> = HashSet::new();
         let mut points: Vec<SeriesPoint> = Vec::new();
         let mut idx_by_t: HashMap<i64, usize> = HashMap::new();
-        // Rows arrive day-ascending, so the last value seen per account is its
-        // most recent value within the window.
         let mut latest_value: HashMap<String, Option<Decimal>> = HashMap::new();
 
         for r in rows {
@@ -172,7 +158,6 @@ impl AccountSeriesResponse {
                 .insert(id, r.value.map(|v| v.to_string()));
         }
 
-        // Largest latest value first; tie-break on id keeps the order stable.
         accounts.sort_by(|a, b| {
             let av = latest_value
                 .get(&a.id)
@@ -219,7 +204,6 @@ impl UpdatedAccount {
     }
 }
 
-/// Where an account comes from: its bank once known, else its provider.
 pub fn source_name(r: &gripsou_core::repo::valuation::AccountRow) -> String {
     r.institution_name
         .clone()
@@ -247,8 +231,6 @@ mod tests {
     fn accounts_ordered_by_latest_value_desc() {
         let a = Uuid::from_u128(1);
         let b = Uuid::from_u128(2);
-        // Day 1: b leads. Day 2 (latest): a overtakes. Order must follow the
-        // latest day, not first appearance.
         let rows = vec![row(a, 1, 10), row(b, 1, 20), row(a, 2, 100), row(b, 2, 30)];
 
         let resp = AccountSeriesResponse::from_rows(rows);

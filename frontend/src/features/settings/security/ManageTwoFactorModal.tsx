@@ -12,14 +12,11 @@ import { useMfaStatus, useRegenerateRecovery, useRemoveTotp } from "../../../api
 
 type View = "menu" | "newCodes" | "codes" | "turnOff";
 
-/** Two-factor once it's on: new backup codes, or turning it off (from the
- *  switch). Both ask for the password first. */
 export function ManageTwoFactorModal({
   onClose,
   start = "menu",
 }: {
   onClose: () => void;
-  /** "turnOff" when opened from the switch: straight to the password. */
   start?: "menu" | "turnOff";
 }) {
   const { t } = useTranslation();

@@ -5,10 +5,9 @@ import type { Store } from "../store.ts";
 export function settingsRoutes(r: Router<Store>): void {
   r.route("GET /health", () => ({ status: "ok", version: "0.0.0-mock" }));
   r.route("GET /users", ({ store }) => store.users);
-  // Made-up tokens: the links lead to the review's invite and reset pages.
+  // Made-up tokens that lead to the review's invite and reset pages.
   r.route("POST /invites", () => reply(201, { token: "mock-invite-token" }));
   r.route("POST /users/:id/reset-link", () => reply(201, { token: "mock-reset-token" }));
-  // As the server: never your own role, never the last admin.
   r.route("PATCH /users/:id", ({ store, params, body: { role } }) => {
     const user = store.users.find((u) => u.id === params.id);
     if (!user) return fail(404, "user not found");
@@ -26,8 +25,7 @@ export function settingsRoutes(r: Router<Store>): void {
     store.providers.filter((p) => p.enabled).map(({ key, displayName, description }) => ({ key, displayName, description })),
   );
   r.route("GET /settings/api-keys", ({ store }) => store.apiKeys);
-  // As the server: one field at a time, null removes it; the JEV key decides
-  // whether the AI can pick JEV.
+  // One field at a time, null removes it; the JEV key decides whether the AI can pick JEV.
   r.route("PATCH /settings/api-keys/:provider", ({ store, params, body: { field, value = null } }) => {
     const p = store.apiKeys.find((x) => x.key === params.provider);
     const f = p?.fields.find((x) => x.key === field);
@@ -54,7 +52,6 @@ export function settingsRoutes(r: Router<Store>): void {
     Object.assign(store.aiSettings, body);
     return reply(204);
   });
-  // Prices change what each model cost; the totals follow.
   r.route("PUT /settings/budget-ai/prices", ({ store, body: prices }) => {
     let total = 0;
     for (const m of store.aiUsage.models) {

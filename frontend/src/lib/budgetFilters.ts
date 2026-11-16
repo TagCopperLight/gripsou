@@ -2,8 +2,6 @@ import type { TypeBucket } from "../api/wire";
 import type { TransactionFilterQuery } from "../api/filter";
 import { presetRange, type Period } from "./period";
 
-/** The presets the time-frame select offers. `custom` keeps whatever dates the
- *  user typed; `all` means no date bound at all. */
 export const TIME_FRAMES = [
   "all",
   "thisMonth",
@@ -15,8 +13,6 @@ export const TIME_FRAMES = [
 
 export type TimeFrame = (typeof TIME_FRAMES)[number];
 
-/** What the user picked. It is deliberately not the wire shape: `timeFrame`
- *  exists only so the select can show which preset produced `from`/`to`. */
 export type BudgetFilters = {
   search: string;
   accountId: string;
@@ -28,13 +24,9 @@ export type BudgetFilters = {
   tagIds: string[];
   uncategorized: boolean;
   needsReview: boolean;
-  /** Internal transfers are hidden until this is on — they are money moving
-   *  between the user's own accounts, not spending. Unlike every other flag
-   *  here, `false` narrows the list rather than widening it. */
+  /** Unlike every other flag here, `false` narrows the list rather than widening it. */
   transfers: boolean;
-  /** Set only by Overview's deep links; renders as a "Selected period" chip
-   *  (labelled at render time, so it follows a language switch) and is
-   *  cleared together with the dates it stands for. */
+  /** Labelled at render time, so it follows a language switch; cleared together with the dates it stands for. */
   period?: Period;
 };
 
@@ -57,16 +49,12 @@ export function withTimeFrame(
   timeFrame: TimeFrame,
   today: Date = new Date(),
 ): BudgetFilters {
-  // Picking any time frame here supersedes Overview's "Selected period" chip:
-  // leaving `period` set would keep showing the OLD period's label
-  // while `activeFilters` hides the real time-frame chip underneath it.
+  // Leaving `period` set would keep the old period's label while `activeFilters` hides the real time-frame chip.
   if (timeFrame === "custom") return { ...f, timeFrame, period: undefined };
   if (timeFrame === "all") return { ...f, timeFrame, from: "", to: "", period: undefined };
   return { ...f, timeFrame, ...presetRange(timeFrame, today), period: undefined };
 }
 
-/** The filter set as the API reads it. Empty values are omitted so the query
- *  key stays minimal and two equivalent filter sets share one cache entry. */
 export function toQuery(f: BudgetFilters): TransactionFilterQuery {
   const q: TransactionFilterQuery = {};
   if (f.search.trim()) q.search = f.search.trim();
@@ -94,8 +82,6 @@ export type ActiveFilter =
   | { kind: "needsReview" }
   | { kind: "transfers" };
 
-/** Part 3 of the search surface: one chip per active filter, account and time
- *  frame included. Order is the reading order of the controls above. */
 export function activeFilters(f: BudgetFilters): ActiveFilter[] {
   const out: ActiveFilter[] = [];
   if (f.period) out.push({ kind: "period" });

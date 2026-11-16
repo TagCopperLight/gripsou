@@ -1,5 +1,3 @@
-//! Who is calling: the client's IP and browser, as the request shows them.
-
 use axum::extract::{ConnectInfo, FromRequestParts};
 use axum::http::HeaderMap;
 use axum::http::request::Parts;
@@ -7,7 +5,6 @@ use std::net::SocketAddr;
 
 use crate::error::ApiError;
 
-/// The caller's address and User-Agent (empty when the browser sent none).
 #[derive(Debug, Clone)]
 pub struct Client {
     pub ip: String,
@@ -26,7 +23,6 @@ impl Client {
         }
     }
 
-    /// The User-Agent, when there is one.
     pub fn browser(&self) -> Option<&str> {
         Some(self.user_agent.as_str()).filter(|ua| !ua.is_empty())
     }
@@ -45,10 +41,8 @@ impl<S: Send + Sync> FromRequestParts<S> for Client {
     }
 }
 
-/// Client IP: the last X-Forwarded-For hop, which the nearest proxy wrote
-/// (earlier hops come from the client), else the direct peer address.
-/// The per-IP login limit relies on it, so the backend must sit behind a
-/// proxy that sets the header; Caddy replaces it, others append to it.
+/// The last X-Forwarded-For hop (written by the nearest proxy; earlier hops come from the client), else the peer.
+/// The per-IP login limit relies on it: the backend must sit behind a proxy that sets the header.
 fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> String {
     headers
         .get("x-forwarded-for")
@@ -59,9 +53,7 @@ fn client_ip(headers: &HeaderMap, peer: SocketAddr) -> String {
         .map_or_else(|| peer.ip().to_string(), str::to_string)
 }
 
-/// Best-effort friendly device label. A self-hosted app needs only a small
-/// heuristic; unknown parts degrade to "Unknown …". Order matters: Edge/Opera
-/// UAs also contain "Chrome", and Chrome UAs also contain "Safari".
+/// Order matters: Edge/Opera UAs also contain "Chrome", and Chrome UAs also contain "Safari".
 pub fn device_name(ua: &str) -> String {
     let browser = if ua.contains("Edg/") {
         "Edge"

@@ -1,6 +1,3 @@
-//! The `users` row: credentials, profile, role, welcome state, and the admin
-//! listing. Preferences are [`crate::repo::prefs`].
-
 use uuid::Uuid;
 
 use crate::error::CoreError;
@@ -8,14 +5,12 @@ use crate::repo::prefs::{self, UserPrefs};
 use crate::text_enum::text_enum;
 
 text_enum! {
-    /// `users.role`. Admins configure the server and manage users.
     pub enum Role {
         Admin = "admin",
         User = "user",
     }
 }
 
-/// What a password login checks: the hash, and whose it is.
 #[derive(Debug)]
 pub struct UserCredentials {
     pub id: Uuid,
@@ -46,7 +41,7 @@ pub async fn password_hash(
     Ok(row)
 }
 
-/// Whether anyone has an account: first-run setup stays open until then.
+/// First-run setup stays open until anyone has an account.
 pub async fn any_exists(pool: &sqlx::PgPool) -> Result<bool, CoreError> {
     let exists = sqlx::query_scalar!(r#"select exists (select 1 from users) as "exists!""#)
         .fetch_one(pool)
@@ -54,8 +49,7 @@ pub async fn any_exists(pool: &sqlx::PgPool) -> Result<bool, CoreError> {
     Ok(exists)
 }
 
-/// Create the first account, as admin. `None` when any user exists already,
-/// one made by hand in SQL included.
+/// `None` when any user exists already, one made by hand in SQL included.
 pub async fn create_first_admin(
     pool: &sqlx::PgPool,
     email: &str,
@@ -77,7 +71,6 @@ pub async fn create_first_admin(
     Ok(id)
 }
 
-/// The current user's own profile, fetched by id for the /auth/me bootstrap.
 #[derive(Debug)]
 pub struct UserProfile {
     pub id: Uuid,
@@ -85,7 +78,6 @@ pub struct UserProfile {
     pub email: String,
     pub role: Role,
     pub prefs: UserPrefs,
-    /// False until the user finished or skipped the post-invite welcome screen.
     pub welcome_done: bool,
 }
 
@@ -125,8 +117,7 @@ pub struct UserRow {
     pub avatar: Option<String>,
 }
 
-/// Every user on the server, oldest first (the seeded admin sorts first), for
-/// the admin Users page.
+/// Oldest first (the seeded admin sorts first).
 pub async fn list(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
     let rows = sqlx::query_as!(
         UserRow,
@@ -141,8 +132,7 @@ pub async fn list(pool: &sqlx::PgPool) -> Result<Vec<UserRow>, CoreError> {
     Ok(rows)
 }
 
-/// What a role change or a deletion did. Both refuse to leave the server
-/// without an admin: nobody could reach the admin-only settings again.
+/// Both refuse to leave the server without an admin.
 #[derive(Debug, PartialEq, Eq)]
 pub enum AdminGuarded {
     Done,
@@ -150,8 +140,8 @@ pub enum AdminGuarded {
     LastAdmin,
 }
 
-/// Lock every admin row until the transaction ends, so two admins removed at
-/// once wait for each other and the second sees the first gone.
+/// Locks every admin row until the transaction ends, so two admins removed at once wait for
+/// each other and the second sees the first gone.
 async fn lock_admins(conn: &mut sqlx::PgConnection) -> Result<Vec<Uuid>, CoreError> {
     Ok(sqlx::query_scalar!(
         "select id from users where role = $1 order by id for update",
@@ -184,8 +174,6 @@ pub async fn set_role(
     Ok(AdminGuarded::Done)
 }
 
-/// Permanently delete a user. FK `on delete cascade` removes their sessions,
-/// connections, accounts, holdings and snapshots.
 pub async fn delete_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<AdminGuarded, CoreError> {
     let mut tx = pool.begin().await?;
     if lock_admins(&mut tx).await? == [user_id] {
@@ -201,9 +189,8 @@ pub async fn delete_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<AdminGuar
     Ok(AdminGuarded::Done)
 }
 
-/// Update the user's display name and email, returning the refreshed profile
-/// (or `None` when the user no longer exists). A duplicate email surfaces as the
-/// underlying unique-violation `sqlx::Error`, which the handler maps to 409.
+/// A duplicate email surfaces as the unique-violation `sqlx::Error`, which the handler maps to
+/// 409.
 pub async fn update_profile(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -221,8 +208,7 @@ pub async fn update_profile(
     profile_by_id(pool, user_id).await
 }
 
-/// Mark the welcome screen done. Keeps the first date when called again.
-/// Returns true when the user exists.
+/// Keeps the first date when called again.
 pub async fn finish_welcome(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, CoreError> {
     let res = sqlx::query!(
         r#"update users set welcomed_at = coalesce(welcomed_at, now()) where id = $1"#,
@@ -233,7 +219,6 @@ pub async fn finish_welcome(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, 
     Ok(res.rows_affected() == 1)
 }
 
-/// Returns true when a row was updated (the user exists).
 pub async fn update_password(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -293,7 +278,6 @@ mod tests {
     #[crate::testkit::db_test]
     async fn update_profile_roundtrip_and_conflict(pool: PgPool) -> anyhow::Result<()> {
         let id = crate::testkit::seed_user_as(&pool, "a@t.local", Role::Admin, "hash").await;
-        // A second user whose email we must not be able to collide with.
         crate::testkit::seed_user_email(&pool, "taken@t.local").await;
 
         let updated = update_profile(&pool, id, "Annie", "annie@t.local")
@@ -304,14 +288,12 @@ mod tests {
         let reread = profile_by_id(&pool, id).await?.unwrap();
         assert_eq!(reread.email, "annie@t.local");
 
-        // Missing user -> None.
         assert!(
             update_profile(&pool, Uuid::new_v4(), "X", "x@t.local")
                 .await?
                 .is_none()
         );
 
-        // Colliding email -> unique-violation error from the DB.
         let err = update_profile(&pool, id, "Annie", "taken@t.local")
             .await
             .unwrap_err();

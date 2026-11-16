@@ -1,10 +1,9 @@
-// Copied from the backend: what the server seeds or declares that the mock
-// answers with too. Each block names its source; keep them in step.
+// Copied from the backend: what the server seeds or declares that the mock answers with too.
+// Each block names its source; keep them in step.
 
 import type { ApiKeyProvider, BudgetCategory } from "../../src/api/wire.ts";
 
-/** `seed_budget_categories` (backend/migrations/0059_budget_category_hints.sql):
- *  name, default key, colour, icon, kind, system key, hint. */
+/** `seed_budget_categories` (backend/migrations/0059_budget_category_hints.sql). */
 export const CATEGORY_SEED: [string, string, string, string, BudgetCategory["kind"], string | null, string][] = [
   ["Housing", "housing", "#f18c80", "house", "expense", null, "Rent, mortgage payments, service charges and property tax."],
   ["Utilities", "utilities", "#ea945e", "zap", "expense", null, "Electricity, gas, water and heating bills."],
@@ -40,11 +39,8 @@ export const CATEGORY_SEED: [string, string, string, string, BudgetCategory["kin
   ["Ignore", "ignore", "#777471", "eye-off", "neutral", null, "Transactions to leave out of every total: duplicates, corrections, and anything that shouldn't count."],
 ];
 
-/** The providers with API keys, in the registry's order
- *  (backend/providers/src/registry.rs), each with its `fields`
- *  (providers/src/powens, providers/src/jev, providers/src/brandfetch.rs).
- *  `optional`: a field the provider works without (Powens::from_config reads
- *  the webhook secret without requiring it). */
+/** The providers with API keys, in the registry's order (backend/providers/src/registry.rs).
+ *  `optional`: a field the provider works without. */
 export const CONFIG_PROVIDERS: (Pick<ApiKeyProvider, "key" | "displayName" | "group" | "returnAddress"> & {
   fields: { key: string; label: string; secret: boolean; optional?: true }[];
 })[] = [
@@ -70,26 +66,19 @@ export const CONFIG_PROVIDERS: (Pick<ApiKeyProvider, "key" | "displayName" | "gr
   },
 ];
 
-/** `ApiKeyProvider.ready` (backend/api/src/admin/dto.rs): a bank provider
- *  once its adapter can be built, a categoriser once its key is set, logos
- *  once every field is. Each comes down to every field it needs being set. */
+/** `ApiKeyProvider.ready` (backend/api/src/admin/dto.rs): every field the provider needs is set. */
 export function keysReady(p: ApiKeyProvider): boolean {
   const declared = CONFIG_PROVIDERS.find((c) => c.key === p.key)?.fields ?? [];
   return p.fields.every((f) => declared.find((d) => d.key === f.key)?.optional || (f.secret ? f.set : f.value !== null));
 }
 
 // The Overview's rules (backend/core/src/budget/overview/calc.rs).
-/** A Sankey side keeps slices of at least this share of the period's expenses... */
 export const SANKEY_MIN_SHARE = 0.02;
-/** ...and at most this many, Other excluded. */
 export const SANKEY_MAX_SLICES = 8;
 export const BREAKDOWN_KEEP = 7;
-/** Months of history a comparison needs, and how far back it averages. */
 export const MIN_BASELINE_MONTHS = 3;
 export const BASELINE_MONTHS = 12;
 export const TREND_KEEP = SANKEY_MAX_SLICES;
-/** The anchor month's largest slices the trend always keeps. */
 export const TREND_ANCHOR_KEEP = 3;
-/** The seed key of the category the trend folds into Other (`SeedKey` in
- *  backend/core/src/budget/vocab.rs, migration 0055). */
+/** The seed key of the category the trend folds into Other (`SeedKey`, backend/core/src/budget/vocab.rs). */
 export const TREND_FOLD_KEY = "other_expense";

@@ -29,7 +29,6 @@ let fetchMock: ReturnType<typeof stubFetch>;
 function routes(url: string, init?: RequestInit) {
   const method = init?.method ?? "GET";
   if (url === "/api/providers/enabled") return jsonResponse(server.providers);
-  // Admin-only: what the server setup and the bank step's keys check read.
   if (url === "/api/providers") return jsonResponse(server.providers.map((p) => ({ ...p, description: "", enabled: true })));
   if (url === "/api/settings/api-keys")
     return jsonResponse([
@@ -55,7 +54,6 @@ function routes(url: string, init?: RequestInit) {
     }]);
   if (url === "/api/connections/init" && method === "POST") return jsonResponse({ connectionId: "c9", redirectUrl: null });
   if (url === "/api/auth/welcome" && method === "POST") return new Response(null, { status: 204 });
-  // Like the server: a provider error fails the complete.
   if (url === "/api/connections/complete")
     return new Response(null, { status: String(init?.body).includes('"error"') ? 400 : 204 });
   return jsonResponse([]);
@@ -84,24 +82,19 @@ afterEach(() => {
 describe("Welcome", () => {
   it("takes an admin through their profile and security, then the server's keys one group at a time, then their bank", async () => {
     renderWelcome({ user: { ...newcomer, role: "admin" } });
-    // The admin's flow waits for the server's keys: its first screen shows, off.
     expect(screen.getByRole("heading", { name: "Welcome, Alex" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     await screen.findByRole("img", { name: "Step 1 of 5" });
-    // An admin can't leave the flow before the server is set up.
     expect(screen.queryByRole("button", { name: "Skip setup for now" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    // Skipping the admin's security asks first.
     fireEvent.click(await screen.findByRole("button", { name: "Skip this step" }));
     fireEvent.click(await screen.findByRole("button", { name: "Skip anyway" }));
 
-    // The bank keys are set. Every server screen is one step of the flow.
     expect(await screen.findByRole("heading", { name: "Bank connections" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Step 3 of 5" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    // The logos aren't: Next waits for them, skipping goes on.
     expect(screen.getByRole("heading", { name: "Bank logos" })).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Step 3 of 5" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
@@ -116,7 +109,6 @@ describe("Welcome", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(await screen.findByRole("button", { name: "Set up" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
-    // Only an admin is asked to confirm.
     expect(await screen.findByRole("button", { name: "Connect a bank" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("heading", { name: "Secure your account" })).toBeInTheDocument();
@@ -131,7 +123,6 @@ describe("Welcome", () => {
     expect(posted("/auth/mfa/totp/setup")[0][1]?.body).toBe("{}");
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    // As the server answers once the code is right.
     server.mfa = { ...server.mfa, totp: true };
     fireEvent.change(screen.getByRole("textbox", { name: "6-digit code" }), { target: { value: "123456" } });
     expect(await screen.findByText("ABCD-EFGH")).toBeInTheDocument();

@@ -21,12 +21,9 @@ type SankeySurfaceProps =
   | {
     sankey: Sankey;
     onSeeTransactions: () => void;
-    /** Private mode: the tooltip's amounts hidden. */
     masked?: boolean;
-    /** The diagram is a previous period's, while this one's loads. */
     stale?: boolean;
   }
-  /** Still loading: the frame, and a bone where the diagram goes. */
   | { sankey?: undefined; onSeeTransactions?: undefined; masked?: undefined; stale?: undefined };
 
 export function SankeySurface({ sankey, onSeeTransactions, masked = false, stale = false }: SankeySurfaceProps) {
@@ -46,9 +43,7 @@ export function SankeySurface({ sankey, onSeeTransactions, masked = false, stale
             <ChevronRight className="size-4" />
           </button>
         </div>
-        {/* The project's idiom for wide content (holdings, transactions): the
-            same diagram, scrolled sideways. Never a distorted phone variant and
-            never a coarser truth on a small screen. */}
+        {/* Wide content scrolls sideways, as in holdings and transactions, never a distorted phone variant. */}
         <div className={`mt-2 overflow-x-auto ${staleClass(stale)}`}>
           <div className="min-w-[560px]">
             {sankey === undefined ? <ChartBone style={{ height: HEIGHT }} /> : <SankeyChart sankey={sankey} masked={masked} />}
@@ -62,9 +57,7 @@ export function SankeySurface({ sankey, onSeeTransactions, masked = false, stale
 function SankeyChart({ sankey, masked }: { sankey: Sankey; masked: boolean }) {
   const { t } = useTranslation();
 
-  // Memoised on the data and the translations: the option holds closures, so
-  // a fresh object every render would reset the chart whenever the page
-  // re-renders for an unrelated reason.
+  // Memoised: the option holds closures, so a fresh object each render would reset the chart.
   const option = useMemo<EChartsOption>(() => {
     const graph = sankeyGraph(sankey, {
       slice: (s) => sliceLabel(t, s),
@@ -90,8 +83,7 @@ function SankeyChart({ sankey, masked }: { sankey: Sankey; masked: boolean }) {
             : params.name;
         const node = byName.get(name);
         if (!node) return "";
-        // The amount is the node's own decimal string, never the float
-        // ECharts summed for it.
+        // The node's own decimal string, never the float ECharts summed.
         return tooltipRow(
           node.name === HUB ? "transparent" : node.color,
           node.name === HUB ? t("common.total") : node.label,
@@ -110,16 +102,13 @@ function SankeyChart({ sankey, masked }: { sankey: Sankey; masked: boolean }) {
           nodeGap: 10,
           nodeWidth: 12,
           emphasis: { focus: "adjacency" },
-          // Order the payload sent is magnitude order, with `other` last on its
-          // side; keeping it means the diagram reads top-down by size.
+          // Payload order is magnitude order, `other` last on its side: the diagram reads top-down by size.
           layoutIterations: 0,
           data: graph.nodes.map((n) => ({
             name: n.name,
             itemStyle: { color: n.color, borderWidth: 0 },
             label: {
-              // Destinations sit on the right edge, so their labels go on the
-              // inner side of the bar; on the default outer side they would be
-              // clipped by the chart's edge.
+              // Destination labels go on the inner side: on the outer side the chart's edge would clip them.
               position: n.name.startsWith("out:") ? "left" : "right",
               // The hub has no label: its total is in its tooltip.
               show: n.name !== HUB,
@@ -133,8 +122,7 @@ function SankeyChart({ sankey, masked }: { sankey: Sankey; masked: boolean }) {
             source: l.source,
             target: l.target,
             value: l.value,
-            // Solid, in the category's colour (the non-hub end): a gradient
-            // would fade every link into the hub's grey in the middle.
+            // Solid category colour: a gradient would fade into the hub's grey.
             lineStyle: {
               color: byName.get(l.target === HUB ? l.source : l.target)?.color,
               opacity: 0.25,

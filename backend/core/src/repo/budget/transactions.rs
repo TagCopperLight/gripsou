@@ -1,6 +1,5 @@
-//! The Transactions page: its rows, header counts and "select all shown"
-//! ids, all through the `budget_transaction_matches` SQL function, so the
-//! three cannot disagree about which rows a filter admits.
+//! The Transactions page: rows, header counts and "select all shown" ids, all through
+//! `budget_transaction_matches`, so they cannot disagree about which rows a filter admits.
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -9,8 +8,7 @@ use uuid::Uuid;
 use crate::budget::vocab::{CategoryKind, CategorySource, RowSource};
 use crate::error::CoreError;
 
-/// Calls a sqlx query macro with `budget_transaction_matches`' twelve
-/// arguments as `$1`..`$12`, in the function's order, then `$extra` from `$13`.
+/// Passes `budget_transaction_matches`' twelve arguments as `$1`..`$12`, then `$extra` from `$13`.
 macro_rules! with_filter_args {
     ($macro:ident!($($head:tt)*), $user_id:expr, $f:expr $(, $extra:expr)* $(,)?) => {
         sqlx::$macro!(
@@ -37,20 +35,15 @@ pub struct TransactionListRow {
     pub day: NaiveDate,
     pub kind: String,
     pub description: Option<String>,
-    /// In `account_currency` — the amount domain, as the provider sent it. Not
-    /// converted: the list shows what actually moved in the account.
+    /// In `account_currency`, as the provider sent it; not converted.
     pub amount: Decimal,
-    /// The same movement in the reader's currency at the transaction's own
-    /// date. The list renders `amount`; this exists so an explicit multi-row
-    /// selection can be totalled without a round trip.
-    /// `None` when the account's or the reader's currency has no rate that day.
+    /// The same movement in the reader's currency at the transaction's date, so a multi-row selection can be
+    /// totalled without a round trip. `None` when either currency has no rate that day.
     pub amount_reporting: Option<Decimal>,
-    /// Structured, not a pre-built sentence: the frontend's i18n and
-    /// per-user number formatting render the lot fields.
+    /// Structured so the frontend's i18n and number formatting render the lot fields.
     pub source: RowSource,
     pub ticker: Option<String>,
-    /// What a lot row's logo is built from (`Logos::instrument` in `providers`);
-    /// null on a cash row.
+    /// Builds a lot row's logo (`Logos::instrument` in `providers`); null on a cash row.
     pub instrument_kind: Option<String>,
     pub instrument_isin: Option<String>,
     pub instrument_symbol: Option<String>,
@@ -60,12 +53,11 @@ pub struct TransactionListRow {
     pub account_id: Uuid,
     pub account_name: String,
     pub account_color: String,
-    /// Also the currency of a lot row's `amount`: lot prices are recorded in
-    /// the account's currency, as `lot_basis` and the holdings table assume.
+    /// Also the currency of a lot row's `amount`: lot prices are in the account's currency, as `lot_basis` and
+    /// the holdings table assume.
     pub account_currency: String,
 
-    // All null/false on a lot row: a purchase is an investment record, not a
-    // budget item.
+    // All null/false on a lot row: a purchase is an investment record, not a budget item.
     pub category_id: Option<Uuid>,
     pub category_name: Option<String>,
     pub category_default_key: Option<String>,
@@ -74,28 +66,17 @@ pub struct TransactionListRow {
     pub category_kind: Option<CategoryKind>,
     pub category_source: Option<CategorySource>,
     pub category_confidence: Option<Decimal>,
-    /// Derived, never stored: an unreviewed AI guess under the reader's
-    /// threshold, with no category, or in a neutral category.
+    /// Derived: an unreviewed AI guess under the reader's threshold, with no category, or in a neutral category.
     pub needs_review: bool,
     pub checked: bool,
-    /// The row is one half of an auto-paired internal transfer.
     pub is_transfer: bool,
-    /// The pairing pass categorised this row, but its link is gone — a user
-    /// corrected the other half, so this one still reads as an
-    /// internal transfer while netting against nothing.
-    ///
-    /// Keyed on `category_source = 'pair'` rather than on the category itself:
-    /// only the pairing pass writes that source, and it always writes a link,
-    /// so a missing link means one was removed. A cross-currency transfer the
-    /// user categorised by hand never had a link (pairing matches
-    /// one currency only) and must not be
-    /// flagged forever.
+    /// The pairing pass categorised this row but its link is gone (the user corrected the other half). Keyed on
+    /// `category_source = 'pair'`, not the category: only pairing writes that source, always with a link. A
+    /// cross-currency transfer categorised by hand never had a link and must not be flagged forever.
     pub is_orphan_transfer: bool,
 }
 
 crate::text_enum::text_enum! {
-    /// The TYPE control on the filter panel: one value, always one selected.
-    /// Spelled as the API query parameter and the SQL function spell it.
     #[derive(Default)]
     pub enum TypeBucket {
         #[default]
@@ -115,26 +96,20 @@ pub struct TransactionFilters {
     pub bucket: TypeBucket,
     pub from: Option<NaiveDate>,
     pub to: Option<NaiveDate>,
-    /// Empty means no filter. Several categories mean *either* of them.
+    /// Several categories mean either of them.
     pub category_ids: Vec<Uuid>,
-    /// Empty means no filter. Several tags mean *all* of them.
+    /// Several tags mean all of them.
     pub tag_ids: Vec<Uuid>,
     pub uncategorized: bool,
     pub needs_review: bool,
-    /// Internal transfers (the `internal_transfer` system category) are hidden
-    /// unless this is set: they are money moving between the user's own
-    /// accounts, noise in a list about spending. The OTHERS panel's
-    /// "Internal transfers" toggle is the only thing that turns them back on,
-    /// and when it does they are filtered like any other row.
+    /// Internal transfers are hidden unless this is set.
     pub include_transfers: bool,
-    /// Below this, an AI guess is in the review queue. A parameter rather than
-    /// a constant so moving it reshapes the queue instantly.
+    /// Below this, an AI guess is in the review queue.
     pub review_threshold: Decimal,
     pub limit: i64,
     pub offset: i64,
 }
 
-/// Everything, unfiltered — the base a caller mutates.
 impl Default for TransactionFilters {
     fn default() -> Self {
         Self {
@@ -157,8 +132,7 @@ impl Default for TransactionFilters {
     }
 }
 
-/// One page of the list. Every filter is optional inside
-/// `budget_transaction_matches`, so one prepared statement covers all
+/// Every filter is optional inside `budget_transaction_matches`, so one prepared statement covers all
 /// combinations and the macro still checks this query at compile time.
 pub async fn transactions(
     pool: &sqlx::PgPool,
@@ -169,8 +143,7 @@ pub async fn transactions(
         query_as!(
             TransactionListRow,
             r#"
-        -- The filter/sort/page cut happens before any conversion, so the grid
-        -- holds only the days this page needs.
+        -- Filter, sort and page before converting, so the grid holds only this page's days.
         with filtered as (
             select *
             from budget_transaction_matches($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
@@ -221,14 +194,10 @@ pub struct TagRef {
     pub color: Option<String>,
 }
 
-/// Tags for a page of transactions, in one round trip. Untagged rows are absent
-/// from the map rather than present with an empty vector.
-///
-/// Ordered exactly like the catalog `list_tags` returns (oldest tag first),
-/// not by name: the row and the tag chooser then read in the same order, and
-/// assigning a tag never makes an existing one jump. Where a row's tags
-/// overflow its cell the frontend drops the tail, so "oldest first" also
-/// decides which ones survive.
+/// Tags for a page of transactions in one round trip; untagged rows are absent from the map. Ordered like
+/// `list_tags` (oldest first), not by name, so the row and the tag chooser read alike and assigning a tag
+/// never makes one jump. The frontend drops the tail of an overflowing cell, so this order decides which
+/// survive.
 pub async fn tags_for_transactions(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -265,30 +234,21 @@ pub async fn tags_for_transactions(
 
 #[derive(Debug, Clone, Copy)]
 pub struct TransactionCounts {
-    /// Rows under the active filters — the left half of "matching / total".
     pub matching: i64,
-    /// Every cash and lot row this user has, filters ignored.
     pub total: i64,
-    /// Cash rows with no category, filters ignored — the list header's second
-    /// number, and the one that starts out enormous.
+    /// Cash rows with no category, filters ignored.
     pub uncategorized: i64,
-    /// The cash rows among `matching`: what "select all shown" selects, the
-    /// same rows as `matching_transaction_ids`. Lot rows carry no budget.
+    /// The cash rows among `matching`: what "select all shown" selects. Lot rows carry no budget.
     pub selectable: i64,
-    /// The selection bar's figure: the `selectable` rows summed in the
-    /// reader's reporting currency, each converted at its own date.
+    /// Summed in the reader's reporting currency, each at its own date.
     pub matching_total: Decimal,
-    /// At least one selectable row had no rate on its day, for its account's
-    /// currency or the reader's, so it is left out of `matching_total`.
-    /// Mirrors `SummaryDto.fxMissing` — same convention, same meaning.
+    /// At least one selectable row had no rate on its day, so it is left out of `matching_total`.
     pub fx_missing: bool,
 }
 
-/// The list header. `matching` reads the same `budget_transaction_matches` as
-/// `transactions()`, so it counts exactly the rows the list pages through —
-/// under `bucket: All` that includes lot rows, unlike
-/// `matching_transaction_ids`, which keeps only the cash ones (`selectable`,
-/// and the total, follow that one).
+/// `matching` reads the same `budget_transaction_matches` as `transactions()`, so under `bucket: All` it
+/// includes lot rows, unlike `matching_transaction_ids`, which keeps only cash ones (`selectable` and the
+/// total follow that one).
 pub async fn transaction_counts(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -304,10 +264,8 @@ pub async fn transaction_counts(
         reporting as (
             select (select currency from users where id = $1) as code
         ),
-        -- One FX row per needed day and account currency, with both legs.
-        -- Keeping reporting FX on the same row avoids a separate join whose
-        -- generic plan estimates one reporting row and repeatedly scans the
-        -- entire date grid for every matching transaction.
+        -- Reporting FX on the same row avoids a separate join whose generic plan repeatedly scans the whole date
+        -- grid for every transaction.
         fx as materialized (
             select day, account_currency,
                    fx_asof(account_currency, day) as account_rate,
@@ -355,9 +313,8 @@ pub async fn transaction_counts(
     })
 }
 
-/// Ids of the **cash** transactions matching the filters — what "select all
-/// shown" means, and what every bulk action runs against. Same filter as the
-/// list; lot rows are dropped because they carry no budget.
+/// Ids of the cash transactions matching the filters: what "select all shown" and every bulk action run
+/// against. Lot rows are dropped because they carry no budget.
 pub async fn matching_transaction_ids(
     pool: &sqlx::PgPool,
     user_id: Uuid,

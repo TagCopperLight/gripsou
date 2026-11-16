@@ -25,7 +25,6 @@ describe("LogoutButton", () => {
   it("logs out and redirects on confirm", () => {
     renderWithApp(<LogoutButton />, { auth: authValue({ logout }) });
     fireEvent.click(screen.getByRole("button", { name: "Log out" }));
-    // Confirm button inside the modal (the second "Log out" button).
     const confirm = screen.getAllByRole("button", { name: "Log out" })[1];
     fireEvent.click(confirm);
     expect(logout).toHaveBeenCalled();

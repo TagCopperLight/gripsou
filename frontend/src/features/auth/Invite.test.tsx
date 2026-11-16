@@ -21,7 +21,7 @@ describe("Invite", () => {
   it("creates an account and adopts the session", async () => {
     const adopt = vi.fn();
     stubFetch()
-      .mockResolvedValueOnce(tokenOk()) // page-load guard
+      .mockResolvedValueOnce(tokenOk())
       .mockResolvedValueOnce(
         jsonResponse({
             token: "sess",

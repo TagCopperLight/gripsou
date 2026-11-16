@@ -1,13 +1,6 @@
-// Method + path router for the review mode's fake API, typed by the generated
-// `Api` (src/api/route.ts): a handler gets its route's query and request body
-// and must answer its response type. It returns the body (sent as 200 JSON),
-// `reply(status, body?)` for another status, or `fail(status, message)` for an
-// error. A query the server couldn't read is refused before the handler.
-
 import type { Body, Key, Query, Res } from "../src/api/route.ts";
 import { BadQuery, readQuery } from "./query.ts";
 
-/** What the plugin sends: JSON (or nothing), or an error as plain text, as the server does. */
 export type Sent = { status: number; body?: unknown } | { status: number; text: string };
 
 const REPLY = Symbol("reply");
@@ -15,14 +8,12 @@ const REPLY = Symbol("reply");
 export type Reply<T> = { status: number; body?: T; [REPLY]: true };
 export type Failure = { status: number; text: string; [REPLY]: true };
 
-/** Wraps a status (and body) so the router doesn't mistake it for a 200 body. */
 export function reply(status: number): Reply<void>;
 export function reply<T>(status: number, body: T): Reply<T>;
 export function reply<T>(status: number, body?: T): Reply<T | void> {
   return body === undefined ? { status, [REPLY]: true } : { status, body, [REPLY]: true };
 }
 
-/** An error answer: the server's errors are a plain-text message. */
 export function fail(status: number, text: string): Failure {
   return { status, text, [REPLY]: true };
 }
@@ -38,11 +29,8 @@ export type Ctx<S, K extends Key> = {
   body: Body<K>;
 };
 
-/** A route with no response body answers with a status only (`reply(204)`). */
 export type Answer<R> = ([R] extends [void] ? never : R) | Reply<R> | Failure;
 
-/** The path parameters when `path` fits `pattern` (`:id` matches any one
- *  segment), else null. */
 export function matchPath(pattern: string, path: string): Record<string, string> | null {
   const want = pattern.split("/").filter(Boolean);
   const parts = path.split("/").filter(Boolean);
@@ -66,7 +54,6 @@ export function createRouter<S>() {
     routes.push({ key, method, pattern, handler: handler as Route<S>["handler"] });
   }
 
-  /** The answer, or null when no route matches. */
   function dispatch(store: S, method: string, path: string, query: URLSearchParams, body: unknown): Sent | null {
     for (const r of routes) {
       if (r.method !== method) continue;
@@ -87,7 +74,6 @@ export function createRouter<S>() {
     return null;
   }
 
-  /** Every route registered, as `Api` names it. */
   const keys = (): Key[] => routes.map((r) => r.key);
 
   return { route, dispatch, keys };

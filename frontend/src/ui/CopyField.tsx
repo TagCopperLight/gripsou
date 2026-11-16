@@ -3,14 +3,11 @@ import { Check, Copy } from "lucide-react";
 import { useCopy } from "../lib/useCopy";
 import { Skeleton, TextBone } from "./Skeleton";
 
-/** A value to paste elsewhere, on one line in code style, with a button that
- *  copies it whole. `value` null is still on its way: a bone holds its place. */
 export function CopyField({
   value,
   label,
 }: {
   value: string | null;
-  /** The button's name for screen readers. */
   label: string;
 }) {
   const { copied, copy } = useCopy();

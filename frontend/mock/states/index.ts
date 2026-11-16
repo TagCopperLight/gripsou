@@ -1,8 +1,4 @@
-// States for the review panel, added as each piece of the UI is reviewed.
-// Each one tweaks the base data (or makes requests fail); several can be on
-// at once, unless they share a `group`, and Reset re-applies the active ones
-// on fresh data. The panel lists the states of the piece under review
-// (`FOCUS`).
+// Several states can be on at once unless they share a `group`; Reset re-applies them on fresh data.
 
 import * as budget from "./budget.ts";
 import { errors } from "./errors.ts";
@@ -11,11 +7,9 @@ import * as portfolio from "./portfolio.ts";
 import * as settings from "./settings.ts";
 import { sync } from "./sync.ts";
 
-/** The piece under review: the panel lists its states. */
 export const FOCUS: Piece = "Sign-in pages";
 
-/** Active states apply in this order, which matters when two touch the same
- *  data: one that empties the household wipes what an earlier one added. */
+/** Applied in this order: a state that empties the household wipes what an earlier one added. */
 export const STATES: MockState[] = [
   ...settings.apiKeys,
   ...portfolio.distribution,

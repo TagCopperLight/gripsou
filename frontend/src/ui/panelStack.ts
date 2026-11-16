@@ -1,5 +1,4 @@
-// The floating panels open right now, oldest first: Escape closes the newest
-// one only.
+// Open floating panels, oldest first: Escape closes only the newest.
 const open: number[] = [];
 let next = 0;
 

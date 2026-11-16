@@ -1,34 +1,24 @@
 import type { TransactionParams, TypeBucket } from "./wire";
 
-/** The filter set the user picks on the transactions list, which is also what
- *  its query key is built from. Pagination belongs to the infinite query. */
 export type TransactionFilterQuery = {
   search?: string;
   accountId?: string;
   bucket?: TypeBucket;
   from?: string;
   to?: string;
-  /** Several ids mean *either* of them (OR), server-side. */
+  /** Several ids: any of them. */
   categoryIds?: string[];
-  /** Several ids mean *all* of them (AND), server-side. */
+  /** Several ids: all of them. */
   tagIds?: string[];
   uncategorized?: boolean;
   needsReview?: boolean;
-  /** Internal transfers are hidden unless this is set — the only filter here
-   *  whose absence means *less* than everything. */
+  /** Hidden unless set: the only filter whose absence means less than everything. */
   includeTransfers?: boolean;
 };
 
-/** The one place a transaction filter becomes request fields, shared by the
- *  list, the counts and the bulk write so "select all shown" writes exactly the
- *  rows the list shows. Values are typed for the JSON bulk body (booleans must
- *  be real booleans there: serde_json will not coerce "true"); a query string
- *  stringifies them.
- *
- *  An empty value is omitted rather than sent blank: the server reads a blank
- *  list as "no filter", but an omitted one keeps the request — and the cache —
- *  from splitting. Ids stay comma-joined strings, which is what the server's
- *  `parse_ids` reads in both places. */
+/** Shared by the list, counts and bulk write so "select all shown" writes exactly the shown rows.
+ *  Booleans stay real booleans (the JSON bulk body rejects "true"). Empty values are omitted so the
+ *  request and its cache key don't split. */
 export function transactionFilterFields(q: TransactionFilterQuery): TransactionParams {
   const f: TransactionParams = {};
   if (q.search) f.search = q.search;

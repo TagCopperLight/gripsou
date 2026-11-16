@@ -1,5 +1,3 @@
-//! Accounts and their net-worth series.
-
 pub mod dto;
 
 use axum::extract::{Path, Query, State};
@@ -84,8 +82,6 @@ mod tests {
     use axum::http::StatusCode;
     use sqlx::PgPool;
 
-    /// The frontend labels every account type the migrations seed, and no
-    /// other (the review mock serves its keys as /account-types).
     #[gripsou_core::testkit::db_test]
     async fn every_account_type_has_a_label(pool: PgPool) {
         let en: serde_json::Value = serde_json::from_str(include_str!(concat!(
@@ -104,7 +100,6 @@ mod tests {
         assert_eq!(seeded, labelled);
     }
 
-    /// Renaming another user's account by id must 404 and leave it untouched.
     #[gripsou_core::testkit::db_test]
     async fn update_account_refuses_another_users_account(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
@@ -133,7 +128,6 @@ mod tests {
         assert_eq!(name, "PEA");
     }
 
-    /// The owner's update persists and echoes the new type.
     #[gripsou_core::testkit::db_test]
     async fn update_account_persists_for_owner(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
@@ -164,8 +158,6 @@ mod tests {
         assert_eq!(color.as_deref(), Some("#123456"));
     }
 
-    /// An account type that does not exist is refused (404) and writes nothing,
-    /// so an account can never point at a type the UI cannot label.
     #[gripsou_core::testkit::db_test]
     async fn update_account_rejects_unknown_type(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
@@ -194,7 +186,6 @@ mod tests {
         assert_eq!((name.as_str(), type_key.as_str()), ("PEA", "pea"));
     }
 
-    /// The accounts list shows only the caller's accounts.
     #[gripsou_core::testkit::db_test]
     async fn accounts_lists_only_own(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;

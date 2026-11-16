@@ -92,21 +92,21 @@ async fn snapshot_value_matrix(pool: PgPool) -> anyhow::Result<()> {
     let sync = SyncResult {
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
-            cash_holding("acct-1", Decimal::new(100, 0)), // cash -> value = qty = 100
+            cash_holding("acct-1", Decimal::new(100, 0)),
             equity_holding(
                 "acct-1",
                 "US0378331005",
                 Decimal::new(3, 0),
                 Decimal::new(450, 0),
                 Some(Decimal::new(600, 0)),
-            ), // valued -> 600
+            ),
             equity_holding(
                 "acct-1",
                 "US5949181045",
                 Decimal::new(2, 0),
                 Decimal::new(300, 0),
                 None,
-            ), // unpriced -> 0
+            ),
         ],
         ..Default::default()
     };
@@ -131,7 +131,6 @@ async fn snapshot_value_matrix(pool: PgPool) -> anyhow::Result<()> {
 async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
 
-    // First sync: a cash holding alongside an equity.
     let sync1 = SyncResult {
         accounts: vec![checking_account("acct-1")],
         holdings: vec![
@@ -148,8 +147,6 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
     };
     ingest(&pool, conn_id, &sync1).await?;
 
-    // Second sync: the cash holding is gone (e.g. the invest residual went to
-    // zero). The equity remains.
     let sync2 = SyncResult {
         accounts: vec![checking_account("acct-1")],
         holdings: vec![equity_holding(
@@ -167,7 +164,6 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
         "the vanished cash holding is closed"
     );
 
-    // The cash holding's position is zeroed in place (row kept for history).
     let cash_qty: Decimal = sqlx::query_scalar(
         "select h.quantity from holding h \
          join instrument i on i.id = h.instrument_id where i.kind = 'cash'",
@@ -176,7 +172,6 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
     .await?;
     assert_eq!(cash_qty, Decimal::ZERO, "cash holding quantity zeroed");
 
-    // Its latest snapshot value is zero — no stale value left to double-count.
     let cash_val: Decimal = sqlx::query_scalar(
         "select hs.value from holding_snapshot hs \
          join holding h on h.id = hs.holding_id \
@@ -187,7 +182,6 @@ async fn holding_absent_from_resync_is_closed(pool: PgPool) -> anyhow::Result<()
     .await?;
     assert_eq!(cash_val, Decimal::ZERO, "cash snapshot zeroed");
 
-    // The surviving equity is untouched.
     let eq_val: Decimal = sqlx::query_scalar(
         "select hs.value from holding_snapshot hs \
          join holding h on h.id = hs.holding_id \
@@ -205,13 +199,13 @@ async fn unknown_account_ref_errors_and_rolls_back(pool: PgPool) -> anyhow::Resu
     let conn_id = seed_connection(&pool).await;
     let sync = SyncResult {
         accounts: vec![checking_account("acct-1")],
-        holdings: vec![cash_holding("ghost", Decimal::new(100, 0))], // references missing account
+        holdings: vec![cash_holding("ghost", Decimal::new(100, 0))],
         ..Default::default()
     };
     let err = ingest(&pool, conn_id, &sync).await.unwrap_err();
     assert!(matches!(err, CoreError::UnknownAccountRef { .. }));
 
-    // Atomicity: the account that *was* valid must not have been committed.
+    // The valid account must not have been committed.
     let accounts: i64 = sqlx::query_scalar("select count(*) from account")
         .fetch_one(&pool)
         .await?;
@@ -221,8 +215,6 @@ async fn unknown_account_ref_errors_and_rolls_back(pool: PgPool) -> anyhow::Resu
 
 #[gripsou_core::testkit::db_test]
 async fn cash_instrument_is_shared_across_connections(pool: PgPool) -> anyhow::Result<()> {
-    // `instrument` is global; the same EUR cash row must serve holdings under
-    // two different connections.
     let conn_a = seed_connection(&pool).await;
     let conn_b = seed_connection(&pool).await;
 
@@ -273,11 +265,7 @@ async fn ingest_stamps_institution_on_connection(pool: PgPool) -> anyhow::Result
     Ok(())
 }
 
-/// A transaction on an account the sync never emitted must not destroy an
-/// otherwise good sync. Powens' transactions endpoint is user-scoped, so it can
-/// name a liability or deleted account that the mapper skipped on purpose.
-/// Failing on it would fail every later sync too, since the row never goes
-/// away.
+/// Powens' transactions endpoint is user-scoped, so it can name an account the mapper skipped. Failing would fail every later sync.
 #[gripsou_core::testkit::db_test]
 async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -286,13 +274,12 @@ async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::
         holdings: vec![cash_holding("acct-1", Decimal::new(100, 0))],
         transactions: vec![
             txn("acct-1", "txn-1", "deposit", Decimal::new(100, 0)),
-            txn("ghost", "txn-2", "deposit", Decimal::new(50, 0)), // unknown account
+            txn("ghost", "txn-2", "deposit", Decimal::new(50, 0)),
         ],
         ..Default::default()
     };
     let summary = ingest(&pool, conn_id, &sync).await?;
 
-    // Everything else committed, and the summary counts only what was written.
     assert_eq!(summary.accounts, 1);
     assert_eq!(summary.holdings, 1);
     assert_eq!(summary.snapshots, 1);
@@ -317,8 +304,7 @@ async fn unknown_account_ref_in_transaction_is_skipped(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-/// A dangling *holding* reference stays fatal: `map_sync` guarantees every
-/// holding belongs to an emitted account, so a violation is a real bug.
+/// Fatal: `map_sync` guarantees every holding belongs to an emitted account.
 #[gripsou_core::testkit::db_test]
 async fn unknown_account_ref_in_holding_still_rolls_back(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -336,8 +322,6 @@ async fn unknown_account_ref_in_holding_still_rolls_back(pool: PgPool) -> anyhow
     Ok(())
 }
 
-/// The backfill runs as part of ingest, so a sync that reports a balance and a
-/// history of transactions leaves a usable series behind it.
 #[gripsou_core::testkit::db_test]
 async fn ingest_derives_history_from_transactions(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -415,7 +399,6 @@ async fn user_today(pool: &PgPool, conn_id: uuid::Uuid) -> chrono::NaiveDate {
         .unwrap()
 }
 
-/// (day, quantity) of the cash holding's snapshots.
 async fn cash_snapshots(pool: &PgPool) -> Vec<(chrono::NaiveDate, Decimal)> {
     sqlx::query_as(
         "select hs.as_of, hs.quantity from holding_snapshot hs \
@@ -428,8 +411,6 @@ async fn cash_snapshots(pool: &PgPool) -> Vec<(chrono::NaiveDate, Decimal)> {
     .unwrap()
 }
 
-/// A provider that last read the bank days ago returns that day's balances:
-/// they are stamped on that day, and a holding closed by that sync closes then.
 #[gripsou_core::testkit::db_test]
 async fn snapshots_are_dated_when_the_bank_was_last_read(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -501,9 +482,7 @@ async fn a_read_day_in_the_future_is_today(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// #58: the bank can't be reached for a few days and the provider keeps
-/// returning its last balance. Nothing false is saved, and once it's repaired
-/// the stretch is rebuilt from the transactions it catches up on.
+/// #58: the bank is unreachable and the provider keeps returning its last balance.
 #[gripsou_core::testkit::db_test]
 async fn an_outage_is_rebuilt_from_transactions_once_repaired(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -517,7 +496,6 @@ async fn an_outage_is_rebuilt_from_transactions_once_repaired(pool: PgPool) -> a
         holdings: vec![cash_holding("acct-1", Decimal::new(10000, 2))],
         ..Default::default()
     };
-    // The last good read, then daily syncs while the bank is unreachable.
     for _ in 0..3 {
         ingest(&pool, conn_id, &stale).await?;
     }

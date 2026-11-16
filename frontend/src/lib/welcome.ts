@@ -1,8 +1,7 @@
 import { browserLanguage } from "../i18n/browserLanguage";
 import { DEFAULT_PREFS, type UserPrefs } from "../api/wire";
 
-/** Language and time zone as the browser reports them. Browsers expose no
- *  currency, so that one stays at its default (EUR). */
+/** Browsers expose no currency, so that stays at its default. */
 export function browserPrefs(
   languages?: readonly string[],
   timeZone: string = Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -13,8 +12,6 @@ export function browserPrefs(
   };
 }
 
-/** The welcome screen's starting prefs: language and time zone still at their
- *  defaults take the browser's; anything the user already chose is kept. */
 export function prefillFromBrowser(
   prefs: UserPrefs,
   detected: ReturnType<typeof browserPrefs> = browserPrefs(),

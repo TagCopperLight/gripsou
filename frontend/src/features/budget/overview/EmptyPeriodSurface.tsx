@@ -3,10 +3,7 @@ import { CalendarX } from "lucide-react";
 
 import { Surface } from "../../../ui/Surface";
 
-/** Replaces the Sankey, the breakdown and the trend wholesale
- *  when the period has nothing in it. The figures above stay: zero is a true
- *  statement about the period, not a missing one. The month line's caret is
- *  the way back. */
+/** Replaces the Sankey, breakdown and trend when the period has nothing in it. */
 export function EmptyPeriodSurface() {
   const { t } = useTranslation();
   return (

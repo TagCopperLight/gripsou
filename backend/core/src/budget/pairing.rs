@@ -1,16 +1,8 @@
-//! The budget pairing pass, run inside every ingest: find the two halves of a movement
-//! between the user's own accounts and mark them as one internal transfer, so
-//! they stop showing up as income and expense in every chart.
+//! The budget pairing pass, run inside every ingest: marks the two halves of a movement between the
+//! user's own accounts as one internal transfer.
 //!
-//! The matching rule is deliberately timid. A false pair silently deletes real
-//! spending from the Sankey and every total; an unpaired row costs the user one
-//! correction. So: mutual nearest neighbour only, and **a tie pairs nothing**
-//! — unless the tied rows are interchangeable and as many on each side, which
-//! pair one-to-one. What that leaves gets one more look: a cluster whose rows
-//! can *all* be paired off, and only in one way (a chain through a middle
-//! account), pairs that way — see [`forced_pairs`]. Which rows are
-//! candidates at all — transfers, plus whatever the user already filed as
-//! counting toward nothing — is the candidate query's business.
+//! Matching is mutual nearest neighbour only; a tie pairs nothing, unless the tied rows are
+//! interchangeable and as many on each side. What is left gets one more look in [`forced_pairs`].
 
 use std::collections::{HashMap, HashSet};
 
@@ -22,10 +14,7 @@ use crate::budget::vocab::{CategoryKind, CategorySource, SystemKey};
 use crate::db::UserWriteTx;
 use crate::error::CoreError;
 
-/// How far apart the two halves may sit. Three days cover a weekend transfer
-/// that clears on Monday; five also catch a card top-up of another account
-/// that settles a few days after the top-up lands, and on real data let
-/// through no wrong pair that three days keep out.
+/// Five days, not three, also catch a card top-up that settles a few days late.
 const WINDOW_DAYS: i64 = 5;
 
 struct Candidate {
@@ -36,41 +25,22 @@ struct Candidate {
     currency: String,
 }
 
-/// Two candidates that could be swapped for each other in a nearest-neighbour
-/// tie without changing the outcome: every candidate is a transfer and callers
-/// only compare rows already sharing currency, amount and sign, so two on the
-/// same account are the same movement as far as any total can tell — whatever
-/// their date. [`forced_pairs`] merges rows on a stricter test (same account
-/// *and* same day), because it measures reach from one day per node.
+/// Two candidates that can be swapped in a nearest-neighbour tie: on one account they are the same
+/// movement for any total, whatever their date. [`forced_pairs`] uses a stricter test (same account and
+/// same day), because it measures reach from one day per node.
 fn interchangeable(a: &Candidate, b: &Candidate) -> bool {
     a.account_id == b.account_id
 }
 
-/// Works out this user's internal-transfer pairs from scratch, writes what
-/// changed, and returns how many pairs it wrote.
+/// Computes the user's pairs from scratch, writes only the difference, and returns how many pairs it
+/// wrote. Starting from scratch lets a correction take effect. A pair that no longer holds is unlinked,
+/// and a half whose category pairing set goes back to uncategorised; a category someone chose stays.
 ///
-/// From scratch, so a correction always takes effect: once the user files the
-/// row that was blocking a pair (an outside wallet's top-up that tied with a
-/// real transfer), or one that was wrongly paired, the next run sees the
-/// ledger as it is now rather than building on what an earlier run decided.
-/// Every candidate is read — paired or not — and matched again; then only the
-/// difference is written. A pair that no longer holds is unlinked, and a half
-/// whose category pairing set goes back to uncategorised, as if never paired;
-/// a category someone chose stays. A run that finds the pairs already there
-/// writes nothing. At a few thousand rows this is one read and, usually, no
-/// write.
+/// One round of mutual nearest neighbour can leave true pairs (X's nearest is Y, but Y's nearest is W),
+/// so rounds repeat in memory until one pairs nothing. Each round removes the rows it paired, so the
+/// loop terminates.
 ///
-/// A single round of mutual-nearest-neighbour matching can leave true pairs on
-/// the table: if X's nearest is Y but Y's own nearest is some other row W,
-/// neither X-Y nor X-W pairs that round, even though removing Y (paired off
-/// with W) may make W's former runner-up X's new, uncontested nearest match.
-/// So rounds repeat until one pairs nothing. The candidates are read once and
-/// the rounds run in memory, each removing the rows it paired, so the pool
-/// strictly shrinks and the loop always terminates; every pair is then
-/// written in one statement.
-///
-/// A category the user chose is never changed: a row they filed in a neutral
-/// category may gain or lose a partner, but keeps that category.
+/// A row in a neutral category may gain or lose a partner but keeps its category.
 pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, CoreError> {
     let user_id = tx.user_id();
     let rows = sqlx::query!(
@@ -81,33 +51,21 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
                t.amount      as "amount!",
                a.currency    as "currency!",
                t.transfer_pair_id
-        -- The cash leg of a buy/sell is the lot's record, already out of
-        -- every budget total, and it mirrors across a broker's cash and
-        -- portfolio accounts: pairing those copies would mean nothing.
+        -- The cash leg of a buy/sell is the lot's record and mirrors across a broker's accounts: pairing those
+        -- copies would mean nothing.
         from budget_transactions($1) t
         join account a on a.id = t.account_id
         left join budget_category c on c.id = t.budget_category_id
         where t.amount <> 0
           and (
-              -- A transfer whose category pairing may still decide: an empty
-              -- slot, an AI guess nobody has looked at yet, or a row pairing
-              -- filed (paired now, to be matched again, or the half left
-              -- when the user recategorised its partner).
+              -- A transfer whose category pairing may still decide: empty, an unreviewed AI guess, or filed by pairing.
               --
-              -- Only transfers: matching is by amount and date alone, so any
-              -- other type lets a coincidence through — a card payment equal
-              -- to a top-up arriving on another account, a friend's deposit
-              -- equal to a transfer leaving, a dividend matched with its own
-              -- mirror on a broker's other account. Measured on real data,
-              -- opening this to every type paired more coincidences than
-              -- transfers, and the extra rows' ties blocked good pairs.
+              -- Only transfers: other types matched on amount and date alone pair coincidences, and their ties block
+              -- good pairs.
               (t.type = 'transfer'
                and not budget_user_chose(t.category_source, t.category_reviewed_at))
-              -- Any row, of any type and whoever filed it, already in a
-              -- neutral category: someone said it counts toward nothing, so
-              -- pairing it hides nothing that was counted. This is what
-              -- catches a real transfer the provider labels a deposit or a
-              -- card payment, once the user has filed it.
+              -- Any row already in a neutral category: pairing it hides nothing that was counted. This catches a real
+              -- transfer the provider labels a deposit or card payment, once the user has filed it.
               or c.kind = $2
           )
         order by t.spent_on
@@ -134,11 +92,8 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
     let mut pairs: Vec<(Uuid, Uuid)> = vec![];
     loop {
         let mut round = nearest_pairs(&candidates);
-        // Nearest-neighbour matching has converged. What it leaves is mostly
-        // chains through a middle account (savings → deposit → checking account
-        // the same day): every row ties there, yet only one pairing explains
-        // them all. Tried only once the rounds above stop finding pairs, so
-        // the nearest-in-time preference always gets first say.
+        // The rounds have converged. What is left is mostly chains through a middle account (every row ties,
+        // yet one pairing explains them all). Tried last so nearest-in-time gets first say.
         if round.is_empty() {
             round = forced_pairs(&candidates);
         }
@@ -153,11 +108,8 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
     let links: Vec<(Uuid, Uuid)> = pairs.iter().flat_map(|&(o, i)| [(o, i), (i, o)]).collect();
     let kept: Vec<Uuid> = links.iter().map(|&(id, _)| id).collect();
 
-    // Pairs this run did not find again. Every paired row is a candidate (its
-    // category is pairing's, or neutral: a write to anything else unlinks
-    // it), but the statement doesn't rely on that and takes every paired row
-    // of the user's outside `kept`. Clearing the source in the same statement
-    // keeps the partner-deleted trigger out of it.
+    // Pairs this run did not find again: every paired row of the user outside `kept`. Clearing the source
+    // in the same statement keeps the partner-deleted trigger out of it.
     sqlx::query!(
         r#"
         update transaction t
@@ -184,11 +136,8 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
     if ids.is_empty() {
         return Ok(0);
     }
-    // A category the user chose (set, or accepted in review) is kept: only
-    // the link is added. Every other row becomes a pairing-set internal
-    // transfer, and the AI's confidence and review stamp go with the guess
-    // they described — left behind they would read as a reviewed transfer at
-    // 27 %.
+    // A category the user chose is kept: only the link is added. Every other row becomes a pairing-set
+    // internal transfer, and the AI's confidence and review stamp go with the guess they described.
     sqlx::query!(
         r#"
         update transaction t
@@ -217,13 +166,10 @@ pub async fn pair_internal_transfers(tx: &mut UserWriteTx<'_>) -> Result<usize, 
     .execute(&mut **tx)
     .await?;
 
-    // A moved pair writes both of its rows, as a new one does.
     Ok(ids.len() / 2)
 }
 
-/// Candidates grouped by (currency, |amount|): only rows inside one group can
-/// ever pair, which keeps the comparison quadratic in the size of a group
-/// rather than of the ledger.
+/// Only rows in one group can pair, so comparison cost follows a group, not the ledger.
 fn groups(candidates: &[Candidate]) -> impl Iterator<Item = Vec<&Candidate>> {
     let mut groups: HashMap<(&str, Decimal), Vec<&Candidate>> = HashMap::new();
     for c in candidates {
@@ -235,28 +181,17 @@ fn groups(candidates: &[Candidate]) -> impl Iterator<Item = Vec<&Candidate>> {
     groups.into_values()
 }
 
-/// One round: every mutual-nearest-neighbour pair among `candidates`. See
-/// [`pair_internal_transfers`] for why this needs to repeat.
 fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
     let mut pairs: Vec<(Uuid, Uuid)> = vec![];
     for group in groups(candidates) {
         let outs: Vec<&&Candidate> = group.iter().filter(|c| c.amount < Decimal::ZERO).collect();
         let ins: Vec<&&Candidate> = group.iter().filter(|c| c.amount > Decimal::ZERO).collect();
 
-        // The nearest counterpart of each row, or None when it has no
-        // candidate or when two candidates genuinely tie.
+        // The nearest counterpart of each row, or None when there is none or two genuinely tie.
         //
-        // A tie between interchangeable candidates (see `interchangeable`) is
-        // not ambiguous *when the row choosing has as many twins of its own*
-        // (same account, near the tied group): two transfers out of A and two
-        // into B pair the same way whichever goes with which. Those resolve to
-        // the lowest id, so both sides agree on one pick; the convergence loop
-        // in `pair_internal_transfers` pairs the next one on the next round.
-        //
-        // The group sizes must match. Otherwise a lone row that merely shares
-        // the amount (a -10 transfer to a friend two days before two +10
-        // top-ups) would claim one of them — the tie between them is what
-        // blocks it.
+        // A tie between interchangeable candidates is not ambiguous when the chooser has as many twins (same
+        // account, near the tied group). Those resolve to the lowest id so both sides agree on one pick.
+        // The group sizes must match, or a lone row that merely shares the amount would claim one of them.
         let nearest =
             |from: &Candidate, own: &[&&Candidate], others: &[&&Candidate]| -> Option<Uuid> {
                 let mut best: Option<(i64, &Candidate)> = None;
@@ -297,8 +232,7 @@ fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
                     return None;
                 }
                 if tie_size > 1 {
-                    // `from`'s own twins: same account, and close enough to the
-                    // tied group to be one of its counterparts.
+                    // `from`'s twins: same account, close to the tied group.
                     let near = best.map(|(_, c)| c.day).unwrap_or(from.day);
                     let twins = own
                         .iter()
@@ -323,8 +257,7 @@ fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
             .filter_map(|i| nearest(i, &ins, &outs).map(|pick| (i.id, pick)))
             .collect();
 
-        // Mutual nearest only: both halves must have chosen each other. That is
-        // what stops one popular counterpart from being claimed twice.
+        // Both halves must have chosen each other, so one popular counterpart is not claimed twice.
         for (out_id, in_id) in out_choice {
             if in_choice.get(&in_id) == Some(&out_id) {
                 pairs.push((out_id, in_id));
@@ -337,27 +270,18 @@ fn nearest_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
 
 /// Pairs that every consistent explanation of a cluster agrees on.
 ///
-/// Rows sharing currency and amount are linked when they could be two halves
-/// of one transfer (opposite signs, different accounts, within reach in
-/// time). A cluster of linked rows is acted on only when *every* row in it
-/// can be paired off — a leftover row means one of them is money leaving or
-/// arriving from outside, and nothing says which, so nothing pairs. Within
-/// such a cluster, a link pairs only when no complete pairing of the cluster
-/// can do without it.
+/// Rows sharing currency and amount are linked when they could be two halves of one transfer. A cluster
+/// is acted on only when every row in it can be paired off; within it, a link pairs only when no complete
+/// pairing can do without it.
 ///
-/// Reach grows a day at a time up to [`WINDOW_DAYS`], so same-day chains are
-/// settled before a wider window could tangle them with the next day's.
+/// Reach grows a day at a time up to [`WINDOW_DAYS`], so same-day chains settle first.
 ///
-/// Rows on one account on one day are identical for this purpose, so
-/// they are counted as one node of that many rows: two identical chains the
-/// same day pair, where treating each row apart would see two equally good
-/// ways to do it and pair nothing. Stricter than [`interchangeable`], which
-/// ignores the date: a node's reach is measured from its single day.
+/// Rows on one account on one day count as one node, so two identical same-day chains pair instead of
+/// tying. Stricter than [`interchangeable`], which ignores the date.
 fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
     let mut pairs = vec![];
     for group in groups(candidates) {
-        // Nodes: identical rows, each list sorted by id so both runs
-        // of a converged pass pick the same rows.
+        // Nodes: identical rows, sorted by id so both runs of a converged pass pick the same rows.
         let mut outs: Vec<Vec<&Candidate>> = vec![];
         let mut ins: Vec<Vec<&Candidate>> = vec![];
         let mut by_key: HashMap<(bool, Uuid, NaiveDate), usize> = HashMap::new();
@@ -382,8 +306,7 @@ fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
         for reach in 0..=WINDOW_DAYS {
             let found = forced_in_group(&outs, &ins, reach);
             if !found.is_empty() {
-                // The next round starts again at same-day reach on what is
-                // left.
+                // The next round starts again at same-day reach.
                 pairs.extend(found);
                 break;
             }
@@ -392,7 +315,6 @@ fn forced_pairs(candidates: &[Candidate]) -> Vec<(Uuid, Uuid)> {
     pairs
 }
 
-/// [`forced_pairs`] for one currency-and-amount group at one reach.
 fn forced_in_group(
     outs: &[Vec<&Candidate>],
     ins: &[Vec<&Candidate>],
@@ -444,8 +366,7 @@ fn forced_in_group(
             continue;
         }
 
-        // How many rows a link must carry in every complete pairing: what
-        // the cluster loses when that link is taken away.
+        // Rows a link must carry in every complete pairing: what the cluster loses without it.
         let mut taken_out = vec![0usize; outs.len()];
         let mut taken_in = vec![0usize; ins.len()];
         for (skip, &(o, i)) in cluster_links.iter().enumerate() {
@@ -460,10 +381,8 @@ fn forced_in_group(
     pairs
 }
 
-/// The most rows `links` can pair at once, each node pairing at most as many
-/// times as it has rows; `skip` leaves one link out. A max flow by
-/// augmenting paths — clusters are a handful of nodes, so nothing cleverer is
-/// worth it.
+/// The most rows `links` can pair at once, each node pairing at most as many times as it has rows;
+/// `skip` leaves one link out. Max flow by augmenting paths.
 fn max_pairing(
     outs: &[Vec<&Candidate>],
     ins: &[Vec<&Candidate>],
@@ -472,14 +391,12 @@ fn max_pairing(
 ) -> usize {
     let mut out_left: Vec<usize> = outs.iter().map(Vec::len).collect();
     let mut in_left: Vec<usize> = ins.iter().map(Vec::len).collect();
-    // Rows currently sent along each link; undone when a path walks it back.
     let mut flow = vec![0usize; links.len()];
     let mut total = 0;
 
     loop {
-        // Breadth-first from every out node with rows to spare, towards any
-        // in node with room. `came_from` records the link used to reach an
-        // in node (forwards) or an out node (backwards, undoing flow).
+        // Breadth-first from every out node with rows to spare to any in node with room. `came_from` records
+        // the link used to reach a node.
         let mut out_from: Vec<Option<usize>> = vec![None; outs.len()];
         let mut in_from: Vec<Option<usize>> = vec![None; ins.len()];
         let mut out_seen: Vec<bool> = out_left.iter().map(|&l| l > 0).collect();

@@ -23,8 +23,7 @@ export function useConnections() {
   return useQuery({
     queryKey: keys.connections(),
     queryFn: ({ signal }) => api("GET /connections", { signal }),
-    // Check idle connections too: scheduled syncs and other tabs may finish
-    // without this page ever seeing a running state.
+    // Idle connections too: scheduled syncs and other tabs may finish unseen.
     refetchInterval: (query) =>
       anySyncing(query.state.data) ? 2000 : 30_000,
   });
@@ -55,8 +54,7 @@ export function useSyncAll() {
   });
 }
 
-/** A "Sync all" request is on its way, from wherever it was started: it syncs
- *  every connection, so each one shows it from the click on. */
+/** A "Sync all" request is on its way, from wherever it started. */
 export function useSyncAllPending() {
   return useIsMutating({ mutationKey: SYNC_ALL }) > 0;
 }
@@ -80,8 +78,7 @@ export function useCompleteConnection() {
   return useMutation({
     mutationFn: ({ connectionId, params }: CompleteConnectionReq) =>
       api("POST /connections/complete", { body: { connectionId, params } }),
-    // A completed connect kicks an initial sync server-side, so the poll that
-    // `afterSyncRequested` starts is what eventually refreshes the data views.
+    // A completed connect starts an initial sync server-side; the poll from `afterSyncRequested` refreshes the data views.
     onSuccess: () => afterSyncRequested(qc),
     onError: () => afterConnectFailed(qc),
   });
@@ -91,8 +88,7 @@ export function useDeleteConnection() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api("DELETE /connections/:id", { params: { id } }),
-    // Deleting cascades to the connection's accounts and holdings immediately,
-    // so every dashboard figure changes with it — not just the list.
+    // Deleting cascades to accounts and holdings, so every dashboard figure changes.
     onSuccess: () => afterConnectionDeleted(qc),
   });
 }

@@ -9,11 +9,7 @@ import { ShellSkeleton } from "./shell/RootLayout";
 function InnerApp() {
   const auth = useAuth();
 
-  // Route guards (beforeLoad) read auth from the router context, which only
-  // refreshes on render — they don't re-run by themselves. When auth flips
-  // (login/logout, or finishing the welcome screen), invalidate so the current
-  // match re-evaluates its guard and redirects, instead of leaving the user on
-  // a now-wrong page.
+  // Route guards only re-run on render, so invalidate when auth flips to make the current match redirect.
   useEffect(() => {
     void router.invalidate();
   }, [auth.isBootstrapping, auth.isAuthenticated, auth.user?.welcomeDone]);
@@ -21,18 +17,14 @@ function InnerApp() {
   return <RouterProvider router={router} context={{ auth }} />;
 }
 
-/** The page at `pathname` can be drawn, and load its data, while a saved
- *  session is checked: it needs nothing of the user. Any other waits on the
- *  frame, as which page shows depends on the session (a redirect, the
- *  welcome screen, an admin's page). */
+/** The page at `pathname` needs nothing of the user, so it can draw and load while a saved session is checked. */
 function drawnBeforeSession(pathname: string): boolean {
   return router.matchRoutes(pathname).some((m) => m.staticData.beforeSession);
 }
 
 export function App() {
   const auth = useAuth();
-  // Not while bootstrapping: a stored token the server refuses is cleared by
-  // the bootstrap itself, before there is a page to leave.
+  // A stored token the server refuses is cleared by the bootstrap itself.
   useEffect(() => {
     if (auth.isBootstrapping) return;
     setUnauthorizedHandler(() => {

@@ -11,14 +11,8 @@ type SelectProps = {
   onChange: (value: string) => void;
   options: SelectOption[];
   className?: string;
-  /** `sunken` is for a Select sitting on an already-lighter nested panel: the
-   *  control goes one step darker so it still reads as a control. Its hover
-   *  skips past the panel's own `surface-2` to `surface-3`: hovering onto the
-   *  panel colour would make the control vanish into its background. Passed as
-   *  a prop, not a caller class: two `bg-*` utilities of equal specificity
-   *  resolve by stylesheet order, so a caller-supplied one would lose. */
+  /** For a Select on a lighter nested panel. A prop, not a caller class: equal-specificity `bg-*` utilities resolve by stylesheet order. */
   tone?: "default" | "sunken";
-  /** Lets a `<label htmlFor>` name the control. */
   id?: string;
   disabled?: boolean;
 };

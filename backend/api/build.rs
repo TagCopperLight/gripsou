@@ -1,5 +1,4 @@
-// The version shown in the UI. A Docker build has no .git, so the host passes
-// GRIPSOU_VERSION in (scripts/build-image.sh); a local build asks git directly.
+// Docker builds have no .git: the host passes GRIPSOU_VERSION (scripts/build-image.sh), else ask git.
 fn main() {
     let version = std::env::var("GRIPSOU_VERSION")
         .ok()
@@ -9,10 +8,7 @@ fn main() {
 
     println!("cargo:rustc-env=GRIPSOU_VERSION={version}");
     println!("cargo:rerun-if-env-changed=GRIPSOU_VERSION");
-    // Best-effort freshness: the reflog catches new commits, HEAD catches
-    // branch switches. Asked of git, as a worktree keeps both outside `.git/`.
-    // A new tag on the current commit, or dirtying the tree without
-    // committing, changes neither: touch this file to refresh the version.
+    // A worktree keeps HEAD and the reflog outside `.git/`, so ask git. A new tag or a dirty tree changes neither: touch this file.
     for path in ["HEAD", "logs/HEAD"] {
         if let Some(file) = git(&["rev-parse", "--path-format=absolute", "--git-path", path]) {
             println!("cargo:rerun-if-changed={file}");

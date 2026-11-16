@@ -1,7 +1,3 @@
-//! Inputs of the annualised return: every non-cash position of a user (held
-//! ones valued by `valuation::holdings`, sold-out ones at zero) and the cash flows
-//! that built them, each converted to the reporting currency on its own day.
-
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -10,7 +6,6 @@ use crate::error::CoreError;
 use crate::returns::{CashFlow, Position};
 
 pub struct ReturnInputs {
-    /// The user's today (`user_today`), the day the current value is taken.
     pub today: NaiveDate,
     pub positions: Vec<Position>,
     pub flows: Vec<CashFlow>,
@@ -19,8 +14,6 @@ pub struct ReturnInputs {
 pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, CoreError> {
     let today = crate::repo::prefs::today(pool, user_id).await?;
 
-    // Held positions: the Holdings table's own rows, so the value is the figure
-    // the user already sees there (one valuation path).
     let mut positions: Vec<Position> = crate::repo::valuation::holdings(pool, user_id)
         .await?
         .into_iter()
@@ -35,9 +28,7 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         })
         .collect();
 
-    // Sold-out positions: `holdings` skips quantity 0, but their lots are part
-    // of what the money earned. Worth nothing today, complete when the sells
-    // match the buys.
+    // `holdings` skips quantity 0, but sold-out lots are part of what the money earned.
     let sold_out = sqlx::query!(
         r#"
         select h.id as "holding_id!", h.account_id as "account_id!", i.name as "name!",
@@ -63,10 +54,8 @@ pub async fn load(pool: &sqlx::PgPool, user_id: Uuid) -> Result<ReturnInputs, Co
         fx_missing: false,
     }));
 
-    // Lots and dividends, each converted on its own day from the account's
-    // currency into the reporting currency. A NULL amount means a rate is
-    // missing for that day. A dividend's day is the day it reached the
-    // balance, as the backfill dates every cash move.
+    // A NULL amount means a rate is missing for that day. A dividend's day is the day it
+    // reached the balance, as the backfill dates every cash move.
     let rows = sqlx::query!(
         r#"
         select l.holding_id as "holding_id?", h.account_id as "account_id!",

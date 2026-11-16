@@ -1,5 +1,4 @@
-//! The website of each bank Powens connects, for its logo. Powens names a
-//! bank by its connector uuid (`connection.institution_key`).
+//! Bank website by Powens connector uuid (`connection.institution_key`), for its logo.
 
 // To add a bank, find its connector uuid + name with:
 //   select distinct institution_key, institution_name

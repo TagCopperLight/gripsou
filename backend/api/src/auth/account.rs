@@ -1,6 +1,3 @@
-//! The signed-in user's own account: profile, password, sessions, logout
-//! and deletion.
-
 use crate::error::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -26,7 +23,6 @@ pub async fn me(
     Ok(Json(dto::SessionUser::from_profile(&profile)))
 }
 
-/// Mark the post-invite welcome screen finished (or skipped). Idempotent.
 pub async fn finish_welcome(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -238,7 +234,6 @@ mod tests {
                 .current
         );
 
-        // revoke the other one
         revoke_session(
             State(pool.clone()),
             auth::AuthUser {
@@ -292,7 +287,6 @@ mod tests {
         .await
         .expect("change ok");
 
-        // other session gone, current still valid
         assert!(
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&other))
                 .await
@@ -315,7 +309,6 @@ mod tests {
 
     #[gripsou_core::testkit::db_test]
     async fn delete_account_requires_the_password(pool: PgPool) {
-        // A non-admin user, so the last-admin guard is not in play here.
         seed_user_with_password(&pool, "a@t.local", PASSWORD, Role::User).await;
         let token = login_token(&pool, "a@t.local", PASSWORD).await;
         let session =
@@ -328,7 +321,6 @@ mod tests {
             session_id: session.id,
         };
 
-        // A wrong password is rejected and the user/session survive.
         let bad = delete_account(
             State(pool.clone()),
             State(throttles()),
@@ -351,7 +343,6 @@ mod tests {
                 .is_some()
         );
 
-        // The right password deletes the user; the session is gone via FK cascade.
         delete_account(
             State(pool.clone()),
             State(throttles()),
@@ -394,7 +385,6 @@ mod tests {
             session_id: session.id,
         };
 
-        // Sole admin: deletion is refused even with the right password.
         let err = delete_account(
             State(pool.clone()),
             State(throttles()),
@@ -417,7 +407,6 @@ mod tests {
                 .is_some()
         );
 
-        // With a second admin present, the first admin can delete itself.
         seed_admin(&pool, "boss2@t.local").await;
         delete_account(
             State(pool.clone()),
@@ -456,7 +445,6 @@ mod tests {
             session_id: session.id,
         };
 
-        // A successful edit returns the refreshed profile and persists.
         let updated = update_profile(
             State(pool.clone()),
             auth::AuthUser {
@@ -483,7 +471,6 @@ mod tests {
         .unwrap();
         assert_eq!(me_resp.0.email, "new@t.local");
 
-        // Empty fields are rejected.
         let bad = update_profile(
             State(pool.clone()),
             auth::AuthUser {
@@ -499,7 +486,6 @@ mod tests {
         .unwrap_err();
         assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
 
-        // Colliding with another user's email returns 409.
         let conflict = update_profile(
             State(pool.clone()),
             auth::AuthUser {
@@ -519,7 +505,6 @@ mod tests {
     #[gripsou_core::testkit::db_test]
     async fn change_password_requires_correct_current(pool: PgPool) {
         let id = seed_user_with_password(&pool, "a@t.local", "old-pass", Role::Admin).await;
-        // Need a real session_id for change_password
         let token = login_token(&pool, "a@t.local", "old-pass").await;
         let session =
             gripsou_core::repo::session::find_valid_by_hash(&pool, &auth::hash_token(&token))
@@ -577,7 +562,6 @@ mod tests {
         assert!(can_login(&pool, "c@t.local", "old-password").await);
     }
 
-    /// "Sign out everywhere else" keeps the caller's own session alive.
     #[gripsou_core::testkit::db_test]
     async fn revoke_other_sessions_keeps_current(pool: PgPool) {
         seed_user(&pool, "a@t.local").await;
@@ -592,7 +576,6 @@ mod tests {
         assert!(session_alive(&pool, session_id).await);
     }
 
-    /// "Sign out everywhere else" revokes the caller's other sessions.
     #[gripsou_core::testkit::db_test]
     async fn revoke_other_sessions_revokes_the_others(pool: PgPool) {
         seed_user(&pool, "a@t.local").await;
@@ -605,7 +588,6 @@ mod tests {
         assert!(!session_alive(&pool, other.session_id).await);
     }
 
-    /// "Sign out everywhere else" never touches another user's sessions.
     #[gripsou_core::testkit::db_test]
     async fn revoke_other_sessions_spares_other_users(pool: PgPool) {
         seed_user(&pool, "a@t.local").await;

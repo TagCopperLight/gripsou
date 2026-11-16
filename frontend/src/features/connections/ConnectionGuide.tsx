@@ -4,8 +4,6 @@ import type { EnabledProvider } from "../../api/wire";
 import { PROVIDER_GUIDE } from "./connectionGuide";
 import { Bone, Skeleton, TextBone } from "../../ui/Skeleton";
 
-/** How a bank connection works, before the user is sent to the provider: what
- *  gripsou can do with the data, then each enabled provider's own points. */
 export function ConnectionGuide({ providers, loading = false }: { providers: EnabledProvider[]; loading?: boolean }) {
   const { t } = useTranslation();
   if (loading) return <GuideSkeleton />;
@@ -25,8 +23,6 @@ export function ConnectionGuide({ providers, loading = false }: { providers: Ena
   );
 }
 
-/** The guide while the enabled providers load: the general point and the
- *  two of the one provider most servers have. */
 function GuideSkeleton() {
   return (
     <Skeleton className="flex flex-col gap-5">
@@ -47,7 +43,6 @@ function GuideSkeleton() {
 function GuideRow({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
   return (
     <div className="flex gap-3.5">
-      {/* In a square, as on the Security rows: each point stands on its own. */}
       <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-fg-dim">
         <Icon className="size-4.5" strokeWidth={2} />
       </span>

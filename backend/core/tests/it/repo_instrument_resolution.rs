@@ -79,11 +79,7 @@ fn equity_ref(symbol: &str) -> InstrumentRef {
     }
 }
 
-/// Regression: a symbol-only instrument must resolve to the SAME row on every
-/// sync, whatever the price and composition passes have written since. If
-/// those passes rewrote `symbol` and `kind`, the next sync would miss the
-/// natural key, insert a second instrument and a second holding, and ingest's
-/// close loop would zero the original, destroying that position's history.
+/// If price or composition passes rewrote `symbol` or `kind`, the next sync would duplicate the instrument and ingest's close loop would zero the original position.
 #[gripsou_core::testkit::db_test]
 async fn symbol_only_instrument_survives_resolution_and_composition(pool: PgPool) {
     let mut conn = pool.acquire().await.unwrap();

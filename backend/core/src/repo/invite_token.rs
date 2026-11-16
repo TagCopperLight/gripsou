@@ -1,6 +1,4 @@
-//! Invite / password-reset tokens. The raw token is never stored — only its
-//! SHA-256 hash (base64url) — mirroring session tokens. Rows expire
-//! ([`TTL_HOURS`]) and are single-use (`used_at`).
+//! Only the SHA-256 hash (base64url) of the raw token is stored.
 
 use uuid::Uuid;
 
@@ -11,26 +9,19 @@ use crate::error::CoreError;
 use crate::text_enum::text_enum;
 
 text_enum! {
-    /// `invite_token.type`.
     pub enum TokenKind {
         Invite = "invite",
-        /// A password reset for an existing user.
         Reset = "reset",
     }
 }
 
-/// How long a link stays redeemable after it is created.
 pub const TTL_HOURS: i32 = 24;
 
-/// A token that is currently redeemable: row exists, unused, unexpired.
 pub struct ValidToken {
     pub token_type: TokenKind,
-    /// The current email of the user a reset is for. `None` for invites.
     pub email: Option<String>,
 }
 
-/// Look up a redeemable token by its stored (hashed) value. Read-only — does
-/// not consume. `None` means unknown, expired, or already used.
 pub async fn find_valid(
     pool: &sqlx::PgPool,
     token_hash: &str,
@@ -48,11 +39,8 @@ pub async fn find_valid(
     Ok(row)
 }
 
-/// Redeem an invite token: create the user and consume the token atomically.
-/// `Ok(None)` = token not valid (unknown/expired/used/wrong type) and nothing
-/// changed. A duplicate email returns `Err(unique violation)` and the whole
-/// transaction rolls back, so the token is left unconsumed for a retry with a
-/// different address.
+/// A duplicate email rolls the whole transaction back, leaving the token unconsumed for a
+/// retry.
 pub async fn redeem_invite(
     pool: &sqlx::PgPool,
     token_hash: &str,
@@ -61,7 +49,7 @@ pub async fn redeem_invite(
     password_hash: &str,
 ) -> Result<Option<Uuid>, CoreError> {
     let mut tx = pool.begin().await?;
-    // FOR UPDATE locks the row so two concurrent redeems can't both succeed.
+    // FOR UPDATE: two concurrent redeems can't both succeed.
     let valid = sqlx::query_scalar!(
         r#"select 1 from invite_token
             where token = $1 and type = $2
@@ -73,7 +61,7 @@ pub async fn redeem_invite(
     .fetch_optional(&mut *tx)
     .await?;
     if valid.is_none() {
-        return Ok(None); // tx rolls back on drop; nothing was changed.
+        return Ok(None);
     }
     let user_id = sqlx::query_scalar!(
         r#"insert into users (email, name, password_hash, role)
@@ -84,7 +72,7 @@ pub async fn redeem_invite(
         Role::User as Role,
     )
     .fetch_one(&mut *tx)
-    .await?; // unique-email violation propagates → rollback, token untouched.
+    .await?;
     sqlx::query!(
         "update invite_token set used_at = now() where token = $1",
         token_hash,
@@ -95,10 +83,6 @@ pub async fn redeem_invite(
     Ok(Some(user_id))
 }
 
-/// Redeem a reset token: set the new password, consume the token, revoke every
-/// existing session of the user and turn off their second factors, all
-/// atomically. `Ok(None)` if the token is invalid (deleting the user deletes
-/// their links).
 pub async fn redeem_reset(
     pool: &sqlx::PgPool,
     token_hash: &str,
@@ -132,15 +116,11 @@ pub async fn redeem_reset(
     .execute(&mut *tx)
     .await?;
     crate::repo::session::delete_all(&mut *tx, user_id, None).await?;
-    // Whoever holds a reset link has proven control the second factor was
-    // meant to guard (an admin vouched for them), so the reset turns it off.
     let cleared = mfa::clear_all(&mut tx, user_id).await?;
     tx.commit().await?;
     Ok(Some((user_id, cleared)))
 }
 
-/// Insert a one-time token, redeemable for [`TTL_HOURS`]. `user_id` is the
-/// user a reset is for, `None` for invites (the invitee creates their own).
 pub async fn create(
     pool: &sqlx::PgPool,
     kind: TokenKind,
@@ -186,7 +166,6 @@ mod tests {
         assert_eq!(found.token_type, TokenKind::Reset);
         assert_eq!(found.email.as_deref(), Some("u@t.local"));
 
-        // Unknown, expired, and used tokens all read as None.
         assert!(find_valid(&pool, "nope").await.unwrap().is_none());
         create(&pool, TokenKind::Invite, None, admin, "tok-exp")
             .await
@@ -217,7 +196,7 @@ mod tests {
 
     #[crate::testkit::db_test]
     async fn redeem_reset_clears_second_factors_of_that_user_only(pool: PgPool) {
-        let admin = seed_admin(&pool).await; // a@t.local
+        let admin = seed_admin(&pool).await;
         let other = crate::testkit::seed_user_email(&pool, "b@t.local").await;
         for (who, cred) in [(admin, 1_u8), (other, 2_u8)] {
             crate::repo::mfa::upsert_unconfirmed_totp(&pool, who, "s")
@@ -255,9 +234,6 @@ mod tests {
         assert_eq!(theirs.recovery_remaining, 2);
     }
 
-    /// The link follows the user, not the address it was made for: it still
-    /// works after an email change, and the account that takes the old
-    /// address later is never reset by it.
     #[crate::testkit::db_test]
     async fn redeem_reset_follows_the_user_through_an_email_change(pool: PgPool) {
         let admin = seed_admin(&pool).await;

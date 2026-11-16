@@ -1,10 +1,7 @@
-// Deterministic helpers for the fake dataset: the same data on every reset.
-
 import { RANGE_DAYS_BACK, type Range } from "../../src/api/wire.ts";
 
 const DAY_MS = 86_400_000;
 
-/** Today at UTC midnight, the anchor every generated date counts back from. */
 export const TODAY = Math.floor(Date.now() / DAY_MS) * DAY_MS;
 
 export function daysAgo(n: number): number {
@@ -21,7 +18,6 @@ export function dayOf(iso: string): number {
 
 export { DAY_MS };
 
-/** mulberry32: a tiny seeded PRNG. */
 export function rng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
@@ -37,10 +33,8 @@ export function money(n: number, decimals = 2): string {
   return n.toFixed(decimals);
 }
 
-/** Euros per dollar, the dataset's one exchange rate. */
 export const EUR_PER_USD = 0.92;
 
-/** Days back of a chart range, as the backend's `Range::window`. */
 export function rangeDays(range: Range): number {
   return RANGE_DAYS_BACK[range]
     ?? Math.round((TODAY - Date.UTC(new Date(TODAY).getUTCFullYear(), 0, 1)) / DAY_MS);

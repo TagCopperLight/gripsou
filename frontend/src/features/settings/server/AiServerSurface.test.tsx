@@ -26,7 +26,6 @@ describe("AiServerSurface", () => {
   it("offers a provider whose key is set, and pre-fills the model", async () => {
     const patches = stub(["jev"]);
     renderWithApp(<AiServerSurface />);
-    // Every choice is a visible radio segment.
     fireEvent.click(await screen.findByRole("radio", { name: "jev" }));
     await waitFor(() => expect(patches.at(-1)).toEqual({ provider: "jev", model: "jev-latest" }));
   });
@@ -53,7 +52,6 @@ describe("AiServerSurface", () => {
     expect(model).toHaveTextContent("jev-retired");
 
     fireEvent.click(model);
-    // The provider doesn't offer the saved model, but it stays listed beside the others.
     expect(screen.getByRole("button", { name: "jev-retired" })).toBeVisible();
     expect(screen.getByRole("button", { name: "jev-latest" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "jev-2" }));

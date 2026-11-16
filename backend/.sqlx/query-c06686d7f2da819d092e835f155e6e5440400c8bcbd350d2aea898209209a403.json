@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        select t.id          as \"id!\",\n               t.account_id  as \"account_id!\",\n               t.spent_on    as \"day!\",\n               t.amount      as \"amount!\",\n               a.currency    as \"currency!\",\n               t.transfer_pair_id\n        -- The cash leg of a buy/sell is the lot's record and mirrors across a broker's accounts: pairing those\n        -- copies would mean nothing.\n        from budget_transactions($1) t\n        join account a on a.id = t.account_id\n        left join budget_category c on c.id = t.budget_category_id\n        where t.amount <> 0\n          and (\n              -- A transfer whose category pairing may still decide: empty, an unreviewed AI guess, or filed by pairing.\n              --\n              -- Only transfers: other types matched on amount and date alone pair coincidences, and their ties block\n              -- good pairs.\n              (t.type = 'transfer'\n               and not budget_user_chose(t.category_source, t.category_reviewed_at))\n              -- Any row already in a neutral category: pairing it hides nothing that was counted. This catches a real\n              -- transfer the provider labels a deposit or card payment, once the user has filed it.\n              or c.kind = $2\n          )\n        order by t.spent_on\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "account_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "day!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "currency!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "account",
+            "name": "currency"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "transfer_pair_id",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      false,
+      null
+    ]
+  },
+  "hash": "c06686d7f2da819d092e835f155e6e5440400c8bcbd350d2aea898209209a403"
+}

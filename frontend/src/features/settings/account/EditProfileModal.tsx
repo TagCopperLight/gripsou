@@ -16,8 +16,6 @@ import { fileToAvatarDataUrl } from "../../../lib/avatar";
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 
-/** Picture, name and email. The picture is saved as soon as it is picked;
- *  name and email on Save. */
 export function EditProfileModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const id = useId();
@@ -44,7 +42,6 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
   const dirty = name !== (user?.name ?? "") || email !== (user?.email ?? "");
   const valid = name.trim() !== "" && EMAIL_RE.test(email);
   const canSave = dirty && valid && !updateProfile.isPending;
-  // The handler returns 409 when the new email collides with another account.
   const emailTaken = updateProfile.error instanceof ApiError && updateProfile.error.status === 409;
 
   const save = () => {

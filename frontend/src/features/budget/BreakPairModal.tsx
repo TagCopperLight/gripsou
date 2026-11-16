@@ -3,22 +3,15 @@ import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
 
 type BreakPairModalProps = {
-  /** How many transactions would be unlinked — the server's count, since a
-   *  multi-row write can hold rows the client has never loaded. */
+  /** The server's count: a multi-row write can hold rows the client never loaded. */
   count: number;
   busy?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 };
 
-/** Confirms dissolving one or more auto-paired internal transfers.
- *
- *  Pairing is a heuristic the user is allowed to overrule, but the correction
- *  is destructive in a way that is easy to miss: both halves lose the link, and
- *  the untouched half keeps its `Internal transfer` category while no longer
- *  netting against anything. This says so before the write rather than leaving
- *  it to be discovered.
- */
+/** Unlinking loses the link on both halves, and the untouched half keeps its `Internal transfer`
+ *  category while netting against nothing, so the modal says so before the write. */
 export function BreakPairModal({ count, busy = false, onConfirm, onClose }: BreakPairModalProps) {
   const { t } = useTranslation();
 

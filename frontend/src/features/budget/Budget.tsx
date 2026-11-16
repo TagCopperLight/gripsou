@@ -15,16 +15,11 @@ const MODE_PATHS = {
 
 type Mode = keyof typeof MODE_PATHS;
 
-/** The one Budget page. Modes live in the URL; the filters and the
- *  selection live in the provider, so they survive a mode switch.
- *  Review appears only while the queue is non-empty — and stays while the
- *  user is in it, so a queue drained in place can still show its success
- *  state instead of losing the selected segment. */
+/** The one Budget page. Modes live in the URL; filters and selection live in the provider. */
 export function Budget() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const matchRoute = useMatchRoute();
-  // A bare `/budget` is Overview, the same default the router redirects to.
   const mode = (["transactions", "review"] as const).find((m) => matchRoute({ to: MODE_PATHS[m] })) ?? "overview";
   const reviewCount = useAiStatus().data?.reviewCount ?? 0;
 
@@ -51,9 +46,7 @@ export function Budget() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title={t("nav.budget")}>
-        {/* The global SyncButton is pinned at the top-right of the page, outside
-         *  this row; `clear-sync-button` keeps the control clear of its box
-         *  instead of letting the two overlap. */}
+        {/* `clear-sync-button` keeps the control clear of the global SyncButton pinned top-right. */}
         <SegmentedControl<Mode>
           className="clear-sync-button"
           value={mode}

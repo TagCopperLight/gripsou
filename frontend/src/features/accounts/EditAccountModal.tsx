@@ -37,7 +37,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
   const dirty =
     trimmed !== account.name || typeKey !== account.typeKey || color !== account.color;
   const busy = update.isPending;
-  // Saving waits for the types: the current one may not be among them yet.
+  // The current type may not be among the types yet.
   const canSave = dirty && trimmed !== "" && !typesLoading;
   const previewColor = safeBudgetColor(color);
 
@@ -57,8 +57,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
       busy={busy}
       title={t("account.edit.title")}
       heading={
-        // The name as typed, and the bank under it: two accounts can share a
-        // name ("Compte courant") at different banks.
+        // Two accounts can share a name at different banks.
         <span className="flex min-w-0 flex-col">
           <span data-testid="account-preview" className="truncate">
             {trimmed || t("account.edit.title")}
@@ -68,7 +67,6 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
       }
       onClose={onClose}
       icon={
-        // The account's colour square, as on its row in the accounts list.
         <span
           className="flex size-10 shrink-0 items-center justify-center rounded-xl"
           style={{ backgroundColor: withAlpha(previewColor, 0.22) }}
@@ -101,7 +99,6 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
         </Field>
 
         <Field label={t("account.edit.type")} htmlFor="account-type">
-          {/* The current type's label is among the options still on their way. */}
           {typesLoading ? (
             <Skeleton>
               <Bone className="h-9.5 rounded-xl" />

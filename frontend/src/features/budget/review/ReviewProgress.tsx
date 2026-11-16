@@ -1,6 +1,5 @@
 import { Trans } from "react-i18next";
 
-/** The review queue's progress line, outside any surface. */
 export function ReviewProgress({ resolved, total }: { resolved: number; total: number }) {
   const pct = total === 0 ? 0 : Math.round((resolved / total) * 100);
   return (

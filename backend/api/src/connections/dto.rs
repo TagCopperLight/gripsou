@@ -1,11 +1,8 @@
-//! What the connection endpoints send and accept.
-
 use chrono::NaiveDate;
 use gripsou_providers::registry::{self, AccountKind, Providers};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// How the provider last reached the bank (`SyncHealth`).
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename = "SyncHealth")]
@@ -37,7 +34,6 @@ pub struct SyncAccount {
     pub name: String,
     pub color: String,
     pub type_key: String,
-    /// Null when the reader's currency has no rate today.
     pub value: Option<String>,
     pub last_sync_at: Option<i64>,
 }
@@ -65,9 +61,6 @@ pub struct ProviderGroup {
 }
 
 impl ProviderGroup {
-    /// Assemble the provider → connection → account tree from the two flat
-    /// queries. Connection order follows `conns` (provider-grouped); accounts
-    /// attach to their connection by id.
     pub fn tree(
         conns: Vec<gripsou_core::repo::connection::ConnectionListRow>,
         accounts: Vec<gripsou_core::repo::connection::ConnectionAccountRow>,
@@ -98,8 +91,7 @@ impl ProviderGroup {
                 logo: providers
                     .logos()
                     .institution(&c.provider_key, c.institution_key.as_deref()),
-                // Bank/broker name once known (filled on first sync); the
-                // provider label ("Powens") is a fallback until then.
+                // The provider label is a fallback until the first sync fills in the bank's name.
                 display_name: c.institution_name.unwrap_or(c.display_name),
                 status: c.status,
                 last_sync_at: c.last_sync_at.map(|d| d.timestamp_millis()),
@@ -157,7 +149,6 @@ impl EnabledProvider {
     }
 }
 
-/// A provider's display name, or its key for one this build doesn't know.
 pub fn provider_name(key: &str) -> &str {
     registry::account_kind(key).map_or(key, |k| k.about.display_name)
 }

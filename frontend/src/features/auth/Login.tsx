@@ -17,8 +17,7 @@ import { useSetupStatus } from "../../api/setup";
 
 type Step = "password" | "passwordless" | "code" | "backup";
 
-/** A message under the step's last field. `refused` rings the fields: what
- *  was typed is wrong, rather than a throttle, an expiry or a server failure. */
+/** `refused` rings the fields: what was typed is wrong, rather than a throttle, an expiry or a server failure. */
 type LoginError = { text: string; refused: boolean };
 const failed = (text: string): LoginError => ({ text, refused: false });
 
@@ -27,20 +26,17 @@ export function Login() {
   const { login, loginWithPasskey, verifyLogin } = useAuth();
 
   const [step, setStep] = useState<Step>("password");
-  // The step a passwordless sign-in was started from, to go back to.
   const [passkeyFrom, setPasskeyFrom] = useState<Step>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(false);
-  // The second step's challenge, from a password the server accepted.
   const [challenge, setChallenge] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [backupCode, setBackupCode] = useState("");
   const [error, setError] = useState<LoginError | null>(null);
   const [pending, setPending] = useState(false);
 
-  // A server with no account yet is set up first. If the server doesn't
-  // answer, signing in can't work either, so this says so instead of the form.
+  // A server with no account yet is set up first.
   const setup = useSetupStatus();
   const navigate = useNavigate();
   const setupNeeded = setup.data?.needed === true;
@@ -57,8 +53,6 @@ export function Login() {
     setError(message);
   };
 
-  // No navigation here: a successful login flips auth, and the /login route
-  // guard redirects to the dashboard once the router context refreshes.
   const submitPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -70,8 +64,7 @@ export function Login() {
         setStep("code");
       }
     } catch (err) {
-      // 401 is the server's answer to a wrong email or password; anything
-      // else failed on its side, and must not blame what was typed.
+      // 401 is a wrong email or password; anything else must not blame what was typed.
       const throttled = throttledError(t, err);
       setError(
         throttled ? failed(throttled)
@@ -83,9 +76,7 @@ export function Login() {
     }
   };
 
-  /** Sign in with a passkey alone, from the password form or in place of the
-   *  code. Cancelled, it goes back where it started without a message;
-   *  refused, it says so there. */
+  /** Cancelled, it goes back where it started without a message. */
   const signInWithPasskey = async () => {
     const from = step;
     setPasskeyFrom(from);
@@ -95,7 +86,7 @@ export function Login() {
       await loginWithPasskey(remember);
     } catch (err) {
       setStep(from);
-      // 410: the sign-in's challenge expired while the browser window was open.
+      // 410: the challenge expired while the browser window was open.
       if (err instanceof ApiError) {
         setError(
           failed(
@@ -114,7 +105,7 @@ export function Login() {
     try {
       await verifyLogin(challenge, secret, remember);
     } catch (err) {
-      // 410: the challenge expired (5 minutes) or was used up; start over.
+      // 410: the challenge expired or was used up.
       if (err instanceof ApiError && err.status === 410) {
         backToPassword(failed(t("auth.mfa.expired")));
         return;
@@ -142,9 +133,7 @@ export function Login() {
   const errorLine = error && <FieldError>{error.text}</FieldError>;
   const refused = error?.refused ?? false;
 
-  // The account being signed into, with a way back to the password. Leaving
-  // a step is disabled while its code is checked, so the answer can't land on
-  // another one.
+  // Leaving a step is disabled while its code is checked, so the answer can't land on another one.
   const account = (
     <div className="flex items-center gap-3 rounded-xl bg-surface-2 px-4 py-2.5">
       <span className="min-w-0 flex-1 truncate text-sm text-fg-dim">{email}</span>

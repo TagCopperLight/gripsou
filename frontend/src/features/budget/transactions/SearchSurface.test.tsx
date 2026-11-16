@@ -15,7 +15,6 @@ const CATEGORIES = [
 ];
 const TAGS = [{ id: "t1", name: "holiday", color: "#f0b952", txCount: 2 }];
 
-/** Surfaces the context so assertions can read what the controls wrote. */
 function Probe() {
   const { filters } = useBudget();
   return <pre data-testid="filters">{JSON.stringify(filters)}</pre>;
@@ -34,8 +33,7 @@ function filters(): Record<string, unknown> {
   return JSON.parse(screen.getByTestId("filters").textContent ?? "{}");
 }
 
-/** `Select` is a custom dropdown (trigger button + option buttons), not a
- *  native <select> — click the trigger, then click the option by its label. */
+/** `Select` is a custom dropdown, not a native <select>: click the trigger, then the option. */
 function pickTimeFrame(label: string) {
   const control = within(screen.getByTestId("time-frame"));
   fireEvent.click(control.getByRole("button"));

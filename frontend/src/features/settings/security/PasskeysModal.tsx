@@ -12,8 +12,6 @@ import { formatDate, formatRelative } from "../../../lib/date";
 const ROW_ICON =
   "cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 enabled:hover:bg-surface-3";
 
-/** The saved passkeys: rename in place, delete after a confirmation asked in
- *  the row, and the way to add another. Closes itself when the last one is deleted. */
 export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: () => void }) {
   const { t } = useTranslation();
   const { data: status } = useMfaStatus();
@@ -61,7 +59,6 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
       busy={remove.isPending}
       footer={<Button onClick={onAdd}>{t("passkeys.addPasskey")}</Button>}
     >
-      {/* One card, a line between passkeys, as in the sync window. */}
       <div className="mb-2 overflow-hidden rounded-2xl bg-surface-2">
         {passkeys.map((p) => {
           const asking = deleting?.id === p.id;
@@ -73,7 +70,6 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
               </span>
               <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                 {renaming === p.id ? (
-                  // Over the name, its text where the name's was: nothing moves.
                   <input
                     autoFocus
                     aria-label={t("passkeys.nameLabel")}
@@ -87,7 +83,6 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
                         e.preventDefault();
                         e.currentTarget.blur();
                       } else if (e.key === "Escape") {
-                        // Cancels the rename only, not the whole window.
                         e.stopPropagation();
                         setRenaming(null);
                       }
@@ -104,7 +99,6 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
                 </span>
               </div>
               {asking ? (
-                // Asked in the row: the list stays in view.
                 <div
                   role="group"
                   aria-label={t("passkeys.deleteTitle", { name: p.name })}
@@ -125,9 +119,7 @@ export function PasskeysModal({ onClose, onAdd }: { onClose: () => void; onAdd: 
                   </Button>
                 </div>
               ) : (
-                // On hover on a computer, or reached with the keyboard (not
-                // just focused: the window focuses the first row's pencil when
-                // it opens); always on a phone, which has no hover.
+                // Shown on hover, or on keyboard focus (not just focused: the window focuses the first row's pencil on open); always on a phone.
                 <div className={`flex shrink-0 items-center gap-0.5 transition-opacity duration-140 has-focus-visible:opacity-100 md:group-hover:opacity-100 ${renaming === p.id ? "" : "md:opacity-0"}`}>
                   <button
                     type="button"

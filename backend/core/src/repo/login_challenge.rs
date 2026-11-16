@@ -1,6 +1,4 @@
-//! Short-lived, single-use proofs between two requests (second login step,
-//! passkey ceremonies, re-authentication). The raw token never hits the DB,
-//! only its SHA-256 hash.
+//! Only the SHA-256 hash of the raw token reaches the DB.
 
 use uuid::Uuid;
 
@@ -8,18 +6,14 @@ use crate::error::CoreError;
 use crate::text_enum::text_enum;
 
 text_enum! {
-    /// What a challenge proves, once used: `login_challenge.kind`.
     pub enum ChallengeKind {
-        /// The second step of a password login.
         Mfa = "mfa",
         PasskeyLogin = "passkey_login",
         PasskeyRegister = "passkey_register",
-        /// A fresh re-authentication before a sensitive change.
         Reauth = "reauth",
     }
 }
 
-/// How long a challenge can be used after it is issued.
 pub const TTL_MINUTES: i32 = 5;
 
 pub struct Challenge {
@@ -29,8 +23,7 @@ pub struct Challenge {
     pub state: serde_json::Value,
 }
 
-/// Store a challenge that expires [`TTL_MINUTES`] from now, by the
-/// database's clock. `token_hash` is unique; a collision is an error.
+/// Expiry uses the database's clock.
 pub async fn create(
     pool: &sqlx::PgPool,
     token_hash: &[u8],
@@ -52,8 +45,6 @@ pub async fn create(
     Ok(())
 }
 
-/// Look a challenge up without using it: only unexpired rows of the given
-/// kind are visible.
 pub async fn find_valid(
     pool: &sqlx::PgPool,
     token_hash: &[u8],
@@ -72,10 +63,8 @@ pub async fn find_valid(
     Ok(row)
 }
 
-/// Use a challenge exactly once: a single atomic delete, so of two concurrent
-/// callers only one gets `Some`. `None` when it was already used, expired, or
-/// is of another kind (a wrong-kind call leaves the row alone). Runs on a pool
-/// or inside a caller's transaction (rolled back, the challenge is back).
+/// A single atomic delete: of two concurrent callers only one gets `Some`. A wrong-kind call
+/// leaves the row alone.
 pub async fn consume(
     db: impl sqlx::PgExecutor<'_>,
     token_hash: &[u8],
@@ -94,8 +83,6 @@ pub async fn consume(
     Ok(row)
 }
 
-/// Housekeeping: drop challenges past their expiry. Lookups already ignore
-/// them; this just reclaims rows.
 pub async fn delete_expired(pool: &sqlx::PgPool) -> Result<u64, CoreError> {
     let res = sqlx::query!(r#"delete from login_challenge where expires_at <= now()"#)
         .execute(pool)

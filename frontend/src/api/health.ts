@@ -5,7 +5,7 @@ import { keys } from "./keys";
 export function useHealth() {
   return useQuery({
     queryKey: keys.health(),
-    // The version cannot change without a page reload, so never refetch it.
+    // The version only changes with a page reload.
     queryFn: ({ signal }) => api("GET /health", { signal }),
     staleTime: Infinity,
   });

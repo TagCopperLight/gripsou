@@ -41,7 +41,6 @@ describe("holdingLines", () => {
   const cashLines = (holdings: Holding[]) => holdingLines(holdings).filter((l) => l.holdings[0].kind === "cash");
 
   it("sums exactly, without a float artifact", () => {
-    // 0.1 + 0.2 in floats is 0.30000000000000004.
     expect(cashLines([cash("c1", "A", "0.1"), cash("c2", "B", "0.2")])[0].value).toBe("0.3");
   });
 

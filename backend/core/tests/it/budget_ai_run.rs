@@ -20,10 +20,8 @@ use uuid::Uuid;
 type Script =
     Box<dyn Fn(&CategorizeRequest) -> Result<CategorizeOutput, CategorizeError> + Send + Sync>;
 
-/// Records every request. Call n answers with `scripts[n]`, the last script
-/// repeating. `edit_during_call` categorises one row by hand inside the call,
-/// to simulate a user acting while the model is thinking. `sql_on_call` runs a
-/// statement during call n, to break the database under the run.
+/// Call n answers with `scripts[n]`, the last repeating. `edit_during_call` categorises one row by
+/// hand inside the call (a user acting mid-run); `sql_on_call` runs a statement during call n.
 struct Mock {
     batch: usize,
     seen: Mutex<Vec<CategorizeRequest>>,
@@ -82,7 +80,6 @@ impl Categorizer for Mock {
     }
 }
 
-/// Answers every item with its first candidate at `conf`.
 fn first_candidate(conf: Decimal) -> Script {
     Box::new(move |req| {
         Ok(CategorizeOutput {
@@ -236,7 +233,6 @@ async fn confirmed_rows_with_the_same_description_are_evidence(pool: PgPool) -> 
         .find(|c| c.default_key.as_deref() == Some("subscriptions"))
         .unwrap()
         .id;
-    // The two older rows are the user's own decisions.
     set_category(&pool, user_id, ids[1], Some(subscriptions)).await;
     set_category(&pool, user_id, ids[2], Some(subscriptions)).await;
     let mock = Mock::new(50, vec![abstain_all()]);
@@ -315,7 +311,6 @@ async fn a_rate_limit_stops_as_partial_and_the_next_run_resumes(
     assert!(
         matches!(out, RunOutcome::Finished { ref outcome, items: 2, .. } if *outcome == AiRunOutcome::Partial)
     );
-    // Newest first: A and B were in the first chunk.
     assert_eq!(row(&pool, ids[0]).await.1.as_deref(), Some("ai"));
     assert_eq!(row(&pool, ids[2]).await.1, None);
     assert_eq!(remaining(&pool, user_id).await?, 1);
@@ -351,7 +346,6 @@ async fn nothing_to_do_writes_no_run_row(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Answers only the first item of each request.
 fn first_item_only() -> Script {
     Box::new(|req| {
         Ok(CategorizeOutput {
@@ -426,7 +420,6 @@ async fn a_database_failure_mid_run_keeps_the_spend_and_says_so(
 ) -> anyhow::Result<()> {
     let (user_id, ids) = ledger(&pool, &[("A", -100), ("B", -200), ("C", -300)]).await?;
     let mut mock = Mock::new(2, vec![first_candidate(Decimal::new(9, 1))]);
-    // From the second call on, writing an AI answer is refused.
     mock.sql_on_call = Some((
         pool.clone(),
         1,
@@ -472,8 +465,6 @@ async fn another_users_rows_are_never_written(pool: PgPool) -> anyhow::Result<()
     Ok(())
 }
 
-/// The AI never sees a buy/sell: the list hides them, so a guess on one could
-/// never be reviewed. Same rule for the chunk and the "N left" count.
 #[gripsou_core::testkit::db_test]
 async fn the_work_set_skips_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = testkit::seed_user_and_connection(&pool).await;

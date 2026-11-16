@@ -1,5 +1,3 @@
-//! Password sign-in with its optional second step.
-
 use crate::error::Json;
 use axum::extract::State;
 use sqlx::PgPool;
@@ -44,8 +42,7 @@ pub async fn login(
     };
     let status = mfa::status(&pool, creds.id).await?;
     if mfa::has_second_factor(&status) {
-        // The password alone proves nothing yet: the attempt stays counted
-        // until the second factor is right (see `login_verify`).
+        // Stays counted until the second factor is right (see `login_verify`).
         drop(attempt);
         let token = challenge::issue(
             &pool,
@@ -68,9 +65,6 @@ pub async fn login(
     Ok(Json(dto::LoginOutcome::Session(resp)))
 }
 
-/// Second login step: a challenge from `login` plus a TOTP or recovery code
-/// becomes a session. Wrong codes count on the second-factor limiter (per
-/// account, long memory) and on the IP.
 pub async fn login_verify(
     State(pool): State<PgPool>,
     State(throttles): State<Arc<Throttles>>,
@@ -87,7 +81,6 @@ pub async fn login_verify(
         .ok_or_else(expired)?;
     let attempt = throttles.login_code(user_id, ip, Instant::now())?;
 
-    // The TOTP step is worked out before the transaction (no DB write).
     let totp_step = match (&body.totp, &body.recovery_code) {
         (Some(code), None) => {
             let row = mfa::totp(&pool, user_id).await?.filter(|r| r.confirmed);
@@ -102,9 +95,7 @@ pub async fn login_verify(
         }
     };
 
-    // Spending the challenge and the code is one transaction: a request that
-    // loses the race for the challenge (a parallel one won) rolls back and
-    // leaves its code unspent, and a wrong code leaves the challenge usable.
+    // One transaction: a request that loses the race for the challenge rolls back and leaves its code unspent.
     let mut tx = pool.begin().await?;
     let challenge = challenge::consume::<Mfa>(&mut *tx, &body.challenge)
         .await?
@@ -167,7 +158,6 @@ mod tests {
                 .unwrap_err();
             assert_eq!(err.status(), StatusCode::UNAUTHORIZED);
         }
-        // Even the right password waits: the check happens before any verify.
         let err = try_login(&pool, &throttle, "a@t.local", "hunter22")
             .await
             .unwrap_err();
@@ -213,8 +203,6 @@ mod tests {
         assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
-    /// A burst sent all at once gets no more guesses than the same requests
-    /// sent one by one: each attempt is counted before the password is checked.
     #[gripsou_core::testkit::db_test]
     async fn a_concurrent_burst_gets_only_the_free_attempts(pool: PgPool) {
         seed_admin(&pool, "a@t.local").await;
@@ -235,8 +223,6 @@ mod tests {
         assert_eq!(count(StatusCode::TOO_MANY_REQUESTS), 5, "{statuses:?}");
     }
 
-    /// An oversized email is refused like a wrong one, before it can become a
-    /// throttle key (or a log field).
     #[gripsou_core::testkit::db_test]
     async fn an_oversized_email_is_refused_without_counting(pool: PgPool) {
         let throttle = throttles();
@@ -250,8 +236,6 @@ mod tests {
         assert_eq!(throttle.tracked_keys(), (0, 0));
     }
 
-    /// The account's password counter follows the account, not the address
-    /// typed: changing the email doesn't wipe the failures.
     #[gripsou_core::testkit::db_test]
     async fn an_email_change_keeps_the_failures(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
@@ -298,7 +282,6 @@ mod tests {
         .await
     }
 
-    /// A challenge issued directly: `login` itself counts one attempt.
     async fn issue_mfa(pool: &PgPool, uid: Uuid) -> String {
         challenge::issue(pool, Some(uid), &Mfa { remember: false })
             .await
@@ -394,7 +377,6 @@ mod tests {
             .expect("right code on the same challenge");
     }
 
-    /// Once the password is past, a failure names the user, not the email.
     #[gripsou_core::testkit::db_test]
     async fn a_failed_second_step_is_saved_with_the_user_id(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);
@@ -519,8 +501,6 @@ mod tests {
         );
     }
 
-    /// Wrong codes wait on the second-factor limiter (logged once with that
-    /// reason), while the password step of the same account is not slowed.
     #[gripsou_core::testkit::db_test]
     async fn wrong_codes_wait_on_the_second_factor_limiter(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);
@@ -541,7 +521,6 @@ mod tests {
             assert_eq!(err.status(), StatusCode::TOO_MANY_REQUESTS);
             assert_eq!(err, ApiError::TooMany { retry_after: 60 });
         }
-        // The password step still answers (a fresh challenge), not 429.
         let _ = mfa_challenge(&pool, &throttle, false).await;
         writer.flush(&pool).await;
         let reasons: Vec<String> = sqlx::query_scalar(
@@ -553,14 +532,11 @@ mod tests {
         assert_eq!(reasons, vec!["second_factor".to_string()]);
     }
 
-    /// A request that loses the challenge to a parallel one keeps its backup
-    /// code unspent.
     #[gripsou_core::testkit::db_test]
     async fn a_lost_challenge_does_not_burn_a_backup_code(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
         let (_, codes) = enable_totp(&pool, uid).await;
         let ch = mfa_challenge(&pool, &throttles(), false).await;
-        // A parallel request holds the challenge, not yet committed.
         let mut winner = pool.begin().await.unwrap();
         assert!(
             challenge::consume::<Mfa>(&mut *winner, &ch)
@@ -580,7 +556,6 @@ mod tests {
         assert_eq!(status.recovery_remaining, 10);
     }
 
-    /// A wrong backup code leaves the challenge usable.
     #[gripsou_core::testkit::db_test]
     async fn a_wrong_backup_code_keeps_the_challenge(pool: PgPool) {
         let uid = seed_admin(&pool, "a@t.local").await;
@@ -596,8 +571,6 @@ mod tests {
             .expect("right code on the same challenge");
     }
 
-    /// Login (ok and failed) and invite creation are logged, and no saved line
-    /// carries the password, the attempted password or the invite token.
     #[gripsou_core::testkit::db_test]
     async fn account_lines_are_saved_without_secrets(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(1000);

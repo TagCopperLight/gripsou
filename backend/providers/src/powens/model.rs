@@ -1,14 +1,8 @@
-//! Powens API wire models — only the fields the mapper consumes. Everything is
-//! resilient (Option / serde defaults) so unexpected or missing fields never
-//! break a sync. Decimals arrive as JSON numbers and are parsed exactly via
-//! rust_decimal's arbitrary-precision serde adapter (no float step).
+//! Powens API wire models, only the fields the mapper consumes. Everything is resilient (Option /
+//! serde defaults) so unexpected or missing fields never break a sync. Decimals arrive as JSON
+//! numbers and are parsed exactly via rust_decimal's arbitrary-precision serde adapter.
 //!
-//! Offset-free date-and-time strings from Powens are Europe/Paris local time,
-//! not UTC (confirmed on live data; issue #38). Keep them as strings while only
-//! checking presence or reading their calendar day. Any future instant parsing
-//! belongs in a shared adapter helper using Paris daylight-saving rules, with
-//! tests for transitions and ambiguous/nonexistent local times. Date-only
-//! transaction fields are already Paris calendar days and stay `NaiveDate`.
+//! Offset-free datetimes are Paris local time, not UTC: keep them as strings (see CLAUDE.md).
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
@@ -16,7 +10,6 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Currency {
-    /// ISO 4217 code, e.g. "EUR".
     pub id: String,
     #[serde(default)]
     pub name: Option<String>,
@@ -35,7 +28,6 @@ pub struct BankAccount {
     pub currency: Option<Currency>,
     #[serde(rename = "type", default)]
     pub r#type: Option<String>,
-    /// Paris-local DateTime string or null; presence means the account is gone.
     #[serde(default)]
     pub deleted: Option<String>,
     #[serde(default)]
@@ -60,7 +52,6 @@ pub struct Investment {
     pub label: Option<String>,
     #[serde(default)]
     pub code: Option<String>,
-    /// "ISIN" or "AMF".
     #[serde(default)]
     pub code_type: Option<String>,
     #[serde(default)]
@@ -116,7 +107,6 @@ pub struct ConnectionsResponse {
     pub connections: Vec<Connection>,
 }
 
-/// Minimal shape of a Powens webhook body — only what we need to correlate.
 #[derive(Debug, Deserialize)]
 pub struct WebhookConnection {
     pub id: i64,
@@ -128,32 +118,21 @@ pub struct WebhookEnvelope {
     pub connection: Option<WebhookConnection>,
 }
 
-/// A Powens statement line. Only the fields gripsou actually reads: the
-/// payload carries ~30 more that measured ~0% filled.
-///
-/// Deserializes via `TryFrom<serde_json::Value>` rather than a plain derive so
-/// `raw` can keep the *entire* payload verbatim — `#[serde(flatten)]` would
-/// only catch fields not already named on this struct (i.e. it would drop
-/// `id_account`, `type`, ...), which defeats `provider_meta`'s forensic
-/// purpose.
+/// Deserializes via `TryFrom<serde_json::Value>` so `raw` keeps the entire payload verbatim:
+/// `#[serde(flatten)]` would drop the fields already named here (`id_account`, `type`, ...).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(try_from = "serde_json::Value")]
 pub struct PowensTransaction {
     pub id: i64,
     pub id_account: i64,
-    /// The day the operation happened (the card was used). 100% filled;
-    /// preferred over `date`, the day the balance moved.
+    /// 100% filled; preferred over `date`, the day the balance moved.
     pub rdate: Option<NaiveDate>,
     pub date: Option<NaiveDate>,
-    /// Signed cash impact on the account.
     pub value: Option<Decimal>,
     pub wording: Option<String>,
     pub r#type: Option<String>,
-    /// Not yet posted. Excluded from ingest — see `map_transaction`.
     pub coming: bool,
     pub deleted: Option<String>,
-    /// The raw JSON object Powens sent for this row, kept verbatim for
-    /// `provider_meta`.
     pub raw: serde_json::Map<String, serde_json::Value>,
 }
 

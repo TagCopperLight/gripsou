@@ -1,9 +1,3 @@
-//! The TypeScript description of the API's JSON: every type a handler sends
-//! or accepts, derived by ts-rs from the serde attributes, and the limits and
-//! defaults the frontend must agree with. `frontend/src/api/wire.ts` holds
-//! the output; `ci.sh` regenerates it and fails when the checked-in file
-//! differs.
-
 use std::any::TypeId;
 use std::collections::BTreeMap;
 use std::fmt::Write;
@@ -13,16 +7,14 @@ use ts_rs::{Config, TS, TypeVisitor};
 use crate::{auth, budget, transactions, wire};
 use gripsou_core::repo::prefs;
 
-/// The command that writes the file, named in its header.
 pub const COMMAND: &str = "cargo run -p gripsou-api --example wire-types";
 
-/// Where the file lives.
 pub const PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../frontend/src/api/wire.ts"
 );
 
-/// How ts-rs writes the types: i64 counts and timestamps fit a JS number.
+/// i64 counts and timestamps fit a JS number.
 pub(crate) fn config() -> Config {
     Config::new().with_large_int("number")
 }
@@ -48,12 +40,10 @@ pub fn render() -> String {
 
 pub(crate) struct Types {
     cfg: Config,
-    /// By TypeScript name, so the file's order is stable.
     decls: BTreeMap<String, (TypeId, String)>,
 }
 
 impl Types {
-    /// Every route's body, query and answer.
     fn roots(&mut self) {
         crate::api_routes().visit_types(self);
     }
@@ -86,7 +76,6 @@ impl TypeVisitor for Types {
     }
 }
 
-/// The server's limits and defaults, as constants of the same names.
 fn constants() -> String {
     let ranges: Vec<String> = wire::Range::ALL
         .iter()

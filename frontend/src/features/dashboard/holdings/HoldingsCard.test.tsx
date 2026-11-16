@@ -29,8 +29,6 @@ const CASH_PEA = {
 };
 
 function renderCard(holdings: unknown[], prefs = DEFAULT_PREFS) {
-  // Every URL gets the holdings list, except the record window's lots and
-  // suggestions: none of either is what these tests want.
   stubFetch(async (url: string) => jsonResponse(/\/lots(\/suggestions)?$/.test(String(url)) ? [] : holdings));
   return renderWithApp(<HoldingsCard />, { prefs });
 }
@@ -39,10 +37,8 @@ describe("HoldingsCard", () => {
   it("merges same-currency cash across accounts into one row", async () => {
     renderCard([HOLDING, CASH_CHECKING, CASH_PEA]);
     await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    // Two cash holdings collapse into one: 1 equity + 1 cash row.
     expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(3);
     expect(screen.getByText("Multiple accounts")).toBeInTheDocument();
-    // The individual cash account names are not shown as separate rows.
     const table = within(screen.getByRole("table"));
     expect(table.queryByText("Main Checking")).not.toBeInTheDocument();
     expect(table.queryByText("PEA")).not.toBeInTheDocument();
@@ -56,7 +52,6 @@ describe("HoldingsCard", () => {
     expect(table.getByText("200,00 €")).toBeInTheDocument();
     expect(table.queryByText("Multiple accounts")).not.toBeInTheDocument();
     expect(table.queryByText("Apple Inc.")).not.toBeInTheDocument();
-    // Chips come from the accounts, so no "Multiple" type for the merged line.
     expect(screen.queryByRole("button", { name: "Multiple" })).not.toBeInTheDocument();
   });
 
@@ -86,7 +81,6 @@ describe("HoldingsCard", () => {
     expect(screen.getByTestId("gap-dot")).toBeInTheDocument();
   });
 
-  // A clamp at zero would hide this state; the dot exists to surface it.
   it("shows the dot when MORE is recorded than held", async () => {
     renderCard([{ ...HOLDING, unexplainedQty: "-5" }]);
     await waitFor(() => expect(screen.getByTestId("gap-dot")).toBeInTheDocument());
@@ -95,7 +89,6 @@ describe("HoldingsCard", () => {
   it("hides the gap dot on a cash row", async () => {
     renderCard([HOLDING, CASH_CHECKING]);
     await waitFor(() => expect(screen.getByText("Apple Inc.")).toBeInTheDocument());
-    // The equity row has no gap either, so no dot should exist at all.
     expect(screen.queryByTestId("gap-dot")).toBeNull();
   });
 

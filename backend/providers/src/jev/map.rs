@@ -1,5 +1,3 @@
-//! Jev `systemone` JSON ↔ the canonical categorisation DTOs.
-
 use std::fmt::Write;
 use std::str::FromStr;
 
@@ -36,7 +34,6 @@ fn example_line(req: &CategorizeRequest, e: &Example) -> String {
     )
 }
 
-/// The `state`: the transaction, then its evidence, as plain text.
 pub fn state(req: &CategorizeRequest, item: &CategorizeItem) -> String {
     let mut s = String::new();
     let _ = writeln!(s, "Transaction: {}", item.description);
@@ -86,12 +83,11 @@ pub fn build_body(req: &CategorizeRequest, item: &CategorizeItem, model: &str) -
     })
 }
 
-/// A token count as the API reports it: a non-negative integer that fits.
 fn tokens(v: &Value) -> Option<i64> {
     v.as_u64().and_then(|n| i64::try_from(n).ok())
 }
 
-/// The confidence from the number's own text, never through a float.
+/// Read from the number's own text, never through a float.
 fn decimal_of(v: &Value) -> Option<Decimal> {
     match v {
         Value::Number(n) => {
@@ -104,10 +100,9 @@ fn decimal_of(v: &Value) -> Option<Decimal> {
     }
 }
 
-/// One item's answer and the tokens it cost. `none` or an option that is not
-/// a category id is an abstention; a body with no choice at all is no answer
-/// (`None`), so the item is sent again later. Usage is unknown unless both
-/// counts are reported.
+/// `none` or an option that is not a category id is an abstention; a body with no choice at all is
+/// no answer (`None`), so the item is sent again later. Usage is unknown unless both counts are
+/// reported.
 pub fn parse_answer(item: &CategorizeItem, body: &Value) -> (Option<Guess>, Usage) {
     let a = &body["answers"][QUESTION];
     let guess = a["choice"].as_str().map(|choice| Guess {
@@ -131,7 +126,6 @@ pub fn parse_answer(item: &CategorizeItem, body: &Value) -> (Option<Guess>, Usag
     (guess, usage)
 }
 
-/// `GET /v1/models`: every model's name.
 pub fn parse_models(body: &Value) -> Vec<String> {
     body["models"]
         .as_array()

@@ -1,6 +1,3 @@
-//! Provider connections: connecting one, syncing, managing and removing it,
-//! and the provider webhook.
-
 pub mod dto;
 
 use crate::routes::Routes;
@@ -113,8 +110,7 @@ pub async fn manage_connection(
         }
         Err(ConnectError::Db(e)) => return Err(e.into()),
         Err(e) => {
-            // The temporary access URL and provider response must never enter
-            // logs: the error names the failed call only.
+            // The access URL and provider response must never enter logs.
             tracing::warn!(
                 connection_id = %id,
                 error = %gripsou_core::logs::error_chain(&e),
@@ -166,8 +162,7 @@ pub async fn complete_connection(
     match gripsou_jobs::complete_connection(pool, &jobs, user_id, id, &body.params).await {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(ConnectError::NotFound) => Err(ApiError::NotFound("connection not found")),
-        // The user cancelled at the bank, or the provider refused: its own
-        // words go to the log only.
+        // The provider's own words go to the log only.
         Err(ConnectError::Provider(e)) => {
             tracing::warn!(connection_id = %id, step = "complete", error = %gripsou_core::logs::error_chain(&e), "connect failed");
             Err(ApiError::bad_request(
@@ -237,8 +232,6 @@ mod tests {
     use gripsou_core::provider::{AccountProvider, CompleteConnect, ConnectInit, ProviderError};
     use sqlx::PgPool;
 
-    /// An adapter that sends people to the Powens webview, with no keys, and
-    /// counts the callbacks that reach it.
     #[derive(Default)]
     struct FakeBank(std::sync::atomic::AtomicUsize);
 
@@ -249,7 +242,6 @@ mod tests {
                 redirect_url: Some("https://webview.powens.com/en/connect?x=1".into()),
             })
         }
-        /// Keeps the callback's params as the connection's provider meta.
         async fn complete_connect(
             &self,
             params: &std::collections::HashMap<String, String>,
@@ -318,7 +310,6 @@ mod tests {
             session_id: Uuid::new_v4(),
         };
 
-        // Unknown connection → 404.
         let nf = sync_connection(
             State(pool.clone()),
             State(crate::testkit::deps()),
@@ -329,7 +320,6 @@ mod tests {
         .unwrap_err();
         assert_eq!(nf.status(), StatusCode::NOT_FOUND);
 
-        // Force a 'syncing' claim, then a trigger → 409.
         sqlx::query("update connection set status='syncing' where id=$1")
             .bind(conn)
             .execute(&pool)
@@ -384,7 +374,6 @@ mod tests {
         assert_eq!(groups[0].provider_name, "Powens");
         assert_eq!(groups[0].connections.len(), 1);
         assert_eq!(groups[0].connections[0].display_name, "My bank");
-        // Account with no snapshots still appears, valued "0".
         assert_eq!(groups[0].connections[0].accounts.len(), 1);
         assert_eq!(
             groups[0].connections[0].accounts[0].value.as_deref(),
@@ -488,7 +477,6 @@ mod tests {
         .await
         .unwrap();
 
-        // Wrong user → 404.
         let err = delete_connection(
             State(pool.clone()),
             auth::AuthUser {
@@ -501,7 +489,6 @@ mod tests {
         .unwrap_err();
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
-        // Correct user → 204.
         let ok = delete_connection(
             State(pool.clone()),
             auth::AuthUser {
@@ -514,7 +501,6 @@ mod tests {
         .expect("delete ok");
         assert_eq!(ok, StatusCode::NO_CONTENT);
 
-        // Connection is gone.
         let count: i64 = sqlx::query_scalar("select count(*) from connection where id=$1")
             .bind(conn_id)
             .fetch_one(&pool)
@@ -584,8 +570,6 @@ mod tests {
         assert_eq!(left, vec![active]);
     }
 
-    /// The provider's code is single-use: a replayed callback, or one naming
-    /// another user's connection, is refused before the provider sees it.
     #[gripsou_core::testkit::db_test]
     async fn a_replayed_or_foreign_callback_never_reaches_the_provider(pool: PgPool) {
         use gripsou_core::repo::connection;

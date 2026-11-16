@@ -11,9 +11,6 @@ import { AiProviderFields } from "../settings/server/AiProviderFields";
 import { useSaveKey } from "../settings/server/useSaveKey";
 import { groupState, KEY_GUIDES, realtimeField, type GroupState, type ServerPart } from "./serverSetup";
 
-/** One screen of a group of the server's keys (what they enable): how to get
- *  them and their fields, or real-time sync. The same fields as Settings →
- *  Server, saved as they are typed, so going back and forth loses nothing. */
 export function ServerScreen({
   group,
   part,
@@ -30,13 +27,11 @@ export function ServerScreen({
   if (part === "realtime") {
     return members.map((k) => <ProviderRealtime key={k.key} provider={k} />);
   }
-  // Several providers in a group: each says its name.
   const named = members.length > 1;
   return (
     <>
       <p className="text-sm leading-relaxed text-fg-dim">{t(`welcome.server.${group}.what`)}</p>
       {members.map((k) => <ProviderKeys key={k.key} provider={k} named={named} providers={providers} />)}
-      {/* A provider is offered only once its key is saved. */}
       {group === "categorize" && groupState(group, keys, providers) === "ready" && <AiProviderFields />}
     </>
   );
@@ -48,14 +43,11 @@ const TAGS: Record<GroupState, { tone: "green" | "neutral"; label: string }> = {
   off: { tone: "neutral", label: "welcome.server.state.off" },
 };
 
-/** Whether a group's keys work, beside its title. */
 export function ServerTag({ state }: { state: GroupState }) {
   const { t } = useTranslation();
   return <Tag tone={TAGS[state].tone}>{t(TAGS[state].label)}</Tag>;
 }
 
-/** A provider's on/off switch (bank providers), how to get its keys, and
- *  its fields. */
 function ProviderKeys({ provider, named, providers }: { provider: ApiKeyProvider; named: boolean; providers: Provider[] }) {
   const { t } = useTranslation();
   const setEnabled = useSetProviderEnabled();
@@ -97,7 +89,6 @@ function ProviderKeys({ provider, named, providers }: { provider: ApiKeyProvider
   );
 }
 
-/** A provider's real-time sync: what it does, and its field. */
 function ProviderRealtime({ provider }: { provider: ApiKeyProvider }) {
   const save = useSaveKey()(provider.key);
   const guide = KEY_GUIDES[provider.key]?.realtime;

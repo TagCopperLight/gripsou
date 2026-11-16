@@ -1,8 +1,6 @@
 import type { SVGProps } from "react";
 
-/** Fallback icon for a category without one: a solid dot in `currentColor`.
- *  Lucide's `Dot` is too small to read and `CircleSmall` a touch too big, so
- *  the radius is tuned here (≈6px across in a 14px box). */
+/** Lucide's `Dot` is too small and `CircleSmall` a touch too big; this radius gives ≈6px in a 14px box. */
 export function FilledDot(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>

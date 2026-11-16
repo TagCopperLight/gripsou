@@ -28,10 +28,10 @@ function renderModal(props: { category?: BudgetCategory; onClose?: () => void } 
   return renderWithApp(<CategoryModal category={props.category} onClose={props.onClose ?? vi.fn()} onDelete={vi.fn()} />);
 }
 
-describe("CategoryModal — create", () => {
+describe("CategoryModal: create", () => {
   it("previews the typed name in the heading, refuses a blank one, and POSTs a trimmed body", async () => {
     stubFetch(async () => jsonResponse({ ...cat({ id: "new" }) }, 201));
-    renderModal();                                   // no `category` prop
+    renderModal();
     expect(screen.getByTestId("category-preview")).toHaveTextContent("New category");
     const submit = screen.getByRole("button", { name: "Create category" });
     expect(submit).toBeDisabled();
@@ -82,10 +82,10 @@ describe("CategoryModal — create", () => {
   });
 });
 
-describe("CategoryModal — edit", () => {
+describe("CategoryModal: edit", () => {
   it("sends the raw stored name when a translated seed's other fields change", async () => {
     stubFetch(async () => jsonResponse(GROCERIES));
-    renderModal({ category: GROCERIES });            // defaultKey "groceries", name "Groceries"
+    renderModal({ category: GROCERIES });
     expect(screen.getByLabelText("Name")).toHaveValue("Groceries");
     fireEvent.change(screen.getByLabelText("Hint for the AI"), { target: { value: "Supermarkets" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
@@ -110,32 +110,24 @@ describe("CategoryModal — edit", () => {
   it("a language switch with the draft open is not a rename", async () => {
     stubFetch(async () => jsonResponse(GROCERIES));
     renderModal({ category: GROCERIES });
-    // Edit something unrelated first, so Save has a real reason to be
-    // enabled — a bare language switch with nothing else touched is a
-    // no-op and Save should stay disabled for it.
+        // Edit something unrelated first so Save is enabled: a bare language switch is a no-op.
     fireEvent.change(screen.getByLabelText("Hint for the AI"), { target: { value: "Supermarkets" } });
     await act(async () => { await i18n.changeLanguage("fr"); });
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
     await waitFor(() => {
       const body = JSON.parse((vi.mocked(fetch).mock.calls[0][1] as RequestInit).body as string);
-      expect(body).toMatchObject({ name: "Groceries", hint: "Supermarkets" }); // not "Courses"
+      expect(body).toMatchObject({ name: "Groceries", hint: "Supermarkets" });
     });
     await act(async () => { await i18n.changeLanguage("en"); });
   });
 
   it("a language switch mid-draft, then manually retyping the now-current translated label, is still not a rename", async () => {
-    // The modal opens in English (initialDisplayName = "Groceries"), then the
-    // app language flips to French. If the user now types exactly what the
-    // French label reads ("Courses"), believing they're just confirming the
-    // shown name, a check against `initialDisplayName` alone would treat that
-    // as a real rename and send the literal "Courses", un-seeding the row. A
-    // match against the *current* categoryLabel(t, category) is no rename.
+        // The modal opens in English, then the language flips to French. Typing the French label ("Courses") must not
+        // count as a rename: it would send the literal "Courses" and un-seed the row.
     stubFetch(async () => jsonResponse(GROCERIES));
     renderModal({ category: GROCERIES });
     expect(screen.getByLabelText("Name")).toHaveValue("Groceries");
     await act(async () => { await i18n.changeLanguage("fr"); });
-    // Touch an unrelated field too, so Save has a reason to be enabled — a
-    // bare retype of the same-meaning name is otherwise a no-op.
     fireEvent.change(screen.getByLabelText("Indication pour l'IA"), { target: { value: "Supermarchés" } });
     fireEvent.change(screen.getByLabelText("Nom"), { target: { value: "Courses" } });
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
@@ -150,8 +142,6 @@ describe("CategoryModal — edit", () => {
     stubFetch(async () => jsonResponse(GROCERIES));
     await act(async () => { await i18n.changeLanguage("fr"); });
     renderModal({ category: GROCERIES });
-    // The name field genuinely shows the French label at mount — this is
-    // what makes the assertion below meaningful, rather than vacuously true.
     expect(screen.getByLabelText("Nom")).toHaveValue("Courses");
     fireEvent.change(screen.getByLabelText("Indication pour l'IA"), { target: { value: "Supermarchés" } });
     fireEvent.click(screen.getByRole("button", { name: "Enregistrer" }));
@@ -178,7 +168,6 @@ describe("CategoryModal — edit", () => {
 
     expect(screen.getByLabelText("Hint for the AI")).toBeDisabled();
 
-    // What is still the user's to change on the system row.
     expect(screen.getByLabelText("Name")).toBeEnabled();
     expect(screen.getByRole("button", { name: "Colour #4dd0b1" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Piggy bank" })).toBeEnabled();

@@ -1,7 +1,4 @@
-// The budget readers over the store: the transactions list and its counts,
-// categories and tags with their row counts, and the Overview's figures. A
-// simplified copy of the server's rules (core/src/budget/overview/calc.rs), close
-// enough to review the screens with.
+// A simplified copy of the server's rules (core/src/budget/overview/calc.rs), close enough to review the screens.
 
 import { TRANSACTIONS_LIMIT_DEFAULT, TRANSACTIONS_LIMIT_MAX, TYPE_BUCKETS, type TypeBucket, type BreakdownRow, type BudgetCategory, type BudgetSummary, type BudgetTag, type BudgetTrend, type CategoryRef, type Figure, type Slice, type SliceAmount, type Transaction, type TransactionCounts, type TransactionParams } from "../../src/api/wire.ts";
 import type { TransactionFilterQuery } from "../../src/api/filter.ts";
@@ -20,7 +17,6 @@ import { EUR_PER_USD, dayOf, isoDay, money } from "../data/util.ts";
 import type { Store } from "../store.ts";
 import { addMonths, monthBounds } from "../../src/lib/month.ts";
 
-/** The AI's guess waiting for review (`categoryId` null: it abstained). */
 export function queueForReview(row: TxnRow, categoryId: string | null, confidence: string | null): TxnRow {
   return Object.assign(row, { categoryId, categorySource: categoryId ? "ai" : null, categoryConfidence: confidence, needsReview: true });
 }
@@ -46,8 +42,7 @@ export function tags(store: Store): BudgetTag[] {
   return store.tags.map((t) => ({ ...t, txCount: store.txns.filter((x) => x.tagIds.includes(t.id)).length }));
 }
 
-/** A row's value in euros; null for a foreign row when the budget has no rate
- *  (the "Budget: a transaction has no rate" state). */
+/** Null for a foreign row when the budget has no rate. */
 function reporting(store: Store, x: TxnRow): number | null {
   const currency = store.accounts.find((a) => a.id === x.accountId)?.currency ?? "EUR";
   if (currency === "EUR") return x.amount;
@@ -111,9 +106,7 @@ function bucket(raw: string | undefined): TypeBucket | undefined {
   return raw as TypeBucket;
 }
 
-/** The filter of the list's query or of a bulk body's `filter`, or the
- *  server's 400 text. Names each field `transactionFilterFields` writes: a
- *  new filter field fails to type-check here until the mock reads it. */
+/** The server's 400 text on a bad filter. Names each field `transactionFilterFields` writes, so a new filter field fails to type-check until the mock reads it. */
 export function parseTransactionFilter(p: TransactionParams): TransactionFilterQuery | string {
   try {
     return {
@@ -134,13 +127,11 @@ export function parseTransactionFilter(p: TransactionParams): TransactionFilterQ
   }
 }
 
-/** Filed under the Internal transfer category: hidden unless asked for,
- *  paired or not. */
+/** Hidden unless asked for, paired or not. */
 function isInternalTransfer(store: Store, x: TxnRow): boolean {
   return x.categoryId !== null && store.categories.find((c) => c.id === x.categoryId)?.systemKey === "internal_transfer";
 }
 
-/** The rows a filter selects, newest first — the list, counts and bulk share it. */
 export function matching(store: Store, f: TransactionFilterQuery): TxnRow[] {
   const search = f.search?.toLowerCase();
   const bucket = f.bucket ?? "all";
@@ -173,7 +164,6 @@ export function transactions(store: Store, q: TransactionParams, f: TransactionF
 
 export function counts(store: Store, f: TransactionFilterQuery): TransactionCounts {
   const rows = matching(store, f);
-  // What "select all shown" covers, as the server: the cash rows only.
   const cash = rows.filter((x) => x.source === "cash");
   return {
     matching: rows.length,
@@ -185,7 +175,7 @@ export function counts(store: Store, f: TransactionFilterQuery): TransactionCoun
   };
 }
 
-type Month = string; // "YYYY-MM"
+type Month = string;
 
 function monthOf(t: number): Month {
   return isoDay(t).slice(0, 7);
@@ -195,8 +185,7 @@ function ref(c: CategoryRow): CategoryRef {
   return { id: c.id, name: c.name, defaultKey: c.defaultKey, color: c.color, icon: c.icon };
 }
 
-/** Budget rows, in euros: cash only (a lot is not spending), no neutral
- *  category; a row with no rate counts for nothing (the server flags it). */
+/** Cash only (a lot is not spending), no neutral category; a row with no rate counts for nothing. */
 function budgetRows(store: Store): (TxnRow & { cat: CategoryRow | null })[] {
   return store.txns
     .filter((x) => x.source === "cash")
@@ -208,8 +197,6 @@ type Row = ReturnType<typeof budgetRows>[number];
 
 const UNCAT = "uncategorised";
 
-/** Expense-side magnitudes per slice key: category nets that went out, and
- *  uncategorised outflows. */
 function expenseSide(rows: Row[]): Map<string, number> {
   const net = new Map<string, number>();
   for (const x of rows) {
@@ -244,7 +231,6 @@ function sorted(m: Map<string, number>): [string, number][] {
   return [...m.entries()].sort((a, b) => b[1] - a[1]);
 }
 
-/** Keeps the slices the Sankey shows of `total`; the rest becomes Other. */
 function collapse(store: Store, entries: [string, number][], total: number): SliceAmount[] {
   const kept = entries.filter(([, v]) => v >= total * SANKEY_MIN_SHARE).slice(0, SANKEY_MAX_SLICES);
   const rest = entries.filter((e) => !kept.includes(e)).reduce((s, [, v]) => s + v, 0);
@@ -261,8 +247,6 @@ function monthRows(rows: Row[], m: Month): Row[] {
   return rows.filter((x) => monthOf(x.t) === m);
 }
 
-/** What the overview sums: one month (compared with the months before it), or
- *  a span of days. */
 export type Period = { month: string } | { month?: undefined; from: string; to: string };
 
 export function summary(store: Store, period: Period): BudgetSummary {
@@ -327,7 +311,6 @@ export function summary(store: Store, period: Period): BudgetSummary {
   };
 }
 
-/** The `n` months ending with `anchor`. */
 export function trend(store: Store, anchor: string, n: number): BudgetTrend {
   const months = Array.from({ length: n }, (_, i) => addMonths(anchor, i - n + 1));
   const all = budgetRows(store);

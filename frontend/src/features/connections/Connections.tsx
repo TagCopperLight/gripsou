@@ -28,7 +28,6 @@ export function SettingsConnections() {
     g.connections.map((c) => ({ ...c, providerName: g.providerName })),
   );
   const connCount = conns.length;
-  // Nothing connected (once known): the empty state carries the button.
   const empty = !isPending && !isError && connCount === 0;
 
   const [guideOpen, setGuideOpen] = useState(false);
@@ -42,7 +41,6 @@ export function SettingsConnections() {
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <h2 className="text-fg font-semibold text-sm">{t("settings.connections.title")}</h2>
             <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center md:gap-4">
-              {/* Most users have connections: kept while the list loads. */}
               {(isPending || connCount > 0) && (
                 <Button variant="ghost" padded={false} className="text-xs" onClick={() => setGuideOpen(true)}>
                   {t("connectionGuide.howItWorks")}
@@ -68,8 +66,6 @@ export function SettingsConnections() {
             />
           ) : empty ? (
             <>
-              {/* As on the dashboard: what's missing and the one thing to do,
-                  then how it works, at the card's full width. */}
               <div className="flex flex-col items-center gap-2 pt-9 pb-8 text-center">
                 <Landmark className="size-6 text-fg-faint" />
                 <p className="text-sm font-medium text-fg">{t("settings.connections.empty.title")}</p>

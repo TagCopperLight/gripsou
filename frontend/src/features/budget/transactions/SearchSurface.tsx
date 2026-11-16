@@ -12,13 +12,8 @@ import type { TransactionCounts } from "../../../api/wire";
 import { TextInput } from "../../../ui/TextInput";
 import { staleClass } from "../../../ui/stale";
 
-/** The Transactions search surface: three parts, each rendered only when it has
- *  something to show.
- *
- *  Three elevation steps, outward in: the page background is darkest, the
- *  Transactions surface above it is `surface`, this whole search surface —
- *  all three parts — is `surface-2`, and every control sitting on it drops
- *  back to `surface` so it reads as a control and not as more panel. */
+/** The Transactions search surface: three parts, each rendered only when it has something to show.
+ *  Elevation: the surface is `surface-2` and every control on it drops back to `surface`. */
 export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
   counts?: TransactionCounts;
   /** `counts` are a previous filter's, while this one's load. */
@@ -32,7 +27,6 @@ export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
 
   return (
     <div className="relative rounded-xl bg-surface-2 p-3">
-      {/* Part 1 — always. */}
       <div className="flex flex-wrap items-center gap-2">
         <label className="relative min-w-48 flex-1">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-fg-faint" />
@@ -60,18 +54,13 @@ export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
           ]}
           className="w-48"
         />
-        {/* Select is a custom dropdown, not a native <select>, and does not
-         *  forward a data-testid — this wrapper gives tests a stable hook
-         *  without touching the shared component. */}
+        {/* `Select` forwards no data-testid, so this wrapper is the test hook. */}
         <div data-testid="time-frame" className="w-44">
           <Select
             value={filters.timeFrame}
             tone="sunken"
             onChange={(v) =>
-              // Updater form, not `withTimeFrame(filters, v)` off the render
-              // snapshot — `patchFilters` re-reads the
-              // current filters at apply time, the same discipline as every
-              // other write in this file.
+              // Updater form: `patchFilters` re-reads the current filters at apply time.
               patchFilters((prev) => withTimeFrame(prev, v as (typeof TIME_FRAMES)[number]))
             }
             options={TIME_FRAMES.map((f) => ({
@@ -116,7 +105,6 @@ export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
         </div>
       )}
 
-      {/* Part 2 — the filter panel. */}
       {panelOpen && (
         <>
           <div className="mt-3 h-px bg-surface-3" />
@@ -124,7 +112,6 @@ export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
         </>
       )}
 
-      {/* Part 3 — active filters, with the readout pinned top-right. */}
       {isFiltered(filters) && (
         <>
           <div className="mt-3 h-px bg-surface-3" />

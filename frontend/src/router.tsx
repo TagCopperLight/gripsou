@@ -40,9 +40,7 @@ const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
   beforeLoad: ({ context }) => {
-    // Already signed in (e.g. just logged in, or revisiting /login): the guard
-    // re-runs when auth changes (App invalidates the router) and bounces to the
-    // dashboard, so the redirect doesn't depend on imperative navigation.
+    // Auth changes re-run the guard, so the redirect needs no imperative navigation.
     if (context.auth.isAuthenticated) {
       throw redirect({ to: "/" });
     }
@@ -50,15 +48,12 @@ const loginRoute = createRoute({
   component: Login,
 });
 
-// Pathless layout for every page that needs a session. A user who hasn't
-// finished the welcome screen sees only it; the bank's return to the callback
-// is handed to it, query and all, so the welcome screen finishes the connection.
+// Pathless layout for pages that need a session. The bank's return to the callback goes to the welcome screen, query and all.
 const signedInRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "signedIn",
   beforeLoad: ({ context: { auth }, matches }) => {
-    // Only a page that needs nothing of the user is drawn while a saved
-    // session is checked (App); this guard runs again once it is.
+    // Pages needing nothing of the user are drawn while a saved session is checked.
     if (auth.isBootstrapping) return;
     if (!auth.isAuthenticated) throw redirect({ to: "/login" });
     const entering = (route: { id: string }) => matches.some((m) => m.routeId === route.id);
@@ -67,8 +62,7 @@ const signedInRoute = createRoute({
     const onWelcome = entering(welcomeRoute);
     if (welcomePending && !onWelcome) {
       if (entering(connectionsCallbackRoute)) {
-        // The provider's own query string, byte for byte: the router's parsed
-        // search would retype values that look like numbers.
+        // Byte for byte: the router's parsed search would retype numeric-looking values.
         const callback = window.location.search.replace(/^\?/, "");
         throw redirect({ to: "/welcome", search: { step: "bank", callback } });
       }
@@ -82,7 +76,6 @@ const signedInRoute = createRoute({
   },
 });
 
-// Pathless layout: the app chrome (sidebar + content).
 const appRoute = createRoute({
   getParentRoute: () => signedInRoute,
   id: "app",
@@ -116,8 +109,6 @@ const budgetRoute = createRoute({
   component: Budget,
 });
 
-// Overview is the landing mode: the analysis is what the page is for, and the
-// Transactions list is where you go to act on what it shows.
 const budgetIndexRoute = createRoute({
   getParentRoute: () => budgetRoute,
   path: "/",
@@ -146,7 +137,6 @@ const budgetReviewRoute = createRoute({
   component: ReviewMode,
 });
 
-// Bookmarks of /transactions land on the budget's transactions page.
 const transactionsRedirectRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/transactions",
@@ -207,7 +197,6 @@ const settingsServerRoute = createRoute({
   component: SettingsServer,
 });
 
-// Full page outside the app chrome.
 const connectionsCallbackRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/connections/callback",
@@ -220,8 +209,6 @@ const inviteRoute = createRoute({
   component: Invite,
 });
 
-// The first account. Signed in, there is nothing to set up: the guard then
-// sends a new admin on to the welcome screen.
 const setupRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/setup",
@@ -237,7 +224,6 @@ const resetRoute = createRoute({
   component: Reset,
 });
 
-// Full page outside the app chrome, like login and invite.
 const welcomeRoute = createRoute({
   getParentRoute: () => signedInRoute,
   path: "/welcome",
@@ -280,8 +266,6 @@ export const routeTree = rootRoute.addChildren([
 export const router = createRouter({
   routeTree,
   context: { auth: undefined! },
-  // A page that throws while showing: ours, not the library's page with the
-  // code's error in it.
   defaultErrorComponent: CrashPage,
   ...scrollRestorationOptions,
 });
@@ -291,10 +275,8 @@ declare module "@tanstack/react-router" {
     router: typeof router;
   }
   interface StaticDataRouteOption {
-    /** Only admins may open the page; the settings nav hides it from others. */
     adminOnly?: boolean;
-    /** Drawn, and its data asked for, while a saved session is checked: the
-     *  page reads nothing of the user (role, welcome, prefs). */
+    /** Drawn while a saved session is checked, so the page must read nothing of the user. */
     beforeSession?: boolean;
   }
 }

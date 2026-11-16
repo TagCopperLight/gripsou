@@ -37,36 +37,12 @@ import { legendItems, plotSeries } from "../../../lib/valueChart";
 import { FG_FAINT, GREEN } from "../../../lib/theme";
 import { ColorSquare } from "../../../ui/ColorSquare";
 
-// This modal shows THREE currency domains on screen, plus a fourth behind the chart's unit
-// switch. They are distinct and must
-// never be collapsed into one "native" currency:
-//
-// - Reporting domain (`users.prefs.currency`, so no explicit `currency` option):
-//   capitalInvested, currentValue, total unrealized P/L, weight of net worth.
-// - Price domain (`holding.priceCurrency` — the currency stamped on the `price`
-//   ROW we read, which is NOT necessarily `holding.currency`; Powens may label
-//   an instrument EUR while Yahoo resolves a London listing quoted GBP): the
-//   asset-mode chart, its header figure and gain.
-// - Amount domain (`holding.accountCurrency`): everything the provider
-//   denominated in the account — mean price per share (`holding.meanPrice`,
-//   the same fee-inclusive figure `lot_basis` computes for RecordLotsModal,
-//   NOT a market price), the purchase-history table's price/amount columns
-//   (`Lot.price`/`Lot.fee`, and the derived cash amount), and the
-//   purchases-mode chart, whose value line uses prices the server converted
-//   into the account's currency (`PricePoint.accountPrice`) and whose
-//   invested line is each day's `lot_basis` (`PricePoint.invested`).
-//
-// - Reader's currency again, as a chart choice: only when the chart's own
-//   currency differs and a day converts, the switch's middle option redraws the
-//   chart, header and gain from each day's converted price
-//   (`PricePoint.reportingPrice`, at that day's rates). Its gain is last minus
-//   first of that series, so it includes the currency's own move.
-//
-// `holding.currency` is the instrument's QUOTE currency. It labels the asset's
-// identity, not any amount here, so it formats nothing on this screen.
-//
-// Never mix the domains without labeling — an unlabelled figure sitting next to
-// one in another currency is the bug this split exists to prevent.
+// Four currency domains show here and must never be collapsed into one "native" currency:
+// - Reporting (`users.prefs.currency`): capital invested, current value, total P/L, weight of net worth.
+// - Price (`holding.priceCurrency`, the currency of the `price` row, not necessarily `holding.currency`: Powens may say EUR while Yahoo resolves a GBP listing): the asset-mode chart, its header figure and gain.
+// - Amount (`holding.accountCurrency`): mean price per share (`lot_basis`, fee-inclusive), the purchase table, and the purchases chart (`PricePoint.accountPrice`, `PricePoint.invested`).
+// - Reporting again, behind the chart's unit switch: redrawn from `PricePoint.reportingPrice`, so its gain includes the currency's own move.
+// `holding.currency` is the quote currency: it labels identity, never an amount here.
 
 
 type Mode = "asset" | "purchases";
@@ -74,7 +50,6 @@ type Mode = "asset" | "purchases";
 
 type AssetModalProps = {
   holding: Holding;
-  /** Total net worth, for the "weight of net worth" stat. */
   netWorth: number;
   onClose: () => void;
   onRecordLots?: () => void;
@@ -97,16 +72,14 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const prices = useMemo(() => priceData ?? [], [priceData]);
 
   const chartReady = priceData !== undefined;
-  // A new range keeps the last one's chart and gain on screen, dimmed.
   const stale = staleClass(pricesStale);
 
   const up = Number(holding.gl) >= 0;
   const chartCurrency = mode === "asset" ? holding.priceCurrency : holding.accountCurrency;
   const offered = reportingOffered(chartCurrency, reader, prices);
-  // Private mode: the purchases chart plots the position's own value, so it
-  // shows in % only (the unit price of the asset tab is public).
+  // Private mode: the purchases chart plots the position's own value, so it shows in % only.
   const percentOnly = masked && mode === "purchases";
-  // A tab where the choice is not offered never leaves the switch on it.
+  // A tab that doesn't offer the choice never leaves the switch on it.
   const shownUnit: ChartUnit = percentOnly ? "percent" : unit === "reporting" && !offered ? "value" : unit;
   const inReporting = shownUnit === "reporting";
   const shownCurrency = inReporting ? reader : chartCurrency;
@@ -170,18 +143,14 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
       </HoldingModalHeader>
 
       <div ref={body} className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0 md:p-6 md:pt-0">
-        {/* Side by side from xl (a chart of at least ~580 px beside the 512 px
-            column); below, the chart on top and the stats under it. */}
+        {/* Side by side from xl (chart at least ~580 px beside the 512 px column). */}
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
         <LoadingFrame loading={pricesLoading} className="flex min-w-0 flex-col rounded-2xl bg-surface-2 p-4 md:p-5 xl:flex-1">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex flex-col gap-1">
               <span className="text-fg-faint text-sm">{chartLabel}</span>
-              {/* Both headerValue and gainAbs follow the chart: price
-                  domain in asset mode, amount domain in purchases mode.
-                  Reporting currency only behind the unit switch — see the file header. */}
-              {/* The asset's own price is known up front; the position's value
-                  and every gain come from the prices. */}
+              {/* headerValue and gainAbs follow the chart: price domain in asset mode, amount domain in purchases mode. */}
+              {/* The asset's own price is known up front; the position's value and gains come from the prices. */}
               {pricesLoading && mode === "purchases" ? (
                 <Skeleton>
                   <TextBone text="text-2xl" className="w-36" />
@@ -265,12 +234,12 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
             />
           )}
         </div>
-        </div>{/* end chart row */}
+        </div>
 
         {mode === "asset" && holding.composition && (
           <CompositionSurface composition={holding.composition} />
         )}
-      </div>{/* end body */}
+      </div>
     </Modal>
   );
 }
@@ -307,8 +276,7 @@ function StatsSurface({
           <MaskedMoney masked={masked} value={holding.invested} />
         </Stat>
         <Stat label={t("dashboard.assetModal.currentValue")}>
-          {/* No rate: the converted value is zero, so show what it is worth
-              in its own currency, marked, as the Holdings table does. */}
+          {/* No rate: the converted value is zero, so show the worth in its own currency, marked, as the Holdings table does. */}
           {holding.fxMissing && holding.valueNative !== null ? (
             <>
               <MaskedMoney masked={masked} value={holding.valueNative} currency={holding.priceCurrency} className="text-fg-dim" />
@@ -378,7 +346,6 @@ function AboutSurface({
           </span>
         </AboutRow>
         <AboutRow label={t("dashboard.assetModal.weightOfNetWorth")}>
-          {/* Left out of the net worth for want of a rate: no share of it. */}
           {holding.fxMissing ? (
             <span className="text-fg-faint">-</span>
           ) : (
@@ -394,8 +361,7 @@ function AboutSurface({
   );
 }
 
-// The purchase history's columns: date with the side, quantity, unit price,
-// cash amount. Fixed tracks like every grid table (see `gridTable.ts`).
+// Fixed tracks like every grid table (see `gridTable.ts`).
 const HISTORY_TRACKS: Track[] = [
   { min: "150px", max: "1fr" },
   { min: "64px", max: "max-content" },
@@ -403,8 +369,7 @@ const HISTORY_TRACKS: Track[] = [
   { min: "108px", max: "max-content" },
 ];
 
-/** `currency` is the ACCOUNT's currency: transaction.amount and
- *  transaction.unit_price are amount-domain, not price-domain. */
+/** `currency` is the account's: amount and unit_price are amount-domain. */
 function PurchaseHistorySurface({
   purchases,
   currency,
@@ -412,7 +377,6 @@ function PurchaseHistorySurface({
   loading,
   onRetry,
 }: {
-  /** Undefined while loading or after a failure. */
   purchases: Lot[] | undefined;
   currency: string;
   masked: boolean;
@@ -472,9 +436,7 @@ function PurchaseHistorySurface({
   );
 }
 
-/** Three rows in the history's columns while the lots load. The table's body
- *  can't hold a `Skeleton`, so each row pulses on its own and is hidden from
- *  screen readers. */
+/** The table's body can't hold a `Skeleton`, so each row pulses on its own and is hidden from screen readers. */
 function HistoryRowsSkeleton() {
   return Array.from({ length: 3 }, (_, i) => (
     <tr key={i} role="row" aria-hidden className={`${ROW_CELLS} motion-safe:animate-pulse`}>

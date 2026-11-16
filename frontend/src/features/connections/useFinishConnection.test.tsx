@@ -6,7 +6,6 @@ import { appWrapper, stubFetch, requestsTo } from "../../test/kit";
 let fetchMock: ReturnType<typeof stubFetch>;
 
 beforeEach(() => {
-  // Like the server: a provider error fails the complete.
   fetchMock = stubFetch(async (url, init) =>
     url === "/api/connections/complete" && String(init?.body).includes('"error"')
       ? new Response("boom", { status: 400 })
@@ -20,8 +19,7 @@ function finish(query: string | undefined, { strict = false, onDone = vi.fn() } 
 
 const completes = () => requestsTo(fetchMock, "/connections/complete").map((r) => r.body);
 
-/** A mutation reaches fetch a few ticks after the effect: give it the
- *  chance, so "nothing" means nothing and not "nothing yet". */
+/** A mutation reaches fetch a few ticks after the effect: wait, so "nothing" means nothing. */
 const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 20)); });
 
 describe("finishing a connection from the provider's callback", () => {

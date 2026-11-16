@@ -5,10 +5,8 @@ import { TransactionsTable } from "./TransactionsTable";
 import { TransactionRow } from "./TransactionRow";
 import type { Transaction } from "../../../api/wire";
 
-// Counts component renders: the table and every row call `useTranslation`
-// once per render. (Counting a child such as the avatar would not do: the
-// React Compiler caches a row's child elements, so a child can skip while
-// the row itself still runs.)
+// Counts component renders: the table and every row call `useTranslation` once per render.
+// A child such as the avatar would not do, since the React Compiler caches a row's child elements.
 const translations = vi.hoisted(() => ({ calls: 0 }));
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>();
@@ -33,8 +31,7 @@ function tx(over: Partial<Transaction>): Transaction {
   };
 }
 
-/** jsdom has no IntersectionObserver; the table must still page, which is what
- *  the button fallback is for — and it is what these tests drive. */
+/** jsdom has no IntersectionObserver; the tests drive the button fallback. */
 class NoopObserver {
   observe() {}
   unobserve() {}
@@ -145,15 +142,10 @@ describe("TransactionsTable", () => {
     const rows = [tx({ id: "t1" }), tx({ id: "t2" }), tx({ id: "t3" })];
     const { rerender } = render(<TransactionsTable {...BASE} rows={rows} />);
 
-    // What a search keystroke looks like from here: a fresh array holding the
-    // same rows, and a fresh-but-equivalent selection test. Only the table
-    // itself runs again.
     translations.calls = 0;
     rerender(<TransactionsTable {...BASE} rows={[...rows]} />);
     expect(translations.calls).toBe(1);
 
-    // An optimistic edit replaces one row object: that row runs again, its
-    // neighbours do not (table + row + the row's category chip).
     translations.calls = 0;
     const edited = [rows[0], { ...rows[1], checked: true }, rows[2]];
     rerender(<TransactionsTable {...BASE} rows={edited} />);
@@ -205,10 +197,8 @@ describe("TransactionsTable", () => {
       const { rerender } = render(<TransactionsTable {...BASE} hasNextPage onLoadMore={onLoadMore} />);
       const before = instances[0].observed;
       rerender(<TransactionsTable {...BASE} hasNextPage fetchingNextPage onLoadMore={onLoadMore} />);
-      // Nothing while the page is in flight...
       instances[0].fire(true);
       expect(onLoadMore).not.toHaveBeenCalled();
-      // ...then a fresh reading once it has landed.
       rerender(<TransactionsTable {...BASE} hasNextPage onLoadMore={onLoadMore} />);
       expect(instances[0].observed).toBeGreaterThan(before);
       instances[0].fire(true);

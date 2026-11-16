@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# The CI checks. `./ci.sh` runs them all; `./ci.sh <job>...` runs some:
-# `backend` is `backend-lint` and `backend-test`, `frontend` is `frontend-lint`
-# and `frontend-test`. GitHub runs them as parallel jobs. Every
-# step runs even after a failure, and the exit status says whether any failed.
+# `./ci.sh` runs every job, `./ci.sh <job>...` some. `backend` is `backend-lint` and `backend-test`,
+# `frontend` is `frontend-lint` and `frontend-test`. Every step runs even after a failure.
 set -uo pipefail
 cd "$(dirname "$0")"
 
@@ -17,14 +15,10 @@ step() {
   echo "::: $name took $((SECONDS - start))s"
 }
 
-# The tests run on a throwaway Postgres, never the dev one. Every
-# #[db_test] copies template1 into a new database and migrates it, so
-# template1 is migrated first (then each test finds everything applied) and
-# the data lives in RAM without fsync (nothing here is worth keeping). Both
-# would be wrong on the dev server; here template1 is rebuilt every run, so it
-# never keeps the old version of a migration you are editing. The image is the
-# one docker-compose.yml runs. Trust auth: an unoptimised build's SCRAM
-# handshake on every test connection doubles the test time.
+# Tests run on a throwaway Postgres, never the dev one: template1 is migrated first (each #[db_test]
+# copies it) and rebuilt every run, so it never keeps the old checksum of a migration being edited.
+# Data lives in RAM without fsync, and auth is trust: an unoptimised build's SCRAM handshake on every
+# test connection doubles the test time.
 db=gripsou-ci-$$
 start_test_db() {
   image=$(sed -n 's/^ *image: *\(postgres:.*\)$/\1/p' docker/docker-compose.yml)
@@ -56,18 +50,15 @@ backend-lint() {
 }
 
 backend-test() { backend_test --workspace; }
-# GitHub runs backend-test as these two halves, each on a runner of its own.
 backend-test-core() { backend_test -p gripsou-core; }
 backend-test-rest() { backend_test --workspace --exclude gripsou-core; }
 
-# $@: the packages to test, as cargo selects them.
 backend_test() {
   start_test_db &
   db_started=$!
   trap 'docker stop "$db" >/dev/null 2>&1' EXIT
-  # Also builds the examples with the tests' features: `cargo run --example`
-  # would build them again with others. Core's `migrate` is built with the
-  # same ones, the whole workspace's when core isn't tested.
+  # Also builds the examples with the tests' features, so `cargo run --example` does not build
+  # them again. Core's `migrate` gets the same features, the whole workspace's when core isn't tested.
   local with_core=("$@")
   [[ " $* " == *" --exclude gripsou-core "* ]] && with_core=(--workspace)
   step "build" bash -c 'cd backend && cargo test "$@" --no-run' _ "$@"
@@ -126,7 +117,6 @@ for job in "${jobs[@]}"; do
   case $job in
     backend | backend-lint | backend-test | backend-test-core | backend-test-rest \
       | frontend | frontend-lint | frontend-test) $job ;;
-    # A part of the frontend tests: `frontend-test/1/2` is the first half.
     frontend-test/*) frontend-test --shard="${job#frontend-test/}" ;;
     *) echo "unknown job: $job"; exit 2 ;;
   esac

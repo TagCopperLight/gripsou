@@ -4,9 +4,7 @@ type Language = UserPrefs["uiLanguage"];
 
 const KEY = "gripsou.uiLanguage";
 
-/** The language of the last user signed in on this device. A page drawn while
- *  their saved session is checked speaks it from the start, rather than the
- *  browser's language until the check names the user's own. */
+/** A page drawn while the saved session is checked speaks it from the start. */
 export function savedLanguage(): Language | null {
   try {
     const saved = localStorage.getItem(KEY);

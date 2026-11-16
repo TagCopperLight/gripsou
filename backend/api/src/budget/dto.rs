@@ -1,5 +1,3 @@
-//! What the budget endpoints send and accept.
-
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -16,8 +14,7 @@ use gripsou_core::repo::budget::{assign, category, tag};
 pub struct CategoryDto {
     pub id: String,
     pub name: String,
-    /// Present only on a seeded row the user has not renamed; the frontend
-    /// translates it and falls back to `name`.
+    /// Set only on a seeded row the user has not renamed; the frontend translates it, falling back to `name`.
     pub default_key: Option<String>,
     pub color: String,
     pub icon: Option<String>,
@@ -71,7 +68,6 @@ impl CategoryBody {
 #[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ReorderBody {
-    /// Every category of the user, in the order they should appear.
     pub ids: Vec<String>,
 }
 
@@ -103,8 +99,6 @@ pub struct TagBody {
     pub color: Option<String>,
 }
 
-/// The category fields a chip needs, and no more. Same shape the transactions
-/// list already sends, so the frontend's `CategoryChip` is reused verbatim.
 #[derive(Serialize, Clone, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename = "CategoryRef")]
@@ -116,8 +110,6 @@ pub struct CategoryRefDto {
     pub icon: Option<String>,
 }
 
-/// One discriminated union for the Sankey's nodes, the breakdown's rows and
-/// the trend's series, so the chip has a single input shape everywhere.
 #[derive(Serialize, Clone, TS)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 #[ts(rename = "Slice")]
@@ -136,8 +128,6 @@ pub struct SliceAmountDto {
     pub amount: String,
 }
 
-/// A headline figure and its two comparisons. Amounts, never percentages: the
-/// frontend owns the formatting and the arrow/colour logic.
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename = "Figure")]
@@ -195,18 +185,13 @@ pub struct FiguresDto {
 #[serde(rename_all = "camelCase")]
 #[ts(rename = "BudgetSummary")]
 pub struct SummaryDto {
-    /// Sum of `txn_count` across every `(day, category)` row in the period —
-    /// NOT the count on the Transactions list header for the same month.
-    /// Paired transfers, neutral rows and lot rows are all left out here; the
-    /// list shows lots and neutral rows (internal transfers on request).
+    /// Not the count on the Transactions list header: paired transfers, neutral rows and lot rows are left out here.
     pub txn_count: i64,
     /// Some row could not be valued: the figures are understated.
     pub fx_missing: bool,
     pub figures: FiguresDto,
     pub sankey: SankeyDto,
-    /// Expense side only: expense-kind categories plus the uncategorised
-    /// outflow row. The 7 largest plus one rolled-up `other`, whose members
-    /// are not sent.
+    /// Expense side only: the 7 largest plus one rolled-up `other`, whose members are not sent.
     pub breakdown: Vec<BreakdownRowDto>,
 }
 
@@ -231,7 +216,6 @@ pub struct TrendSeriesDto {
 #[serde(rename_all = "camelCase")]
 #[ts(rename = "BudgetTrend")]
 pub struct TrendDto {
-    /// `["2025-10", ..., "2026-09"]` — `months` entries ending at `anchor`.
     pub months: Vec<String>,
     /// One value per month in every series, zeros included.
     pub series: Vec<TrendSeriesDto>,
@@ -241,8 +225,7 @@ pub struct TrendDto {
 #[serde(rename_all = "camelCase")]
 #[ts(optional_fields = nullable)]
 pub struct TrendParams {
-    /// `"2026-09"`. Required: stepping back to March 2024 must compare against
-    /// 2024, not against whenever the request happened to be made.
+    /// Required: stepping back to March 2024 must compare against 2024, not the request date.
     pub anchor: String,
     pub months: Option<u32>,
 }
@@ -255,24 +238,17 @@ pub struct PatchTransactionBody {
     #[serde(default, deserialize_with = "double_option")]
     #[ts(as = "Option<Uuid>")]
     pub category_id: Option<Option<Uuid>>,
-    /// The row's whole tag set, replacing the one it has: there is no
-    /// add/remove split.
+    /// The whole tag set, replacing the current one.
     pub tag_ids: Option<Vec<Uuid>>,
     pub checked: Option<bool>,
-    /// As on an apply-to-description: a category change on half of an
-    /// internal transfer waits for it.
     #[serde(default)]
     #[ts(optional = nullable)]
     pub confirm_break_pairs: bool,
-    /// Which rows `sameDescriptionCount` counts: the review queue sends
-    /// `review`, so its offer matches the write it would launch.
     #[serde(default)]
     #[ts(optional = nullable)]
     pub offer_scope: Scope,
 }
 
-/// Which of the rows sharing a description an "apply to all" reaches: every
-/// one (the Transactions list), or only those still in review (the queue).
 #[derive(Deserialize, Default, Clone, Copy, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename = "SameDescriptionScope")]
@@ -294,14 +270,11 @@ where
 #[serde(rename_all = "camelCase")]
 #[ts(rename = "PatchResult")]
 pub struct PatchTransactionResponse {
-    /// How many *other* transactions share this row's normalised description —
-    /// what the "apply to all?" prompt offers. Present only when the category
-    /// was written.
+    /// How many other transactions share this row's normalised description: what "apply to all?" offers. Present only when the category was written.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub same_description_count: Option<i64>,
-    /// Non-null means nothing was written: the write would have dissolved
-    /// this many internal-transfer pairs and the caller has not confirmed.
+    /// Non-null means nothing was written: the write would have dissolved this many internal-transfer pairs.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub pending_pair_breaks: Option<i64>,
@@ -312,13 +285,10 @@ pub struct PatchTransactionResponse {
 #[ts(optional_fields = nullable)]
 pub struct ApplyToDescriptionBody {
     pub category_id: Option<Uuid>,
-    /// The caller has seen how many internal-transfer pairs this write would
-    /// dissolve and wants it applied anyway. Without it, a write that would
-    /// break one is refused and answers `pendingPairBreaks`.
+    /// Confirms breaking the pairs a previous answer reported.
     #[serde(default)]
     #[ts(optional = nullable)]
     pub confirm_break_pairs: bool,
-    /// `review` from the queue: only rows still in review are written.
     #[serde(default)]
     #[ts(optional = nullable)]
     pub scope: Scope,
@@ -329,25 +299,18 @@ pub struct ApplyToDescriptionBody {
 #[ts(rename = "WriteResult")]
 pub struct UpdatedResponse {
     pub updated: i64,
-    /// Non-null means **nothing was written**: the write would have dissolved
-    /// this many internal-transfer pairs and the caller has not confirmed.
-    /// Re-send the identical body with `confirmBreakPairs` to go ahead.
-    ///
-    /// Kept distinct from `updated: 0` on purpose — "wrote no rows" and
-    /// "refused, awaiting confirmation" are different answers, and a client
-    /// that cannot tell them apart silently swallows the confirmation step.
+    /// Non-null means nothing was written: the write would have dissolved this many internal-transfer pairs and the caller has not confirmed.
+    /// Resend the identical body with `confirmBreakPairs`. Distinct from `updated: 0`: a client that can't tell them apart swallows the confirmation step.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub pending_pair_breaks: Option<i64>,
-    /// The rows written, for apply-to-description only: the review queue
-    /// resolves those of its lines this swept up. A bulk write omits it.
+    /// The rows written, for apply-to-description only: the review queue resolves the lines this swept up.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub ids: Option<Vec<Uuid>>,
 }
 
 impl UpdatedResponse {
-    /// The answer to a write that did `(rows written, ids to report)`.
     pub fn answer(
         outcome: assign::WriteOutcome<(i64, Option<Vec<Uuid>>)>,
     ) -> Result<Self, ApiError> {
@@ -371,22 +334,15 @@ impl UpdatedResponse {
 #[serde(rename_all = "camelCase")]
 #[ts(optional_fields = nullable)]
 pub struct BulkBody {
-    /// Explicit rows, at most `MAX_BULK_IDS`. Exactly one of `ids` and
-    /// `filter` is sent: `filter` targets every row the list shows under the
-    /// same parameters — that is what "select all shown" means with 3.5 years
-    /// behind an infinite scroll.
+    /// Exactly one of `ids` and `filter`. `filter` targets every row the list shows ("select all shown" over an infinite scroll).
     pub ids: Option<Vec<Uuid>>,
-    /// The list's own query parameters, decoded as the list decodes them, so an
-    /// absent `includeTransfers` hides transfers here exactly as it does in the
-    /// list.
+    /// The list's own query, decoded as the list decodes it.
     pub filter: Option<crate::transactions::TransactionParams>,
     #[serde(default, deserialize_with = "double_option")]
     #[ts(as = "Option<Uuid>")]
     pub category_id: Option<Option<Uuid>>,
     pub add_tag_ids: Option<Vec<Uuid>>,
     pub checked: Option<bool>,
-    /// As on an apply-to-description: a write that would break pairs waits
-    /// for it.
     #[serde(default)]
     #[ts(optional = nullable)]
     pub confirm_break_pairs: bool,
@@ -395,8 +351,7 @@ pub struct BulkBody {
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct AcceptReviewResponse {
-    /// How many *other* rows sharing this row's normalised description are
-    /// still in review — what the review line's "apply to N others" offers.
+    /// Other rows sharing this row's description that are still in review: what "apply to N others" offers.
     pub same_description_count: i64,
 }
 

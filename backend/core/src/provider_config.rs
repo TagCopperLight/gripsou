@@ -1,13 +1,10 @@
-//! The keys providers need (Powens, the AI, logos), as the admin entered them
-//! in Settings → Server → API keys. Stored encrypted in
-//! `app_settings.provider_config` (`repo::provider_config`); this is the
-//! decrypted copy the adapters are built from.
+//! The keys providers need (Powens, the AI, logos), decrypted from `app_settings.provider_config`
+//! (`repo::provider_config`); the adapters are built from this copy.
 
 use std::collections::BTreeMap;
 
-/// One value a provider declares it needs. A secret is never sent back to the
-/// browser, only whether it is set. `label` is shown as is, in the provider's
-/// own words, never translated.
+/// A secret is never sent back to the browser, only whether it is set. `label` is the provider's own
+/// words, never translated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ConfigField {
     pub key: &'static str,

@@ -11,17 +11,12 @@ import { LoadingFrame } from "../../../ui/LoadingFrame";
 import { Bone, Skeleton } from "../../../ui/Skeleton";
 
 type PeriodLineProps = {
-  /** The period on screen: the one picked, or the default it resolved to.
-   *  `undefined` while the default (the latest month with data) loads. */
+  /** `undefined` while the default (latest month with data) loads. */
   period: Period | undefined;
-  /** Private mode: the eye that reveals every amount of the overview. */
   privacy: Privacy;
-  /** Forward stops at the latest month with data; back is always open. */
   canStepBack: boolean;
   canStepForward: boolean;
-  /** Moves a month period by `delta` months. */
   onStep: (delta: number) => void;
-  /** At the line's far end (the AI's running pill). */
   end?: ReactNode;
 };
 
@@ -70,7 +65,6 @@ export function PeriodLine({
               data-testid="period-clear"
               aria-label={t("budget.overview.clearRange")}
               title={t("budget.overview.clearRange")}
-              // Back to the default: the latest month with data.
               onClick={() => setPeriod(null)}
               className="cursor-pointer text-fg transition-opacity duration-140 hover:opacity-70"
             >

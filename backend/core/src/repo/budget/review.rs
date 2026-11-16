@@ -1,5 +1,4 @@
-//! The review queue's writes: accept and undo. The queue itself is the
-//! transactions list with `needs_review`; nothing here lists rows.
+//! The review queue's writes: accept and undo.
 
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -10,16 +9,12 @@ use crate::error::CoreError;
 #[derive(Debug, PartialEq, Eq)]
 pub enum ReviewWrite {
     Done,
-    /// Not this user's row.
     NotFound,
-    /// The row is not in a state this action applies to.
     Refused,
-    /// The confidence is outside 0 to 1.
     BadConfidence,
 }
 
-/// Tells a refused write apart from someone else's row. Runs only after a
-/// scoped write matched nothing, so the common path is one statement.
+/// Runs only after a scoped write matched nothing, so the common path is one statement.
 async fn not_written(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -41,9 +36,7 @@ async fn not_written(
     })
 }
 
-/// Keeps the AI's guess and marks it reviewed. Only an unreviewed AI row
-/// that actually has a category can be accepted — a "no guess" row can only
-/// be corrected.
+/// Only an unreviewed AI row with a category can be accepted; a "no guess" row can only be corrected.
 pub async fn accept(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -74,13 +67,9 @@ pub async fn accept(
     }
 }
 
-/// Puts a resolved row back in the queue with the guess the client last
-/// showed. Only a reviewed row (accepted, or corrected by the user) can be
-/// undone, never a paired one, and only into one of the user's categories.
-///
-/// The state is checked by the update itself, not read beforehand: a sync
-/// that pairs the row in between makes the update match nothing, rather than
-/// turning half a transfer back into an AI guess.
+/// Only a reviewed row can be undone, never a paired one, and only into one of the user's categories.
+/// The update checks the state itself, so a sync that pairs the row in between makes it match nothing
+/// instead of turning half a transfer back into an AI guess.
 pub async fn undo(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -126,10 +115,8 @@ pub async fn undo(
     }
 }
 
-/// The queue's size — the amber segment and the banner. Counts the list's own
-/// rows (`budget_transaction_rows`) with `needs_review`, so it is by
-/// construction what the list shows under the review filter with transfers
-/// included.
+/// Counts the list's own rows (`budget_transaction_rows`) with `needs_review`, so it matches the list under
+/// the review filter.
 pub async fn review_count(
     pool: &sqlx::PgPool,
     user_id: Uuid,

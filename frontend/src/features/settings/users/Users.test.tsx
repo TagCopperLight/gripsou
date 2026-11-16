@@ -18,7 +18,6 @@ describe("SettingsUsers", () => {
   it("shows reset and delete only for other users, not the self row", async () => {
     renderWithApp(<SettingsUsers />);
     await screen.findAllByText("Marie Laurent");
-    // The self row has no actions: its password lives in the Account tab.
     expect(screen.getAllByLabelText("Reset password")).toHaveLength(2);
     expect(screen.getAllByLabelText("Delete user")).toHaveLength(2);
   });
@@ -26,7 +25,6 @@ describe("SettingsUsers", () => {
   it("locks the self row's role (a non-button badge)", async () => {
     renderWithApp(<SettingsUsers />);
     await screen.findAllByText("Jules Bernard");
-    // Only the self row is Admin; it must not be a clickable button.
     expect(screen.queryByRole("button", { name: "Admin" })).toBeNull();
   });
 

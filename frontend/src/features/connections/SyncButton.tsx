@@ -6,17 +6,8 @@ import { useConnections } from "../../api/connections";
 import { anySyncing, overallAlert } from "../../lib/connectionState";
 import { SyncModal } from "./SyncModal";
 
-// Global sync control: positioned top-right on every page. The icon spins while any
-// connection is syncing; its dot is the worst of the connections' own dots.
-//
-// Vertical placement: it is centred in the band above the first surface, which
-// every page builds the same way (see PageHeader): `main`'s own `pt-6` (24px),
-// then the 32px title line, then 24px down to the first card. The 32px button
-// starts at the same 24px → `top-6`, level with the title.
-//
-// Its size and inset are CSS variables (index.css) because a page whose header
-// row reaches the right edge has to stay clear of it: `clear-sync-button`
-// derives that margin from the same two numbers.
+// Placed top-right on every page, centred in the band above the first surface (`pt-6` + 32px title + 24px gap), hence `top-6`.
+// Size and inset are CSS variables (index.css) so `clear-sync-button` can keep right-aligned headers clear of it.
 export function SyncButton() {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);

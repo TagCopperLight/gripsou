@@ -3,9 +3,6 @@ import type { ReactNode } from "react";
 import { PrivacyEye } from "./MaskedMoney";
 import type { Privacy } from "../auth/usePrivacy";
 
-/** A card's (or a section's) heading, with the eye of its masked amounts
- *  after it while private mode is on. `privacy` is left out (or false) while
- *  the card has no figures to reveal. */
 export function CardTitle({
   privacy,
   size = "sm",
@@ -13,7 +10,6 @@ export function CardTitle({
   children,
 }: {
   privacy?: Privacy | false | null;
-  /** `lg` heads a page section or a page-wide surface. */
   size?: "sm" | "lg";
   className?: string;
   children: ReactNode;

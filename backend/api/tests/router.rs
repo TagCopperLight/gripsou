@@ -17,8 +17,7 @@ fn app(db: sqlx::PgPool, static_dir: &std::path::Path) -> axum::Router {
 
 #[tokio::test]
 async fn public_health_auth_static_fallback_and_webhook_limit() {
-    // Short wait: a route reaching the database fails fast instead of
-    // retrying the connection for the default 30 s.
+    // Short wait: a route reaching the database fails fast instead of retrying for 30 s.
     let db = sqlx::postgres::PgPoolOptions::new()
         .acquire_timeout(std::time::Duration::from_secs(1))
         .connect_lazy("postgres://unused:unused@localhost/unused")
@@ -41,7 +40,6 @@ async fn public_health_auth_static_fallback_and_webhook_limit() {
             .unwrap();
         assert_eq!(response.status(), status);
     }
-    // An unknown API path answers like any API error, not with the SPA.
     let r = app
         .clone()
         .oneshot(
@@ -68,8 +66,7 @@ async fn public_health_auth_static_fallback_and_webhook_limit() {
         .await
         .unwrap();
     assert_eq!(r.status(), StatusCode::METHOD_NOT_ALLOWED);
-    // Passwordless sign-in starts without a session (the unused pool makes
-    // it fail later, but never as unauthorised).
+    // The unused pool makes it fail later, but never as unauthorised.
     let r = app
         .clone()
         .oneshot(
@@ -134,8 +131,6 @@ async fn static_files_are_compressed_and_hashed_assets_cached_forever() {
         "public, max-age=31536000, immutable"
     );
 
-    // Only hashed assets get the long cache: never the page naming them, nor a
-    // missing asset.
     for (path, status) in [
         ("/", StatusCode::OK),
         ("/assets/gone.js", StatusCode::NOT_FOUND),
@@ -210,7 +205,6 @@ async fn totp_setup_without_a_token_is_unauthorized() {
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
 
-/// A member's bearer token.
 async fn member_token(pool: &sqlx::PgPool) -> String {
     let member = gripsou_core::testkit::seed_user(pool).await;
     let token = gripsou_api::auth::generate_token();
@@ -227,8 +221,6 @@ async fn member_token(pool: &sqlx::PgPool) -> String {
     token
 }
 
-/// A chart range the server doesn't know is refused like any other filter,
-/// never read as the widest window.
 #[gripsou_core::testkit::db_test]
 async fn an_unknown_range_is_a_400(pool: sqlx::PgPool) {
     let token = member_token(&pool).await;
@@ -251,8 +243,6 @@ async fn an_unknown_range_is_a_400(pool: sqlx::PgPool) {
     }
 }
 
-/// A body that isn't JSON, or is JSON of the wrong shape (an unknown lot
-/// type or category kind), is a 400 and writes nothing.
 #[gripsou_core::testkit::db_test]
 async fn a_malformed_body_is_a_400(pool: sqlx::PgPool) {
     let token = member_token(&pool).await;

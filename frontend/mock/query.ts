@@ -1,12 +1,9 @@
-// The query string of each route that takes one, read into its generated
-// type as the server's `Query` extractor reads it: a value that doesn't fit
-// its field is a 400 in axum's words. A route whose query type gains a field
-// fails to type-check here until it is read.
+// Each route's query string, read as the server's `Query` extractor reads it. A route whose query type
+// gains a field fails to type-check here until it is read.
 
 import type { Key, Query } from "../src/api/route.ts";
 import { RANGES, type RangeParams, type SummaryParams, type TransactionParams, type TrendParams, type TypeBucket } from "../src/api/wire.ts";
 
-/** A query string the server refuses to read; `message` is its 400 text. */
 export class BadQuery extends Error {}
 
 const refuse = (detail: string): never => {
@@ -68,8 +65,7 @@ const range = read<RangeParams>({ range: oneOf(RANGES) });
 const transactions = read<TransactionParams>({
   search: text,
   accountId: text,
-  // Any text: the server reads the bucket as a string, then checks it
-  // (`parseTransactionFilter`).
+  // Any text: the server checks the bucket itself (`parseTransactionFilter`).
   bucket: (q, name) => text(q, name) as TypeBucket | undefined,
   from: date,
   to: date,
@@ -94,7 +90,6 @@ const QUERIES: WithQuery = {
   "GET /budget/trend": read<TrendParams>({ anchor: required, months: (q, name) => int(q, name, true) }),
 };
 
-/** The route's query, read from the URL; throws `BadQuery`. */
 export function readQuery<K extends Key>(key: K, raw: Raw): Query<K> {
   const reader = (QUERIES as Partial<Record<Key, (q: Raw) => unknown>>)[key];
   return (reader ? reader(raw) : undefined) as Query<K>;

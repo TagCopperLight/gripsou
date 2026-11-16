@@ -12,13 +12,9 @@ let txns: Lot[] = [];
 let suggestions: LotSuggestion[] = [];
 let suggestionsFailed = false;
 let saveFails = false;
-// When set, the lots answer waits for it.
 let lotsGate: Promise<void> | null = null;
 
-// Fixed sentinel answers from the preview endpoint, deliberately not the basis
-// formula: they prove the row set reaches the server and the figures it sends
-// back reach the screen, and nothing about the formula, which only the
-// backend computes.
+// Sentinel answers, not the basis formula, which only the backend computes.
 const PREVIEW_RESULTS: BasisPreview[] = [
   { meanPrice: "25", invested: "375", realised: "0", unrealised: "12", reporting: null },
   { meanPrice: "30", invested: "400", realised: "5", unrealised: "20", reporting: null },
@@ -27,8 +23,6 @@ const PREVIEW_RESULTS: BasisPreview[] = [
 const ZERO: BasisPreview = { meanPrice: "0", invested: "0", realised: "0", unrealised: "0", reporting: null };
 
 let previewCallCount: number;
-// When true, a preview answer is queued instead of sent at once, so a test can
-// look at the screen while a request is in flight.
 let holdPreviewResolution: boolean;
 let heldResolvers: Array<() => void>;
 let fetchMock: ReturnType<typeof stubFetch>;
@@ -37,7 +31,6 @@ function stubServer() {
   fetchMock = stubFetch(async (url, init) => {
     if (url.endsWith("/lots/preview")) {
       const { rows } = JSON.parse(String(init?.body)) as { rows: LotEntry[] };
-      // An empty holding previews zero without using up a sentinel.
       const result = rows.length === 0 ? ZERO : PREVIEW_RESULTS[Math.min(previewCallCount, PREVIEW_RESULTS.length - 1)];
       if (rows.length > 0) previewCallCount += 1;
       if (!holdPreviewResolution) return jsonResponse(result);
@@ -54,12 +47,9 @@ function stubServer() {
   });
 }
 
-/** The rows each preview request sent, oldest first. */
 const previews = () => requestsTo(fetchMock, "/lots/preview").map((r) => (r.body as { rows: LotEntry[] }).rows);
-/** The bodies of the save requests. */
 const saves = () => requestsTo(fetchMock, "/holdings/h1/lots").filter((r) => r.method === "PUT").map((r) => r.body);
 
-/** Let in-flight answers land: a fetch answer reaches the screen a few ticks later. */
 const settle = () => act(() => new Promise((done) => setTimeout(done, 20)));
 
 async function releaseHeldPreview() {
@@ -68,7 +58,6 @@ async function releaseHeldPreview() {
   await settle();
 }
 
-/** Render the modal once its lots and suggestions have loaded. */
 async function renderModal(ui: ReactElement) {
   const view = renderWithApp(ui);
   await waitFor(() => expect(view.client.isFetching()).toBe(0));
@@ -76,11 +65,9 @@ async function renderModal(ui: ReactElement) {
   return view;
 }
 
-/** The "x / y shares accounted for" line above the bar. */
 const accountedLine = () =>
   screen.getByText((_, el) => el?.tagName === "SPAN" && /shares accounted for$/.test(el.textContent ?? "")).textContent;
 
-/** A background refetch that hands the modal the current `txns`. */
 async function refetch(client: QueryClient) {
   await act(() => client.refetchQueries());
   await settle();
@@ -122,11 +109,8 @@ describe("RecordLotsModal", () => {
     heldResolvers = [];
     stubServer();
   });
-  // This runs while the modal is still mounted (Vitest unwinds afterEach hooks
-  // in reverse registration order, so RTL's auto-cleanup — registered when this
-  // file imported it — goes last). `changeLanguage` emits `languageChanged`,
-  // which re-renders every mounted `useTranslation` consumer, so it must be
-  // acted on or React reports an un-acted update for each one.
+  // Runs while the modal is mounted (afterEach hooks unwind in reverse, so RTL's cleanup goes last);
+  // `changeLanguage` re-renders mounted consumers and must be wrapped in act.
   afterEach(async () => {
     await act(async () => {
       await i18n.changeLanguage("en");
@@ -141,7 +125,6 @@ describe("RecordLotsModal", () => {
     expect(screen.getByLabelText(/sent by your bank/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /delete entry/i })).toHaveLength(1);
     expect(accountedLine()).toBe("15 / 20 shares accounted for");
-    // The server keeps the provider's lots itself: only the user's rows go out.
     expect(previews().at(-1)).toEqual([{ type: "buy", date: "2024-05-02", quantity: "10", unitPrice: "20", fee: "0" }]);
 
     await user.click(screen.getByRole("button", { name: /delete entry/i }));
@@ -250,14 +233,9 @@ describe("RecordLotsModal", () => {
     } finally { vi.useRealTimers(); }
   });
 
-  // The figures are the server's, verbatim: the right rows reach the preview
-  // endpoint and whatever it answers reaches the screen. The formula itself is
-  // the backend's alone.
   it("shows the resulting figures the preview endpoint returns", async () => {
     txns = [lot("a", "buy", "10", "20"), lot("b", "buy", "10", "30"), lot("c", "sell", "5", "35")];
     await renderModal(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
-    // Check the row payload as well as the returned figures: sentinel figures
-    // alone cannot distinguish a correctly seeded request from a wrong one.
     await waitFor(() =>
       expect(previews()).toContainEqual([
         { type: "buy", date: "2024-05-02", quantity: "10", unitPrice: "20", fee: "0" },
@@ -271,9 +249,6 @@ describe("RecordLotsModal", () => {
     expect(screen.getByTestId("figure-unrealised")).toHaveTextContent("12");
   });
 
-  // TanStack Query resets a mutation's `data` to `undefined` the moment it goes
-  // pending again: the modal holds the last figures itself until a new answer
-  // lands, instead of blanking them to 0,00 € on every edit.
   it("keeps the previous figures on screen while a new preview is in flight", async () => {
     txns = [lot("a", "buy", "10", "20")];
     const user = userEvent.setup();
@@ -285,8 +260,6 @@ describe("RecordLotsModal", () => {
     await user.type(screen.getAllByTestId("lot-quantity")[1], "1");
     await user.type(screen.getAllByTestId("lot-unitPrice")[1], "10");
 
-    // The edit's debounced preview call has fired and is being held pending —
-    // the panel must still show the FIRST result, not zero.
     await waitFor(() => expect(previewCallCount).toBe(2));
     expect(screen.getByTestId("figure-meanPrice")).toHaveTextContent("25");
     expect(screen.getByTestId("figure-invested")).toHaveTextContent("375");
@@ -311,10 +284,7 @@ describe("RecordLotsModal", () => {
     await user.type(screen.getAllByTestId("lot-quantity")[1], "0");
     await user.type(screen.getAllByTestId("lot-unitPrice")[1], "10");
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
-    // The invalid row contributed nothing.
     expect(accountedLine()).toBe("10 / 20 shares accounted for");
-    // Nor the preview request: the invalid row must never reach the server, only
-    // the one valid buy of 10@20.
     await waitFor(() =>
       expect(previews()).toContainEqual([
         { type: "buy", date: "2024-05-02", quantity: "10", unitPrice: "20", fee: "0" },
@@ -322,9 +292,7 @@ describe("RecordLotsModal", () => {
     );
   });
 
-  // The server rejects an empty date at deserialization (400, nothing saved),
-  // so a row with no date must stay out of the bar and keep Save disabled —
-  // Save must never offer a batch the server would refuse.
+  // The server rejects an empty date (400), so Save must not offer such a batch.
   it("keeps Save disabled and the bar unmoved when a row's date is empty", async () => {
     const user = userEvent.setup();
     txns = [lot("a", "buy", "10", "20")];
@@ -335,12 +303,9 @@ describe("RecordLotsModal", () => {
     await user.type(screen.getAllByTestId("lot-quantity")[1], "5");
     await user.type(screen.getAllByTestId("lot-unitPrice")[1], "10");
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
-    // The dateless row contributed nothing.
     expect(accountedLine()).toBe("10 / 20 shares accounted for");
   });
 
-  // Over-recording is information, not an error: a user may enter a sale before
-  // the buy it came from.
   it("keeps Save enabled when more is recorded than held", async () => {
     const user = userEvent.setup();
     await renderModal(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
@@ -453,10 +418,7 @@ describe("RecordLotsModal", () => {
     expect(saves()).toHaveLength(0);
   });
 
-  // The server picks its own decimal scale, so a PEA lot comes back as "16.030"
-  // while the user retypes the same price as "16.03". Treating that as an edit
-  // would burn the row's id on a delete + re-add that changes nothing, and count
-  // a phantom entry on the Save button.
+  // The server picks its own decimal scale ("16.030" vs a retyped "16.03"): that is not an edit.
   it("does not treat a retyped equivalent decimal as a change", async () => {
     const user = userEvent.setup();
     txns = [lot("a", "buy", "10.00", "16.030")];
@@ -493,8 +455,6 @@ describe("RecordLotsModal", () => {
     expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
   });
 
-  // The whole justification for the dirty-flag seeding design: a refetch
-  // that lands mid-edit must not clobber what the user is typing.
   it("preserves an in-progress edit across a refetch that returns a new data reference", async () => {
     const user = userEvent.setup();
     txns = [lot("a", "buy", "10", "20")];
@@ -504,8 +464,6 @@ describe("RecordLotsModal", () => {
     await user.clear(qtyInput);
     await user.type(qtyInput, "17");
 
-    // A new array reference with the same underlying row — simulates a
-    // background refetch completing while the user is mid-edit.
     txns = [lot("a", "buy", "10", "20")];
     await refetch(client);
 

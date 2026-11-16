@@ -3,13 +3,10 @@ import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { MaskedMoney } from "./MaskedMoney";
 import { Percent } from "./Percent";
 
-/** A gain as a green (or red, for a loss) pill: the amount, masked in private
- *  mode, and the percentage, which never is. */
 export function GainPill({ value, pct, masked, currency }: {
   value: string | number;
   pct: string | number;
   masked: boolean;
-  /** The amount's currency; the reader's by default. */
   currency?: string;
 }) {
   const up = Number(value) >= 0;

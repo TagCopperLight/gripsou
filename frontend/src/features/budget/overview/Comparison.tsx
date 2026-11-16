@@ -5,22 +5,15 @@ import { Percent } from "../../../ui/Percent";
 import { TONE_CLASS, compareToBaseline } from "../../../lib/comparison";
 
 type ComparisonProps = {
-  /** "vs previous month" / "vs 12-month average". */
   label: string;
-  /** The figure's own amount, as the API sent it. */
   current: string;
-  /** The baseline. ABSENT (undefined) means this comparison does not exist for
-   *  this figure and nothing renders — never `null`, never a dash. */
+  /** Undefined: no such comparison for this figure, nothing renders. */
   baseline?: string;
-  /** Percent for the always-positive magnitudes, absolute for the signed ones.
-   *  Fixed per figure, so a cell never changes shape month to month. */
+  /** Fixed per figure so a cell never changes shape between months. */
   format: "percent" | "absolute";
-  /** Which direction reads as good: `up` for income and net; `down` for
-   *  expenses, where spending less is the improvement. */
+  /** `down` for expenses, where spending less is the improvement. */
   goodWhen: "up" | "down";
-  /** Completes `cmp-<figure>-<key>` for the test hooks. */
   testId: string;
-  /** Private mode: an amount change is hidden, a percentage one stays. */
   masked?: boolean;
 };
 
@@ -31,14 +24,10 @@ export function Comparison({
 
   const { tone, direction, delta, ratio } = compareToBaseline(current, baseline, goodWhen);
   const Icon = direction === "flat" ? Dot : direction === "up" ? ArrowUpRight : ArrowDownRight;
-  // Without a ratio (a zero baseline) the absolute delta is the only honest
-  // thing to show.
   const asPercent = format === "percent" && ratio !== undefined;
 
   return (
-    // `contents`: the delta and the label are the two cells of the parent's
-    // two-column grid, so every "vs …" label in a figure starts at the same x
-    // however wide the delta beside it is.
+    // `contents`: delta and label are cells of the parent's grid, so every "vs" label starts at the same x.
     <span data-testid={testId} data-tone={tone} className="contents text-xs">
       <span className={`flex items-center gap-0.5 ${TONE_CLASS[tone]}`}>
         <Icon className="size-3.5 shrink-0" />

@@ -7,10 +7,8 @@ import { Modal } from "./Modal";
 
 type DialogProps = {
   title: string;
-  /** Visible heading when it differs from the accessible name — e.g. a live
-      preview of what the user is typing, which must not rename the dialog. */
+  /** Shown when it differs from the accessible name, e.g. a live preview that must not rename the dialog. */
   heading?: ReactNode;
-  /** A line under the heading. */
   subtitle?: ReactNode;
   onClose: () => void;
   children?: ReactNode;
@@ -18,17 +16,11 @@ type DialogProps = {
   icon?: ReactNode;
   busy?: boolean;
   large?: boolean;
-  /** Wider still, for a list with several columns (the sync window). */
   wide?: boolean;
-  /** Shown in the header, just before the close button (e.g. step progress). */
   aside?: ReactNode;
 };
 
-/** The app's standard modal: a header with the title and a close button, a
- *  body that scrolls, and a footer of actions that stays in view. The
- *  behaviour (focus trap, Escape, `busy`) is [`Modal`](./Modal.tsx)'s.
- *  While `busy`, every control in the body and footer is off as well, so the
- *  write in flight is the only thing happening. */
+/** Behaviour (focus trap, Escape, `busy`) is [`Modal`](./Modal.tsx)'s. While `busy`, every control is off too. */
 export function Dialog({
   title, heading, subtitle, onClose, children, footer, icon, busy = false, large = false, wide = false, aside,
 }: DialogProps) {
@@ -41,8 +33,6 @@ export function Dialog({
       label={title}
       onClose={onClose}
       busy={busy}
-      // The first field of the body, else the first action (a confirmation's
-      // Cancel).
       focusWithin={[body, actions]}
       className={`relative ${wide ? "w-170" : large ? "w-160" : "w-120"} max-w-[90vw] max-h-[90vh] bg-surface rounded-3xl flex flex-col`}
     >

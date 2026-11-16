@@ -54,14 +54,10 @@ async fn stores_composition_without_touching_the_natural_key(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    // `kind` is half the natural key the next sync re-resolves this row by, so
-    // the scrape must not relabel it; the tracker/share distinction is derived
-    // from the presence of a composition at read time instead.
+    // `kind` is half the natural key the next sync resolves this row by, so the scrape must not relabel it.
     assert_eq!(row.kind, "equity", "provider kind left intact");
     assert_eq!(row.meta["composition"]["countries"][0]["name"], "USA");
 
-    // Second run: row is now fresh (composition.as_of is today), so the
-    // eligibility query excludes it.
     let again = fetch_composition_for_connection(&pool, conn_id, &provider)
         .await
         .unwrap();
@@ -84,7 +80,6 @@ async fn marks_none_when_no_tracker(pool: PgPool) {
         .unwrap();
     assert_eq!(summary.unresolved, 1);
 
-    // none-marked rows are excluded by the eligibility query on second run
     let again = fetch_composition_for_connection(&pool, conn_id, &provider)
         .await
         .unwrap();
@@ -96,8 +91,7 @@ async fn marks_none_when_no_tracker(pool: PgPool) {
 
 #[gripsou_core::testkit::db_test]
 async fn marks_none_when_composition_empty(pool: PgPool) {
-    // Symbol resolves, but the page has no breakdown (e.g. an equity, or a
-    // tracker that reports none) — must NOT be stamped `etf`.
+    // Symbol resolves but the page has no breakdown: must not be stamped `etf`.
     let conn_id = testkit::seed_one_equity(&pool).await;
 
     let provider = MockComp {
@@ -135,8 +129,7 @@ impl CompositionProvider for FailingResolve {
     }
 }
 
-// An unavailable source is not "no composition": the instrument must stay
-// eligible for the next sync.
+// An unavailable source is not "no composition": the instrument stays eligible.
 #[gripsou_core::testkit::db_test]
 async fn an_unavailable_source_is_a_failure_not_a_none_mark(pool: PgPool) {
     let conn_id = testkit::seed_one_equity(&pool).await;

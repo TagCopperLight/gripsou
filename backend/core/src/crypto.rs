@@ -15,8 +15,7 @@ pub enum CryptoError {
     InvalidBase64,
 }
 
-/// `ENCRYPTION_KEY`, parsed once at startup: it encrypts provider
-/// credentials and authenticator secrets. Its `Debug` never shows the bytes.
+/// Parsed once at startup. Its `Debug` never shows the bytes.
 #[derive(Clone)]
 pub struct EncryptionKey([u8; 32]);
 
@@ -27,8 +26,7 @@ impl std::fmt::Debug for EncryptionKey {
 }
 
 impl EncryptionKey {
-    /// Check the raw `ENCRYPTION_KEY` value. The error says what is wrong
-    /// without ever repeating the value.
+    /// The error never repeats the value.
     pub fn parse(raw: Option<&str>) -> Result<EncryptionKey, String> {
         match raw {
             None | Some("") => Err(
@@ -45,7 +43,7 @@ impl EncryptionKey {
         Aes256Gcm::new(&self.0.into())
     }
 
-    /// Encrypt `plaintext` using AES-256-GCM. Returns `base64(nonce || ciphertext)`.
+    /// Returns `base64(nonce || ciphertext)`.
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<String, CryptoError> {
         let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
         let ciphertext = self
@@ -57,7 +55,6 @@ impl EncryptionKey {
         Ok(STANDARD.encode(&combined))
     }
 
-    /// Decrypt `blob` (base64 of nonce || ciphertext) using AES-256-GCM.
     pub fn decrypt(&self, blob: &str) -> Result<Vec<u8>, CryptoError> {
         let combined = STANDARD
             .decode(blob)
@@ -72,7 +69,6 @@ impl EncryptionKey {
     }
 }
 
-/// The 32 bytes of `key_hex`, unless it is not exactly 64 hex characters.
 fn from_hex(key_hex: &str) -> Option<[u8; 32]> {
     if key_hex.len() != 64 {
         return None;

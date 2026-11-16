@@ -1,7 +1,6 @@
-// Arithmetic on the API's decimal strings, exactly, in BigInt: money and
-// quantities are `Decimal` end to end (CLAUDE.md), and `Number(...)` would
-// bring back the float error the strings exist to avoid. `Number` stays
-// acceptable for a ratio or a chart coordinate, never for a shown amount.
+// Exact arithmetic on the API's decimal strings in BigInt: `Number(...)` brings
+// back float error. `Number` is fine for a ratio or chart coordinate, never a
+// shown amount.
 
 /** A typed number in the API's form (`-12.5`): `"+1"` is `"1"`, `".5"`
  *  is `"0.5"`, `"1."` is `"1"`. Null unless it is digits with an optional
@@ -36,8 +35,7 @@ function render({ units, scale }: Scaled): string {
   return negative ? `-${body}` : body;
 }
 
-/** The sum, at the widest fraction length among the inputs (`"1.5" + "2.25"`
- *  is `"3.75"`). An empty list sums to `"0"`. */
+/** At the widest fraction length among the inputs. */
 export function sumDecimals(values: string[]): string {
   if (values.length === 0) return "0";
   const parsed = values.map(parse);
@@ -54,7 +52,7 @@ export function subtractDecimals(a: string, b: string): string {
   return sumDecimals([a, negateDecimal(b)]);
 }
 
-/** The exact product, at the sum of the operands' fraction lengths. */
+/** At the sum of the operands' fraction lengths. */
 export function multiplyDecimals(a: string, b: string): string {
   const x = parse(a);
   const y = parse(b);
@@ -70,17 +68,11 @@ export function compareDecimals(a: string, b: string): -1 | 0 | 1 {
   return diff < 0n ? -1 : diff > 0n ? 1 : 0;
 }
 
-/** An FR keyboard under `inputMode="decimal"` produces `16,03`, so a comma has
- *  to be readable as a decimal separator. But `15,617` (three decimals, like
- *  a typical ETF unit price) and `1,234` (en-US grouping) are indistinguishable
- *  from the string alone, and guessing wrong posts a value 1000x off in silence.
- *
- *  So the reader is locale-led: under `fr` a comma is the decimal separator,
- *  which is what the French keyboard produces and what French formatting means.
- *  Under any other language a comma is grouping, and a decimal comma is not
- *  expected — so anything containing one is left alone for `canonicalDecimal` to
- *  reject, and the user is told rather than silently misread. Mixed or repeated
- *  separators are always ambiguous and always refused. */
+/** FR keyboards produce `16,03`, but `15,617` (ETF price) and `1,234` (en-US
+ *  grouping) look alike, and guessing wrong posts a value 1000x off. So it
+ *  follows the locale: under `fr` a comma is the decimal separator; under any
+ *  other language it is grouping, and a number with one is left for
+ *  `canonicalDecimal` to reject. Mixed or repeated separators are refused. */
 export function normaliseDecimal(raw: string, language: string): string {
   const s = raw.trim();
   if (s.includes(".") && s.includes(",")) return s;

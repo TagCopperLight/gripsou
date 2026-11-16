@@ -1,9 +1,3 @@
-// Vite plugin behind `bun run dev:mock`: answers /api/* from the in-memory
-// store instead of proxying to the Rust server, exposes /__mock/* for the
-// review panel and injects the panel and its first-visit sign-in. Dev server
-// only (`apply: "serve"`), and vite.config.ts only imports it in mock mode, so
-// a build never sees it.
-
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Plugin } from "vite";
@@ -28,7 +22,6 @@ function send(res: ServerResponse, status: number, body?: unknown): void {
   res.end(JSON.stringify(body));
 }
 
-/** An error as the server sends it: a plain-text message. */
 function sendText(res: ServerResponse, status: number, text: string): void {
   res.statusCode = status;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -37,8 +30,7 @@ function sendText(res: ServerResponse, status: number, text: string): void {
 
 type Held = { request: string; release: () => void };
 
-// Vite restarts the server whenever a file under mock/ changes; the active
-// states and the App settings are kept here so a restart doesn't drop them.
+// Vite restarts the server on any change under mock/: active states and App settings are kept here.
 const CACHE_DIR = "node_modules/.cache";
 const SAVED_FILE = `${CACHE_DIR}/gripsou-mock-states.json`;
 

@@ -1,7 +1,5 @@
-//! Per-user preferences. The settings the server reads are `users` columns
-//! (`currency`, `time_zone`, `budget_ai_enabled`, `budget_ai_threshold`), with
-//! their defaults in the schema. The display-only ones are the JSON in
-//! `users.prefs`. The API sends and accepts both as one object.
+//! Server-read settings are `users` columns; display-only ones are the JSON in `users.prefs`.
+//! The API sends and accepts both as one object.
 
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -16,20 +14,13 @@ use crate::error::CoreError;
 pub struct UserPrefs {
     #[serde(flatten)]
     pub display: DisplayPrefs,
-    /// ISO code of the currency this user reads their figures in.
     pub currency: String,
-    /// IANA timezone shared by background syncs and browser date defaults.
     pub time_zone: String,
-    /// The user's opt-in to AI categorisation.
     pub budget_ai_enabled: bool,
-    /// Review threshold, as an integer percent. An AI guess below it goes to
-    /// the review queue. Always within the range the column's check allows.
     pub budget_ai_threshold: u8,
 }
 
-/// Preferences only the frontend reads, stored as JSON in `users.prefs`. A
-/// missing field reads as its default, so an empty or partial object reads
-/// back whole.
+/// A missing field reads as its default, so a partial object reads back whole.
 #[derive(Debug, Clone, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct DisplayPrefs {
@@ -43,8 +34,7 @@ pub struct DisplayPrefs {
     /// Masks the headline net-worth figure. Display-only: the API still sends
     /// the real amounts.
     pub private_mode: bool,
-    /// The user's own bookkeeping column in the budget transactions table. The
-    /// pipeline never reads it.
+    /// The pipeline never reads it.
     pub show_checked: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -68,13 +58,10 @@ impl Default for DisplayPrefs {
     }
 }
 
-/// The review threshold a user who never moved the slider gets, in percent.
-/// Matches the column default.
 pub const DEFAULT_BUDGET_AI_THRESHOLD: u8 = 70;
 
-/// What a new user's preferences read as: the column defaults of `users`
-/// (pinned by `core/tests/it/value_sets.rs`) and `DisplayPrefs::default()`.
-/// The frontend shows these before anyone signs in.
+/// The column defaults of `users` (pinned by `core/tests/it/value_sets.rs`) and
+/// `DisplayPrefs::default()`. The frontend shows these before anyone signs in.
 impl Default for UserPrefs {
     fn default() -> Self {
         Self {
@@ -87,21 +74,16 @@ impl Default for UserPrefs {
     }
 }
 
-/// The review thresholds a user may pick, in percent. Matches the column's check.
 pub const BUDGET_AI_THRESHOLD_RANGE: std::ops::RangeInclusive<u8> = 50..=95;
 
-/// A review threshold as the fraction (`0.70`) the review rule compares
-/// `category_confidence` against.
 pub fn threshold_fraction(percent: u8) -> Decimal {
     Decimal::new(percent.into(), 2)
 }
 
-/// Whether `code` has the shape of an ISO 4217 code, as the column's check requires.
 pub fn valid_currency(code: &str) -> bool {
     code.len() == 3 && code.bytes().all(|b| b.is_ascii_uppercase())
 }
 
-/// The preference columns of a `users` row.
 struct PrefsRow {
     prefs: Json<DisplayPrefs>,
     currency: String,
@@ -122,7 +104,6 @@ impl From<PrefsRow> for UserPrefs {
     }
 }
 
-/// The user's preferences, or `None` when the user does not exist.
 pub async fn get(
     db: impl sqlx::PgExecutor<'_>,
     user_id: Uuid,
@@ -139,7 +120,6 @@ pub async fn get(
     Ok(row.map(UserPrefs::from))
 }
 
-/// The reader's review threshold, as a fraction ([`threshold_fraction`]).
 pub async fn review_threshold(pool: &PgPool, user_id: Uuid) -> Result<Decimal, CoreError> {
     let pct = sqlx::query_scalar!(
         "select budget_ai_threshold from users where id = $1",
@@ -150,14 +130,10 @@ pub async fn review_threshold(pool: &PgPool, user_id: Uuid) -> Result<Decimal, C
     Ok(threshold_fraction(pct as u8))
 }
 
-/// Why [`patch_prefs`] wrote nothing.
 #[derive(Debug, thiserror::Error)]
 pub enum PrefsError {
-    /// The merged preferences break a rule; the message says which.
     #[error("{0}")]
     Invalid(String),
-    /// The currency would change to one with no stored rate
-    /// ([`crate::repo::price::has_fx_rate`]).
     #[error("no exchange rate into {0}")]
     NoRate(String),
     #[error(transparent)]
@@ -170,12 +146,8 @@ impl From<sqlx::Error> for PrefsError {
     }
 }
 
-/// Applies `patch`, some of the API object's keys, to the user's preferences:
-/// a key set to `null` goes back to its default (or, for `avatar`, is removed).
-/// The row stays locked from read to write, so two saves of different settings
-/// never undo each other, and a currency change is checked against the
-/// currency it replaces. False when the user does not exist. Nothing is
-/// written on an error.
+/// A key set to `null` goes back to its default (or, for `avatar`, is removed). The row stays
+/// locked from read to write, so two saves of different settings never undo each other.
 pub async fn patch_prefs(
     pool: &PgPool,
     user_id: Uuid,
@@ -236,7 +208,6 @@ pub async fn patch_prefs(
     Ok(true)
 }
 
-/// The rules a saved set of preferences must follow.
 async fn check(db: &mut sqlx::PgConnection, prefs: &UserPrefs) -> Result<(), PrefsError> {
     let invalid = |msg: &str| Err(PrefsError::Invalid(msg.to_string()));
     if !valid_time_zone(&mut *db, &prefs.time_zone).await? {
@@ -263,7 +234,6 @@ async fn check(db: &mut sqlx::PgConnection, prefs: &UserPrefs) -> Result<(), Pre
     Ok(())
 }
 
-/// Whether this user has opted in to AI categorisation.
 pub async fn budget_ai_enabled(pool: &PgPool, user_id: Uuid) -> Result<bool, CoreError> {
     Ok(
         sqlx::query_scalar!("select budget_ai_enabled from users where id = $1", user_id)
@@ -272,9 +242,7 @@ pub async fn budget_ai_enabled(pool: &PgPool, user_id: Uuid) -> Result<bool, Cor
     )
 }
 
-/// The current day in the user's timezone, the day every figure the user
-/// reads is dated by. SQL reads it as `user_today(user_id)`: PostgreSQL owns
-/// the timezone rules. Market data is dated in UTC instead
+/// SQL's `user_today(user_id)` is the same day. Market data is dated in UTC instead
 /// ([`crate::repo::price::market_today`]).
 pub async fn today(
     db: impl sqlx::PgExecutor<'_>,

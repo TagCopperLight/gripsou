@@ -16,9 +16,6 @@ import { WelcomeFooter, WelcomeSkip } from "./WelcomeFooter";
 
 type PasskeyState = "idle" | "waiting" | "notAdded" | "alreadyAdded";
 
-/** An authenticator app and passkeys, both optional. The welcome flow asks
- *  for no password: the server allows it until the flow is finished. An
- *  admin's account guards the whole server: skipping asks first. */
 export function SecurityScreen({
   confirmSkip, onBack, onNext,
 }: { confirmSkip: boolean; onBack: () => void; onNext: () => void }) {
@@ -28,7 +25,6 @@ export function SecurityScreen({
   const creation = usePasskeyCreation();
   const [passkey, setPasskey] = useState<PasskeyState>("idle");
   const [confirming, setConfirming] = useState(false);
-  // Leaving the screen closes a browser window still open.
   useEffect(() => creation.cancel, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { state } = enrolment;
@@ -65,8 +61,7 @@ export function SecurityScreen({
     setPasskey("waiting");
     const outcome = await creation.create(undefined);
     if (outcome.kind === "cancelled") return;
-    // The welcome flow needs no password check, so none can expire: a
-    // refusal there is a passkey that wasn't added.
+    // The welcome flow needs no password check, so a refusal here is a passkey that wasn't added.
     setPasskey(outcome.kind === "added" ? "idle" : outcome.kind === "alreadyAdded" ? "alreadyAdded" : "notAdded");
   };
 
@@ -116,7 +111,6 @@ export function SecurityScreen({
         <Button onClick={onNext} disabled={!(totp || passkeys > 0)}>{t("common.next")}</Button>
       </WelcomeFooter>
       {confirming && (
-        // Setting it up is the button that stands out: skipping is the choice to think twice about.
         <Dialog
           title={t("welcome.twoFactor.skipTitle")}
           icon={<TriangleAlert className="size-5 text-amber" />}

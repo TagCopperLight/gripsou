@@ -4,8 +4,6 @@ import { ExcludedFootnote, FxFootnote } from "../../ui/FxNote";
 import type { ReturnFigures } from "../../api/wire";
 import { leavesOut } from "../../lib/returns";
 
-/** The lines under a returns card saying which holdings its figures leave
- *  out, one per reason; nothing when none is. */
 export function ExcludedNotes({ figures, className = "" }: { figures: ReturnFigures; className?: string }) {
   const { t } = useTranslation();
   if (!leavesOut(figures)) return null;

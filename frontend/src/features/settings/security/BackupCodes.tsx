@@ -4,8 +4,7 @@ import { Check, Copy, Download } from "lucide-react";
 import { Button } from "../../../ui/Button";
 import { useCopy } from "../../../lib/useCopy";
 
-/** Freshly issued backup codes, with Copy and Download. Shown once: the
- *  server only keeps their hashes. */
+/** Shown once: the server only keeps their hashes. */
 export function BackupCodes({ codes }: { codes: string[] }) {
   const { t } = useTranslation();
   const { copied, copy } = useCopy();

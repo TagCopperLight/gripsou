@@ -26,13 +26,10 @@ type TrendSurfaceProps =
   | {
     trend: BudgetTrend;
     onSelectMonth: (month: string) => void;
-    /** Private mode: the tooltip's amounts and the axis hidden; the bars keep
-     *  their shape. */
+    /** Private mode: the tooltip's amounts and the axis are hidden; the bars keep their shape. */
     masked?: boolean;
-    /** The trend is a previous anchor month's, while this one's loads. */
     stale?: boolean;
   }
-  /** Still loading: the title, and bones for the chart and its legend. */
   | { trend?: undefined; onSelectMonth?: undefined; masked?: undefined; stale?: undefined };
 
 export function TrendSurface({ trend, onSelectMonth, masked = false, stale = false }: TrendSurfaceProps) {
@@ -44,7 +41,6 @@ export function TrendSurface({ trend, onSelectMonth, masked = false, stale = fal
         {trend === undefined ? (
           <>
             <ChartBone style={{ height: HEIGHT }} />
-            {/* A legend chip is a text-xs line in py-1. */}
             <Skeleton className="mt-3 flex flex-wrap gap-2">
               {boneWidths(4).map((w) => <Bone key={w} className="h-6 rounded-xl" style={{ width: w * 2.4 }} />)}
             </Skeleton>
@@ -52,8 +48,7 @@ export function TrendSurface({ trend, onSelectMonth, masked = false, stale = fal
         ) : (
           <div className={staleClass(stale)}>
             <TrendChart trend={trend} onSelectMonth={onSelectMonth} masked={masked} />
-            {/* Wraps freely: French labels run longer and a renamed category can be
-                any length, so the legend must never assume a row fits. */}
+            {/* Wraps freely: French labels and renamed categories can be any length. */}
             <div className="mt-3 flex flex-wrap gap-2">
               {trend.series.map((s) => (
                 <CategoryChip key={sliceKey(s.slice)} category={sliceChip(t, s.slice)} />
@@ -75,8 +70,7 @@ function TrendChart({ trend, onSelectMonth, masked }: {
   const money = (v: string, opts?: MoneyFormatOptions) => formatMaskedMoney(v, masked, opts);
 
   const language = i18n.language;
-  // Each month has its own order. Series represent stack positions rather
-  // than categories, so a category can move up or down between columns.
+  // Each month has its own order: series are stack positions, not categories.
   const columns = useMemo(
     () => trend.months.map((_, dataIndex) =>
       trend.series
@@ -86,9 +80,7 @@ function TrendChart({ trend, onSelectMonth, masked }: {
     [trend],
   );
 
-  // Memoised on the data and the language: the option holds closures, so a
-  // fresh object every render would make the chart reset whenever the page
-  // re-renders for an unrelated reason.
+  // Memoised: the option holds closures, so a fresh object each render would reset the chart.
   const option = useMemo<EChartsOption>(() => {
     const short = new Intl.DateTimeFormat(language, { month: "short" });
     const axisLabels = trend.months.map((m) => short.format(monthStart(m)));
@@ -98,8 +90,7 @@ function TrendChart({ trend, onSelectMonth, masked }: {
       grid: AXIS_GRID,
       tooltip: chartTooltip("item", (params) => {
         const { dataIndex } = params as TooltipParam;
-        // An item hover still shows the whole month's stack. Read the
-        // original decimal strings so the total never sums chart floats.
+        // Item hover still shows the whole month's stack. Read the original decimal strings so the total never sums chart floats.
         const entries = [...columns[dataIndex]]
           .sort((a, b) => Number(a.amount) - Number(b.amount));
         const total = sumDecimals(entries.map((s) => s.amount));
@@ -120,8 +111,7 @@ function TrendChart({ trend, onSelectMonth, masked }: {
         data: columns.map((entries) => Number(entries[rank].amount)),
         itemStyle: {
           color: ({ dataIndex }: TooltipParam) => sliceColor(columns[dataIndex][rank].slice),
-          // A border in the card's colour spaces the stacked blocks apart,
-          // like the donut's slices (half its width: the bars are narrow).
+          // A border in the card's colour spaces the blocks, like the donut's slices (half its width: the bars are narrow).
           borderColor: SURFACE,
           borderWidth: 1,
           borderRadius: 4,
@@ -134,8 +124,7 @@ function TrendChart({ trend, onSelectMonth, masked }: {
   }, [trend, columns, language, t, masked]);
 
   const onEvents = useMemo(() => {
-    // Update only the colours: rebuilding the React option on every hover
-    // would reset this notMerge chart.
+    // Colours only: rebuilding the React option on every hover would reset this notMerge chart.
     const colorMonth = (chart: EChartsType, activeIndex: number | null) => {
       chart.setOption({
         series: trend.series.map((_, rank) => ({
@@ -153,8 +142,7 @@ function TrendChart({ trend, onSelectMonth, masked }: {
     return {
       mouseover: (params: TooltipParam, chart: EChartsType) => colorMonth(chart, params.dataIndex),
       mouseout: (_params: unknown, chart: EChartsType) => {
-        // Clear the tooltip position before setOption tries to preserve it
-        // during the colour update, or it can reopen over empty chart space.
+        // Clear the tooltip position first, or setOption's preservation can reopen it over empty space.
         chart.dispatchAction({ type: "hideTip" });
         colorMonth(chart, null);
       },

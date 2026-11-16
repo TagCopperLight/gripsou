@@ -19,7 +19,6 @@ describe("CompositionSurface", () => {
   });
 
   it("adds an Other slice for the remainder up to 100%", () => {
-    // countries sum to 76% → Other is 24% (one Other per bar shown).
     const { container } = render(<CompositionSurface composition={COMP} />);
     expect(screen.getAllByText("Other").length).toBe(2);
     const other = container.querySelector('[data-testid="seg-Other"]') as HTMLElement;
@@ -27,7 +26,6 @@ describe("CompositionSurface", () => {
   });
 
   it("puts the rounding leftover into Other so percents total 100", () => {
-    // Three 33.3% slices display as 33+33+33 = 99 → Other absorbs the last 1%.
     const thirds: Composition = {
       countries: [
         { name: "A", weight: 0.333 },
@@ -48,7 +46,6 @@ describe("CompositionSurface", () => {
       sectors: [{ name: "Technology", weight: 0.997 }],
     };
     render(<CompositionSurface composition={full} />);
-    // 100% → no remainder; 99.7% rounds to 0% → no Other.
     expect(screen.queryByText("Other")).not.toBeInTheDocument();
   });
 

@@ -6,7 +6,6 @@ function initials(name: string): string {
   return name.trim().slice(0, 2).toUpperCase();
 }
 
-// Stable color per name so avatars are consistent without a stored color.
 function colorForName(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
@@ -20,8 +19,7 @@ type AvatarProps = {
   className?: string;
 };
 
-// The initials are sized from the circle's own width (cqw), so they keep the
-// same proportions at every avatar size without each caller picking a text size.
+// Sized from the circle's width (cqw) so proportions hold at every size.
 export function Avatar({ name, color, src, className = "size-9" }: AvatarProps) {
   if (src) {
     return (

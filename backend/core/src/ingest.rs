@@ -1,5 +1,4 @@
-//! Sync-ingestion orchestrator: persist a provider `SyncResult` for one
-//! connection in a single transaction. Idempotent and atomic.
+//! Sync-ingestion orchestrator: persists a provider `SyncResult` for one connection in a single transaction.
 
 use std::collections::{HashMap, HashSet};
 
@@ -17,24 +16,17 @@ use crate::repo::instrument::resolve_instrument;
 use crate::repo::snapshot::stamp_snapshot;
 use crate::repo::transaction::{TxnWrite, upsert_transaction};
 
-/// Counts of what an ingest wrote (handy for logging and tests).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct IngestSummary {
     pub accounts: usize,
     pub holdings: usize,
     pub transactions_inserted: usize,
     pub transactions_updated: usize,
-    /// Transactions the ingest could not store and left out.
     pub transactions_skipped: usize,
     pub snapshots: usize,
-    /// Holdings present in a prior sync but absent from this one: their position
-    /// was zeroed and a zero snapshot stamped for today.
     pub holdings_closed: usize,
-    /// Derived history rows written by the backfill engine, across every
-    /// connection of the user.
     pub backfill_rows: usize,
-    /// Internal-transfer pairs written by the budget pairing pass, counted in
-    /// pairs, not rows.
+    /// Counted in pairs, not rows.
     pub transfers_paired: usize,
 }
 
@@ -45,11 +37,8 @@ pub async fn ingest(
 ) -> Result<IngestSummary, CoreError> {
     let mut tx = pool.begin().await?;
 
-    // Serialise this user's whole ingest, not just its pairing pass (see
-    // `lock_user_writes`). Two of one user's connections syncing at once would
-    // otherwise take row locks in opposite orders. Taken here rather than inside
-    // the pairing pass because the upserts below already hold row locks by the
-    // time pairing starts, which leaves the cycle open.
+    // Serialises the user's whole ingest, not just pairing: the upserts already hold row locks when pairing
+    // starts, so two connections syncing at once could lock in opposite orders (see `lock_user_writes`).
     let user_id = connection::user_id(&mut *tx, connection_id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
@@ -58,9 +47,7 @@ pub async fn ingest(
     let today = crate::repo::prefs::today(&mut *tx, user_id).await?;
 
     let mut account_ids: HashMap<&str, Uuid> = HashMap::new();
-    // The day each account's holdings are true on: when the provider last read
-    // the bank. A provider that can't reach the bank keeps returning old
-    // balances, and dating them today would be a false snapshot (#58).
+    // Dated by when the provider last read the bank, so stale balances are not stamped today.
     let mut snapshot_day: HashMap<Uuid, NaiveDate> = HashMap::new();
     let mut account_currency: HashMap<Uuid, &str> = HashMap::new();
     for acct in &sync.accounts {
@@ -83,10 +70,9 @@ pub async fn ingest(
         let holding_id = upsert_holding(&mut tx, account_id, instrument_id, holding).await?;
         present.insert(holding_id);
 
-        // The snapshot value is in the account's currency: what readers fall
-        // back to when the holding has no price or rate. Cash in the account's
-        // currency is worth its quantity; any other line, foreign cash
-        // included, is worth the provider's valuation.
+        // The snapshot value is in the account's currency: readers fall back to it when the holding has no price
+        // or rate. Cash in the account's currency is worth its quantity; any other line is worth the provider's
+        // valuation.
         let value = if holding.instrument.kind == "cash"
             && holding.instrument.currency == account_currency[&account_id]
         {
@@ -99,11 +85,8 @@ pub async fn ingest(
         snapshots += 1;
     }
 
-    // Close holdings that existed before but are absent from this sync (e.g. a
-    // position fully sold, or an invest account's cash residual that went to
-    // zero). Zero the position and stamp a zero snapshot on its account's day
-    // so the "latest snapshot per holding" aggregations (accounts) and
-    // the holdings list stop counting their stale values. History is kept.
+    // Close holdings absent from this sync (position sold, cash residual at zero): zero the position and
+    // stamp a zero snapshot so latest-snapshot aggregations stop counting stale values. History is kept.
     let mut holdings_closed = 0;
     for (existing, account_id) in ids_for_connection(&mut tx, connection_id).await? {
         if !present.contains(&existing) {
@@ -114,20 +97,14 @@ pub async fn ingest(
         }
     }
 
-    // Transactions: upsert on external_id — provider corrections propagate,
-    // while the user's budget fields (category, tags, ✓) are never overwritten.
+    // Upsert on external_id: provider corrections propagate, the user's budget fields are never overwritten.
     let mut transactions_inserted = 0;
     let mut transactions_updated = 0;
     let mut transactions_skipped = 0usize;
     for txn in &sync.transactions {
-        // A transaction naming an account this sync did not emit is skipped,
-        // not fatal: a provider whose transactions endpoint is user-scoped
-        // (Powens) returns rows for accounts the adapter deliberately drops
-        // (liability, deleted). Failing here would abort the whole ingest
-        // transaction — accounts, holdings, snapshots and backfill — and since
-        // the condition persists across syncs it would never recover. The
-        // holdings loop above keeps its hard failure on purpose: `map_sync`
-        // guarantees that invariant, so a violation there is a real bug.
+        // A transaction naming an account this sync did not emit is skipped, not fatal: Powens' user-scoped
+        // endpoint returns rows for accounts the adapter drops (liability, deleted), and failing would abort
+        // every sync. Holdings keep a hard failure: `map_sync` guarantees that invariant.
         let Some(&account_id) = account_ids.get(txn.account_external_id.as_str()) else {
             tracing::debug!(
                 account_external_id = %txn.account_external_id,
@@ -145,19 +122,14 @@ pub async fn ingest(
 
     connection::set_health(&mut *tx, connection_id, sync.health.as_ref()).await?;
 
-    // Guarded so a provider that momentarily reports nothing can't clobber a
-    // previously-good value.
+    // Guarded so a provider that momentarily reports nothing can't clobber a good value.
     if !sync.institution.key.is_empty() {
         connection::set_institution(&mut *tx, connection_id, &sync.institution).await?;
     }
 
-    // Inside the same transaction, so a failed sync leaves no half-written history.
     let backfill_rows = crate::backfill::backfill_user(&mut tx).await? as usize;
 
-    // Inside the same transaction as everything else, so a failed sync
-    // leaves no half-paired ledger. Scoped to
-    // the connection's owner, because a transfer's two halves routinely live
-    // under two different connections.
+    // Scoped to the connection's owner: a transfer's two halves routinely live under two connections.
     let transfers_paired = crate::budget::pairing::pair_internal_transfers(&mut tx).await?;
 
     tx.commit().await?;

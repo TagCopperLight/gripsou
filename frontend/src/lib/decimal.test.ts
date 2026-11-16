@@ -21,7 +21,6 @@ describe("normaliseDecimal", () => {
 
 describe("sumDecimals", () => {
   it("sums decimal strings exactly, without a float artifact", () => {
-    // Number('-12.40')+Number('-9.08')+Number('-0.10') is -21.580000000000002.
     expect(sumDecimals(["-12.40", "-9.08", "-0.10"])).toBe("-21.58");
   });
 
@@ -48,7 +47,6 @@ describe("sumDecimals", () => {
 
 describe("subtractDecimals", () => {
   it("subtracts exactly where floats would not", () => {
-    // 0.3 - 0.1 in floats is 0.19999999999999998.
     expect(subtractDecimals("0.3", "0.1")).toBe("0.2");
     expect(subtractDecimals("1940.00", "2010.00")).toBe("-70.00");
     expect(subtractDecimals("5", "-2.5")).toBe("7.5");

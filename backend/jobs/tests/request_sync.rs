@@ -1,7 +1,3 @@
-//! Integration tests for `gripsou_jobs::request_sync`. They check the state
-//! the claim returned, taken before the spawned refresh or sync runs (and
-//! fails against an unreachable server).
-
 use gripsou_core::repo::connection::ConnectionStatus;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,7 +9,6 @@ use gripsou_providers::powens::PowensProvider;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Deps with the given account adapters only.
 fn deps(accounts: Vec<(&str, Box<dyn AccountProvider>)>) -> Arc<Deps> {
     let deps = gripsou_jobs::testing::deps();
     deps.set_accounts(
@@ -25,7 +20,6 @@ fn deps(accounts: Vec<(&str, Box<dyn AccountProvider>)>) -> Arc<Deps> {
     Arc::new(deps)
 }
 
-/// A webhook-enabled Powens adapter whose server is unreachable.
 fn powens_with_webhooks() -> Arc<Deps> {
     deps(vec![(
         "powens",
@@ -40,7 +34,6 @@ fn make_encrypted_creds(creds: serde_json::Value) -> serde_json::Value {
     gripsou_jobs::credentials::seal(&testkit::encryption_key(), &creds).unwrap()
 }
 
-/// Insert a connection in 'ok' status with encrypted credentials and provider_meta.
 async fn seed_connection(
     pool: &PgPool,
     user_id: Uuid,
@@ -65,8 +58,6 @@ async fn seed_connection(
     conn_id
 }
 
-/// When the connection's provider has no registered adapter, request_sync takes
-/// the direct path: status becomes 'syncing'.
 #[gripsou_core::testkit::db_test]
 async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -96,8 +87,6 @@ async fn request_sync_direct_path_marks_syncing(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-/// When a Powens adapter is configured with a webhook secret, request_sync takes
-/// the webhook path: status becomes 'awaiting' and sync_requested_at is stamped.
 #[gripsou_core::testkit::db_test]
 async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -124,7 +113,6 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
         panic!("expected Started on webhook path");
     }
 
-    // sync_requested_at is safe to re-query since mark_synced_error never writes it.
     let req_at: Option<chrono::DateTime<chrono::Utc>> =
         sqlx::query_scalar("select sync_requested_at from connection where id=$1")
             .bind(conn_id)
@@ -138,17 +126,10 @@ async fn request_sync_webhook_path_marks_awaiting(pool: PgPool) -> anyhow::Resul
     Ok(())
 }
 
-/// When a Powens adapter is configured (webhook-enabled) but the connection's
-/// provider_meta lacks `external_connection_id`, request_sync must fall back to
-/// the direct path (status 'syncing', not 'awaiting').
-///
-/// This covers the Powens OAuth flow that omits connection_id (documented in
-/// `complete_connect_without_connection_id`).
 #[gripsou_core::testkit::db_test]
 async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
     let credentials = make_encrypted_creds(serde_json::json!({ "auth_token": "tok" }));
-    // provider_meta has NO external_connection_id — mimics the incomplete OAuth callback.
     let meta = serde_json::json!({ "powens_user_id": "42" });
     let conn_id = seed_connection(&pool, user_id, "powens", credentials, meta).await;
 
@@ -161,7 +142,6 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
     )
     .await
     .unwrap();
-    // Must take the DIRECT path → status 'syncing', not 'awaiting'.
     if let gripsou_core::repo::connection::BeginSync::Started(state) = result {
         assert_eq!(
             state.status,
@@ -175,8 +155,7 @@ async fn request_sync_without_external_id_falls_back_to_direct(pool: PgPool) -> 
     Ok(())
 }
 
-/// A database that cannot answer is an Err (the handler turns it into a 500),
-/// never a silent "not found".
+/// A database that cannot answer is an Err (the handler turns it into a 500).
 #[gripsou_core::testkit::db_test]
 async fn request_sync_on_a_failing_database_is_an_error(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;

@@ -3,9 +3,8 @@ import { createContext, useContext } from "react";
 import type { BudgetFilters } from "../../lib/budgetFilters";
 import type { Period } from "../../lib/period";
 
-/** "All shown" is a *mode*, never an expanded id list: it means
- *  everything matching the active filters, which with no filter is 3.5 years
- *  of rows. The bulk endpoint takes a `filter` body for exactly this reason. */
+/** "All shown" is a mode, never an expanded id list: with no filter that is 3.5 years of rows, so the
+ *  bulk endpoint takes a `filter` body. */
 export type Selection =
   | { mode: "ids"; ids: ReadonlySet<string> }
   | { mode: "allShown" };
@@ -16,10 +15,8 @@ type BudgetContextValue = {
   patchFilters: (
     patch: Partial<BudgetFilters> | ((prev: BudgetFilters) => Partial<BudgetFilters>),
   ) => void;
-  /** Overview's period. Beside the filters, not in the URL, so it survives a
-   *  mode switch within a visit and resets on leaving. `null` until the
-   *  reader picks one: the Overview then shows the latest month that has
-   *  transactions, which only the server knows. */
+  /** Overview's period, kept out of the URL so it survives a mode switch. `null` until picked: the
+   *  Overview then shows the latest month with transactions, which only the server knows. */
   period: Period | null;
   setPeriod: (p: Period | null) => void;
   selection: Selection;

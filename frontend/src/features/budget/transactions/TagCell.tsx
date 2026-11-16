@@ -6,24 +6,17 @@ import type { BudgetTag } from "../../../api/wire";
 
 type TagCellProps = {
   tags: Pick<BudgetTag, "id" | "name" | "color">[];
-  /** Accessible name of the add button, naming the row it belongs to. */
   label: string;
   onOpen: (anchor: HTMLElement) => void;
 };
 
-/** `gap-1`, in px — the loop below has to add the gaps itself. */
+/** `gap-1`, in px: the loop below has to add the gaps itself. */
 const GAP = 4;
 
-/** The tags cell keeps everything on one line: as many chips as fit, then a
- *  `+N` counter for the rest, then the add button.
- *
- *  Widths cannot come from the rendered row — hiding a chip changes the very
- *  layout the decision was made from, which oscillates. So an invisible
- *  measuring copy of the full line (every chip, the counter, the button) is
- *  laid out off-flow, and the visible line is rendered from its numbers.
- *  In jsdom every width is 0, so everything "fits" and the counter never
- *  appears — which is what the row tests expect.
- */
+/** One line: as many chips as fit, then a `+N` counter, then the add button.
+ *  Widths come from an invisible measuring copy of the full line: hiding a chip in the
+ *  rendered row changes the layout the decision was made from and oscillates.
+ *  In jsdom every width is 0, so everything fits and the counter never appears. */
 export function TagCell({ tags, label, onOpen }: TagCellProps) {
   const line = useRef<HTMLSpanElement>(null);
   const ghost = useRef<HTMLSpanElement>(null);
@@ -34,8 +27,7 @@ export function TagCell({ tags, label, onOpen }: TagCellProps) {
     const probe = ghost.current;
     if (!box || !probe) return;
     const items = Array.from(probe.children) as HTMLElement[];
-    // The measuring line holds one node per tag, then the counter, then the
-    // button — the last two are the reserved width, not candidates.
+    // The last two nodes of the measuring line are reserved width, not candidates.
     const counter = items[items.length - 2];
     const button = items[items.length - 1];
     const widths = items.slice(0, -2).map((el) => el.offsetWidth);
@@ -50,15 +42,12 @@ export function TagCell({ tags, label, onOpen }: TagCellProps) {
       used = next;
       fits = i + 1;
     }
-    // A single chip truncates rather than disappearing: "+3" alone says
-    // nothing about what is on the row.
+    // A single chip truncates rather than disappearing: "+3" alone says nothing.
     setVisible(Math.max(widths.length === 0 ? 0 : 1, fits));
   }, []);
 
   useLayoutEffect(() => {
-    // Empty cells and single chips have no overflow decision: a single chip
-    // always stays visible and truncates. Avoid a measuring twin, forced
-    // layout reads and a ResizeObserver for these common ledger rows.
+    // Empty and single-chip cells skip the measuring twin and ResizeObserver: they are the common rows.
     if (tags.length <= 1) return;
     measure();
     const box = line.current;
@@ -77,9 +66,7 @@ export function TagCell({ tags, label, onOpen }: TagCellProps) {
       onClick={(e) => onOpen(e.currentTarget)}
       aria-label={label}
       aria-haspopup="dialog"
-      /* Always mounted (for non-lot rows) and focusable — opacity, not
-         `display`, drives visibility so a keyboard-only user can Tab to it and
-         reveal it with its own focus, not just row hover. */
+      /* Opacity, not `display`, so a keyboard user can Tab to it. */
       className="shrink-0 cursor-pointer rounded-md p-1 text-fg-faint opacity-0 transition-opacity hover:text-fg group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
     >
       <Plus className="size-3.5" />
@@ -102,7 +89,6 @@ export function TagCell({ tags, label, onOpen }: TagCellProps) {
       )}
       {addButton}
 
-      {/* Off-flow twin: full-width, never wrapping, invisible and inert. */}
       {tags.length > 1 && (
         <span
           ref={ghost}
@@ -113,8 +99,7 @@ export function TagCell({ tags, label, onOpen }: TagCellProps) {
             <TagChip key={tag.id} tag={tag} className="shrink-0" />
           ))}
           <span className="shrink-0 text-[11px] font-medium">+{tags.length}</span>
-          {/* A stand-in, not the button itself: a second `tx-add-tag` would be
-              both a duplicate test id and a focusable node inside aria-hidden. */}
+          {/* A stand-in: a second `tx-add-tag` would duplicate the test id and be focusable inside aria-hidden. */}
           <span className="shrink-0 p-1">
             <Plus className="size-3.5" />
           </span>

@@ -6,14 +6,9 @@ import { tint } from "../../lib/color";
 import { CategoryIcon } from "./CategoryIcon";
 
 type CategoryChipProps = {
-  /** `null` is the "no category" state, not a missing prop. */
   category: CategoryLike | null;
-  /** An unreviewed AI guess: outline instead of fill. */
   needsReview?: boolean;
-  /** The chip sits inside something that removes it when clicked: on hover of
-   *  that `group`, the icon cross-fades into a cross so the click reads as a
-   *  removal before it happens. Stacked, not appended — the chip must not
-   *  change width under the cursor. */
+  /** Inside a parent that removes it on click (`group`): on hover the icon cross-fades into a cross. Stacked, so the width never changes. */
   removable?: boolean;
   className?: string;
 };

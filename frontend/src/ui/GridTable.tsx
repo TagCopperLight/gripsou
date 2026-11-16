@@ -5,24 +5,16 @@ import { HEAD_ROW, gridColumns, type Track } from "./gridTable";
 import { staleRowsClass } from "./stale";
 
 type GridTableProps = {
-  /** The column tracks, in column order. Below the sum of their minimums the
-   *  table scrolls sideways rather than shrinking a column past its floor. */
+  /** Below the sum of their minimums the table scrolls sideways. */
   tracks: Track[];
-  /** The header cells (`HEAD_CELL`), in column order. */
   head: ReactNode;
-  /** The rows (`ROW_CELLS`). */
   children: ReactNode;
-  /** True while its rows are `BoneRows`. */
   busy?: boolean;
-  /** The rows are out of date while their replacement loads (`staleClass`):
-   *  they dim, the header doesn't. */
+  /** Rows are out of date while their replacement loads (`staleClass`): they dim, the header doesn't. */
   stale?: boolean;
 };
 
-/** A table on a CSS grid (see `gridTable.ts`). `display: contents` drops the
- *  groups out of the layout so the rows themselves are the grid's items, and
- *  with them their implicit ARIA roles, which is why every element here names
- *  its own. */
+/** `display: contents` drops the groups' implicit ARIA roles, so every element here names its own. */
 export function GridTable({ tracks, head, children, busy = false, stale = false }: GridTableProps) {
   const { template, minWidth } = gridColumns(tracks);
   return (
@@ -41,13 +33,10 @@ export function GridTable({ tracks, head, children, busy = false, stale = false 
   );
 }
 
-/** A column title that sorts the table: lit, with the direction's chevron,
- *  while it is the sort key. */
 export function SortHeader({ label, active, asc, right = false, onClick, testId }: {
   label: string;
   active: boolean;
   asc: boolean;
-  /** A right-aligned column: the chevron goes before the title. */
   right?: boolean;
   onClick: () => void;
   testId?: string;
@@ -57,8 +46,7 @@ export function SortHeader({ label, active, asc, right = false, onClick, testId 
       type="button"
       data-testid={testId}
       onClick={onClick}
-      // `uppercase` on the button itself: the browser's own button style
-      // resets `text-transform`, so it is not inherited from the row.
+      // The browser's button style resets `text-transform`, so it is not inherited from the row.
       className={`inline-flex h-4 cursor-pointer items-center gap-1 align-middle uppercase transition-colors duration-140 ${
         right ? "flex-row-reverse" : ""
       } ${active ? "text-fg" : "text-fg-dim enabled:hover:text-fg"}`}
@@ -69,8 +57,6 @@ export function SortHeader({ label, active, asc, right = false, onClick, testId 
   );
 }
 
-/** What a table shows instead of its rows when it has none: a faint icon, a
- *  line, and an action (clear the filters) when there is one. */
 export function TableEmpty({ icon, message, action, testId }: { icon: ReactNode; message: ReactNode; action?: ReactNode; testId?: string }) {
   return (
     <div data-testid={testId} className={`flex flex-col items-center py-16 text-fg-faint [&>svg]:size-6 ${action ? "gap-3" : "gap-2"}`}>

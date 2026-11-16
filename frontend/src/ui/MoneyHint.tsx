@@ -3,11 +3,7 @@ import type { ReactNode } from "react";
 import { Money } from "./Money";
 import { usePrefs } from "../auth/context";
 
-/** An amount in `currency`, with the same figure in the reader's currency
- *  (`converted`) in a small bubble beside it while it is hovered; the hand
- *  cursor says there is one. No bubble when the amount already is in the
- *  reader's currency, or when there is no converted figure. CSS-only (no
- *  state), so a long list of rows pays no re-render for it. */
+/** CSS-only hover bubble (no state), so a long list pays no re-render. */
 export function MoneyHint({ currency, converted, signed = false, side = "left", children }: {
   currency: string;
   converted: string | number | null | undefined;

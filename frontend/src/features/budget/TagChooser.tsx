@@ -9,14 +9,11 @@ type TagChooserProps = {
   selectedIds: string[];
   onToggle: (id: string) => void;
   onClose: () => void;
-  /** The control that opened it — the chooser hangs under it. */
   anchor?: HTMLElement | null;
-  /** See `EntityChooser`: a band under the list, for a caller that confirms. */
   footer?: ReactNode;
 };
 
-/** Flat, and always multi-select: several tags on a row, and several in a
- *  filter (where they are AND'd server-side). */
+/** Always multi-select; several tags in a filter are AND'd server-side. */
 export function TagChooser({ selectedIds, onToggle, onClose, anchor, footer }: TagChooserProps) {
   const { t } = useTranslation();
   const tags = useBudgetTags().data ?? [];

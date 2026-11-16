@@ -1,8 +1,5 @@
 import type { ReactNode } from "react";
 
-/** The frame of the pages outside the app (sign-in, invite, reset, a bank's
- *  return): the wordmark, the card, an optional faint line under it. All in
- *  the page's flow, so a short window scrolls instead of cutting the top. */
 export function AuthPage({ children, note }: { children: ReactNode; note?: ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-bg px-6 py-10">

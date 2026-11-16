@@ -13,10 +13,7 @@ import {
   useSetBudgetAiSettings,
 } from "../../../api/budget";
 
-/** Which provider categorises transactions for the whole instance, and its
- *  model. Keys are saved with the API keys; a provider without one is never
- *  offered. The model is picked from the provider's own list; when that list
- *  cannot be had, it is typed instead. */
+/** Keys are saved with the API keys; a provider without one is never offered. The model is picked from the provider's list, or typed when that list can't be had. */
 const ROW = "flex flex-wrap items-center gap-4";
 const FIELD = "flex items-center gap-3 text-sm text-fg";
 
@@ -27,9 +24,7 @@ export function AiProviderFields() {
   const save = useSetBudgetAiSettings();
   const models = useBudgetAiModels(settings?.provider ?? null);
   const modelId = useId();
-  // The model being typed, tied to the server value it started from: once a
-  // save lands and the server value moves, the draft is spent and the field
-  // shows the server again.
+  // Draft tied to the server value it started from: once a save moves the server value, the draft is spent.
   const [draft, setDraft] = useState<{ base: string | null; value: string } | null>(null);
 
   const body = (() => {
@@ -37,8 +32,7 @@ export function AiProviderFields() {
       return <CardError onRetry={() => void query.refetch()} className="h-24" />;
     }
     if (!settings) {
-      // The fields' frame, their values unknown. The model field shows only
-      // once a provider is chosen; it stands here for the usual case.
+      // The model field shows only once a provider is chosen; it stands here for the usual case.
       return (
         <div className={ROW}>
           <div className={FIELD}>
@@ -70,8 +64,7 @@ export function AiProviderFields() {
 
     const commitModel = () => {
       if (typed === null) return;
-      // Blank means "the provider's default", which the server stores as no
-      // model at all — the field then shows that default again.
+      // Blank means the provider's default, which the server stores as no model.
       const next = typed.trim() || null;
       if (next === settings.model) {
         setDraft(null);
@@ -116,8 +109,7 @@ export function AiProviderFields() {
                 onChange={(m) => {
                   if (m !== shownModel) save.mutate({ provider: settings.provider, model: m });
                 }}
-                // The saved model stays listed even when the provider doesn't
-                // offer it, so the control never shows a blank.
+                // The saved model stays listed even when the provider doesn't offer it, so the control never shows a blank.
                 options={[...new Set([shownModel, ...(models.data ?? [])])]
                   .filter(Boolean)
                   .sort()

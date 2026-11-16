@@ -45,7 +45,6 @@ async fn tags_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()> {
     );
     assert!(!delete_tag(&pool, stranger, mine.id).await?);
     assert!(list_tags(&pool, stranger).await?.is_empty());
-    // Both users may hold a tag of the same name.
     create_tag(&pool, stranger, "Holiday", None).await?;
     Ok(())
 }

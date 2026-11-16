@@ -1,8 +1,6 @@
-// The ECharts parts gripsou draws with. Importing `echarts` itself bundles
-// every chart type and component (over half the app's JavaScript), so charts
-// go through `ui/EChart.tsx`, which hands this trimmed build to
-// echarts-for-react. A chart type or option component missing here renders
-// nothing, without an error: register it before using it.
+// Importing `echarts` itself bundles every chart type (over half the app's
+// JavaScript), so charts use this trimmed build through `ui/EChart.tsx`. A chart
+// type or component not registered here renders nothing, without an error.
 import * as echarts from "echarts/core";
 import { BarChart, LineChart, PieChart, SankeyChart } from "echarts/charts";
 import { GridComponent, TooltipComponent } from "echarts/components";

@@ -6,8 +6,7 @@ import { SankeySurface } from "./SankeySurface";
 import { sankeyGraph } from "../../../lib/sankeyGraph";
 import type { Sankey } from "../../../api/wire";
 
-// Stands in for the chart so a test can read the option it was handed: jsdom
-// cannot draw it, and the labels and tooltips are what is under test.
+// Stands in for the chart so tests can read its option; jsdom cannot draw it.
 const rendered: { option?: EChartsOption } = {};
 vi.mock("../../../ui/EChart", () => ({
   default: (props: { option: EChartsOption }) => {
@@ -73,8 +72,6 @@ describe("sankeyGraph", () => {
   });
 
   it("totals the hub over the sources plus any savings drawdown, as an exact decimal string", () => {
-    // Never a float sum of a server amount — the hub renders `total`
-    // directly through `formatMoney`.
     expect(graph().total).toBe("3000.00");
     expect(graph({ drawnFromSavings: "200.00" }).total).toBe("3200.00");
   });
@@ -93,8 +90,7 @@ function sankeySeries() {
 
 describe("SankeySurface's node labels", () => {
   it("labels the remainder nodes by their own name, not a category's label", () => {
-    // A real category literally named "notSpent" must render its own name,
-    // not be swapped for the "not spent" copy meant for the synthetic node.
+    // A category named "notSpent" must render its own name, not the synthetic node's copy.
     const notSpentCategory = {
       slice: {
         kind: "category" as const,

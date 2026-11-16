@@ -17,7 +17,6 @@ type Reply = { status: number; body?: unknown; headers?: Record<string, string> 
 const json = ({ status, body, headers }: Reply) =>
   body === undefined ? new Response(null, { status, headers }) : jsonResponse(body, status, headers);
 
-/** Answers per path; a path given a list answers its items in turn. */
 function stubApi(routes: Record<string, Reply | Reply[]>) {
   const fetchMock = stubFetch(async (url) => {
     const path = url.replace(/^\/api/, "");

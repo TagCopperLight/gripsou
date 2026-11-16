@@ -2,10 +2,8 @@ import { hashKey, type QueryClient, type QueryKey } from "@tanstack/react-query"
 
 const watched = new WeakMap<QueryClient, Set<string>>();
 
-/** Calls `onChange` with the data before and after each successful fetch of
- *  one polled query, to act when a background run moves on. Installed once
- *  per client and key, whichever component asks first. The first read has
- *  nothing to compare to; a removed query starts over. */
+/** Calls `onChange` with the data before and after each successful fetch of a polled query.
+ *  Installed once per client and key. */
 export function watchQuery<T>(
   qc: QueryClient,
   queryKey: QueryKey,

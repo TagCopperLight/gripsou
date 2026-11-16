@@ -1,6 +1,4 @@
-// Signs in on the first visit only, so signing out (to review the login
-// screen) sticks across reloads. Loaded before the app's own module, which
-// shares this client and so starts with the token.
+// Signs in on the first visit only, so signing out (to review the login screen) sticks across reloads.
 
 import { setAuthToken } from "../../src/api/client.ts";
 

@@ -6,9 +6,7 @@ import { tint } from "../../lib/color";
 import { CategoryIcon } from "./CategoryIcon";
 import type { Transaction } from "../../api/wire";
 
-/** Last resort glyphs, keyed by kind of movement — a static record, indexed
- *  (not called), so the icon resolution stays lint-clean under
- *  `react-hooks/static-components`. */
+/** Indexed, not called, to satisfy `react-hooks/static-components`. */
 const GENERIC_ICONS: Record<"lot" | "sale" | "transfer" | "out" | "in", LucideIcon> = {
   lot: TrendingUp,
   sale: TrendingDown,
@@ -17,18 +15,12 @@ const GENERIC_ICONS: Record<"lot" | "sale" | "transfer" | "out" | "in", LucideIc
   in: ArrowDownLeft,
 };
 
-/** Which generic glyph applies, when nothing else is known. */
 function genericIconKey(tx: Transaction): keyof typeof GENERIC_ICONS {
   if (tx.source === "lot") return tx.type === "sell" ? "sale" : "lot";
   if (tx.isTransfer) return "transfer";
   return tx.amount.trim().startsWith("-") ? "out" : "in";
 }
 
-/** One size everywhere. A lot shows its instrument's logo, as on the Holdings
- *  card. A categorised row shows its category's glyph (or, for
- *  a category without one, the same coloured dot its chip shows), tinted with
- *  the category colour. Only a row with no category falls back to a neutral
- *  glyph for its kind of movement. */
 export function TransactionAvatar({ tx }: { tx: Transaction }) {
   const logo = tx.source === "lot" ? logoUrl(tx.logo) : null;
   if (logo) {
@@ -56,8 +48,6 @@ export function TransactionAvatar({ tx }: { tx: Transaction }) {
   return (
     <span
       data-testid="tx-avatar"
-      // No colour to speak for it, so it sits on the neutral surface with the
-      // faint foreground.
       className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-surface-2 text-fg-faint"
     >
       <Icon className="size-4" />

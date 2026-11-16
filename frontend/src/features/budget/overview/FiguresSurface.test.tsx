@@ -29,19 +29,16 @@ function renderSurface(sum: BudgetSummary, prefs: UserPrefs = DEFAULT_PREFS) {
 describe("FiguresSurface", () => {
   it("renders income's comparison as a percentage", () => {
     renderSurface(summary());
-    // 3200 vs 2980 → +7,4 %
     expect(screen.getByTestId("figure-income")).toHaveTextContent("%");
   });
 
   it("renders net's comparison as an absolute amount, never a percentage", () => {
     renderSurface(summary());
-    // Net can be zero or negative, where a percentage change is meaningless.
     expect(screen.getByTestId("figure-net")).not.toHaveTextContent("%");
   });
 
   it("hides both comparisons when the server sends no baseline", () => {
-    // A date range, or a month with too little history before it: the server
-    // omits both keys together.
+    // A date range or too little history: the server omits both keys.
     renderSurface(
       summary({
         income: { amount: "3200.00" },

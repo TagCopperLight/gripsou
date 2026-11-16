@@ -12,9 +12,7 @@ use uuid::Uuid;
 
 use crate::Deps;
 
-/// The admin's AI choice as `(provider, model)`, when the provider is one
-/// this build knows and its key is saved. A blank model is the provider's
-/// default.
+/// A blank model means the provider's default.
 fn server_choice(
     settings: &BudgetAiSettings,
     providers: &Providers,
@@ -32,13 +30,11 @@ fn server_choice(
     Some((kind.about.key, model.to_string()))
 }
 
-/// Whether the server can categorise at all, whoever opted in.
 pub async fn ai_configured(db: &Db, deps: &Deps) -> Result<bool, gripsou_core::error::CoreError> {
     let settings = gripsou_core::repo::settings::budget_ai(db).await?;
     Ok(server_choice(&settings, &deps.providers()).is_some())
 }
 
-/// `(provider, model)` when the server can categorise and the user opted in.
 async fn open_gate(
     db: &Db,
     providers: &Providers,
@@ -62,14 +58,12 @@ async fn open_gate(
     }
 }
 
-/// Whether a run would actually start — the API answers 409 when not.
+/// The API answers 409 when this is false.
 pub async fn categorize_ready(db: &Db, deps: &Deps, user_id: Uuid) -> bool {
     open_gate(db, &deps.providers(), user_id).await.is_some()
 }
 
-/// Categorise one user's uncategorised rows. Never fails loudly: a run that
-/// cannot start logs why; a run that fails, on the model or on the database,
-/// records it in `budget_ai_run` for the banner.
+/// Never fails loudly: failures are logged or recorded in `budget_ai_run` for the banner.
 async fn categorize_user(db: Db, deps: Arc<Deps>, user_id: Uuid) {
     let providers = deps.providers();
     let Some((kind, model)) = open_gate(&db, &providers, user_id).await else {
@@ -95,21 +89,17 @@ async fn categorize_user(db: Db, deps: Arc<Deps>, user_id: Uuid) {
     }
 }
 
-/// Users with a run in this process, and whether another was asked for
-/// meanwhile. The app is single-process, so this is every live run.
+/// The app is single-process, so this is every live run.
 static AI_RUNS: LazyLock<Mutex<HashMap<Uuid, bool>>> = LazyLock::new(Default::default);
 
 fn ai_runs() -> std::sync::MutexGuard<'static, HashMap<Uuid, bool>> {
     AI_RUNS.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Whether the user has an AI run going (or booked to follow the current one).
 pub fn ai_running(user_id: Uuid) -> bool {
     ai_runs().contains_key(&user_id)
 }
 
-/// Claims the user's run slot. False when a run is going: it is then asked to
-/// go round once more instead.
 fn claim_run(user_id: Uuid) -> bool {
     let mut runs = ai_runs();
     if let Some(again) = runs.get_mut(&user_id) {
@@ -120,8 +110,7 @@ fn claim_run(user_id: Uuid) -> bool {
     true
 }
 
-/// After a run: true when another was asked for meanwhile (the slot is kept
-/// for it), false when the slot is freed.
+/// True when another run was asked for meanwhile (the slot is kept), false when freed.
 fn run_again(user_id: Uuid) -> bool {
     let mut runs = ai_runs();
     match runs.get_mut(&user_id) {
@@ -136,18 +125,13 @@ fn run_again(user_id: Uuid) -> bool {
     }
 }
 
-/// What [`request_categorize`] did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Categorize {
-    /// A run started.
     Started,
-    /// The user's run is going: one more follows it.
     Booked,
 }
 
-/// Fire and forget: the run can take minutes. A request while the user's run
-/// is going is not dropped: one more run follows it, however many requests
-/// arrived, so rows a later sync brought in are not left for tomorrow.
+/// Fire and forget (a run can take minutes). Requests during a run coalesce into one more run, so rows a later sync brought in aren't left for tomorrow.
 pub fn request_categorize(db: Db, deps: Arc<Deps>, user_id: Uuid) -> Categorize {
     if !claim_run(user_id) {
         return Categorize::Booked;
@@ -169,10 +153,7 @@ pub fn request_categorize(db: Db, deps: Arc<Deps>, user_id: Uuid) -> Categorize 
     Categorize::Started
 }
 
-/// One AI run once all of a user's `syncs` are in, if any of them ingested.
-/// After the syncs, so a run never holds a sync's lock; after all of them,
-/// because a run started after the first would miss the others' rows, and
-/// could pay for transfer halves their pairing is about to claim.
+/// Runs after all of a user's syncs, not the first: it never holds a sync's lock, and doesn't miss the others' rows or pay for transfer halves their pairing is about to claim.
 pub(crate) async fn categorize_after(
     db: Db,
     deps: Arc<Deps>,
@@ -183,8 +164,7 @@ pub(crate) async fn categorize_after(
     for s in syncs {
         match s.await {
             Ok(ok) => any_ok |= ok,
-            // A panicking sync is already caught and logged by its
-            // supervisor; this is the supervisor itself dying.
+            // A panicking sync is caught by its supervisor; this is the supervisor dying.
             Err(e) => tracing::error!(user_id = %user_id, error = %e, "sync task crashed"),
         }
     }
@@ -193,10 +173,7 @@ pub(crate) async fn categorize_after(
     }
 }
 
-/// Runs `run` in its own task so a panic is caught and the slot goes on to the
-/// next run, instead of holding the user until a restart. Once the task has
-/// ended, a run row it left `running` (a panic, or a failed close) is closed
-/// as failed. Only for the task that owns the user's run.
+/// Runs in its own task so a panic frees the slot instead of holding the user until restart. A run row left `running` is closed as failed.
 async fn guarded<F>(db: &Db, user_id: Uuid, run: F)
 where
     F: std::future::Future<Output = ()> + Send + 'static,
@@ -254,8 +231,7 @@ mod categorize_gate_tests {
         );
     }
 
-    /// The schema stores any provider key; one this build does not know (stale
-    /// setting, typo) keeps the gate shut instead of failing mid-run.
+    /// An unknown provider key (stale setting, typo) keeps the gate shut instead of failing mid-run.
     #[test]
     fn closed_when_the_admin_named_an_unknown_provider() {
         assert_eq!(
@@ -276,7 +252,6 @@ mod categorize_gate_tests {
         );
     }
 
-    /// Insert a user with `budget_ai_enabled = opted_in`.
     async fn seed_user(pool: &PgPool, opted_in: bool) -> Uuid {
         let id = gripsou_core::testkit::seed_user(pool).await;
         sqlx::query("update users set budget_ai_enabled = $2 where id = $1")
@@ -288,10 +263,7 @@ mod categorize_gate_tests {
         id
     }
 
-    /// The gate reads the admin's provider from `app_settings` and the opt-in
-    /// from each user's own prefs. The admin configuring a provider is not
-    /// consent: a user who did not opt in never has their transactions sent
-    /// to a model, and one user's opt-in never opens it for another.
+    /// The admin configuring a provider is not consent: no opt-in, no transactions sent. One user's opt-in never opens it for another.
     #[gripsou_core::testkit::db_test]
     async fn open_only_for_the_users_who_opted_in(pool: PgPool) {
         let opted_in = seed_user(&pool, true).await;
@@ -336,8 +308,6 @@ mod categorize_run_tests {
         assert!(!run_again(user));
     }
 
-    /// One user's run must not block another's: the slot is per user, so a
-    /// long run for A never leaves B's new rows uncategorised.
     #[test]
     fn run_slots_are_per_user() {
         let (a, b) = (Uuid::new_v4(), Uuid::new_v4());
@@ -347,8 +317,7 @@ mod categorize_run_tests {
         assert!(!run_again(b), "B was never asked twice either");
     }
 
-    /// Simultaneous requests (several syncs finishing at once) start exactly
-    /// one run: two would pay the model twice for the same rows.
+    /// Simultaneous requests start one run: two would pay the model twice.
     #[test]
     fn concurrent_requests_start_a_single_run() {
         let user = Uuid::new_v4();
@@ -372,8 +341,6 @@ mod categorize_run_tests {
         assert!(!run_again(user), "and only one");
     }
 
-    /// A request while the user's run is in flight starts no second task: it
-    /// only books one more round, which the running task picks up.
     #[gripsou_core::testkit::db_test]
     async fn a_request_during_a_run_books_a_rerun_instead_of_starting_one(pool: PgPool) {
         let user = Uuid::new_v4();
@@ -390,8 +357,7 @@ mod categorize_run_tests {
         assert!(!run_again(user), "then frees the slot");
     }
 
-    /// A run that cannot start (AI off) must still free the user's slot, or
-    /// every later request would be swallowed until a restart.
+    /// A run that can't start must still free the slot, or later requests are swallowed until restart.
     #[gripsou_core::testkit::db_test]
     async fn a_run_that_cannot_start_frees_the_slot(pool: PgPool) {
         let user = gripsou_core::testkit::seed_user(&pool).await;

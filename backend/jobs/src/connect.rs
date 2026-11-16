@@ -15,9 +15,7 @@ use uuid::Uuid;
 use crate::sync::{Trigger, request_sync};
 use crate::{Deps, credentials};
 
-/// The provider's page for managing the user's connection `connection_id`.
-/// Credentials never leave the server; the returned URL contains a
-/// single-use code.
+/// The returned URL contains a single-use code; credentials never leave the server.
 pub async fn manage_connection(
     db: &Db,
     deps: &Deps,
@@ -36,11 +34,7 @@ pub async fn manage_connection(
     Ok(adapter.manage(&credentials, &conn.provider_meta).await?)
 }
 
-/// Begin a provider connection: check the adapter exists, call `connect()`,
-/// create a pending DB row, and append `state=<id>` to the redirect URL.
-///
-/// Calling `connect()` before inserting the row avoids leaving orphaned
-/// pending rows when the provider refuses (e.g. keys not saved).
+/// Calls `connect()` before inserting the row so a refusing provider (keys not saved) leaves no orphaned pending row.
 pub async fn init_connection(
     db: Db,
     deps: &Deps,
@@ -66,18 +60,13 @@ pub async fn init_connection(
     Ok((connection_id, init))
 }
 
-/// Why connecting failed.
 #[derive(Debug)]
 pub enum ConnectError {
-    /// No connection with this id belongs to the user.
     NotFound,
-    /// No adapter for the provider does this: its keys aren't saved, or it
-    /// has no management page.
+    /// Keys not saved, or no management page.
     NoAdapter,
-    /// The provider refused or failed the call.
     Provider(ProviderError),
     Db(CoreError),
-    /// The credentials couldn't be sealed or opened.
     Credentials(String),
 }
 
@@ -115,10 +104,7 @@ impl From<CoreError> for ConnectError {
     }
 }
 
-/// Complete a pending connection: call `complete_connect()`, encrypt the
-/// returned credentials, and flip status to 'ok'. On failure (including a
-/// callback the user cancelled) the pending row is deleted, so it never shows
-/// as "Connecting…"; the stale-pending sweep covers callbacks that never come.
+/// A failure, including a cancelled callback, deletes the pending row so it never shows as "Connecting…". The stale-pending sweep covers callbacks that never come.
 pub async fn complete_connection(
     db: Db,
     deps: &Arc<Deps>,
@@ -170,9 +156,7 @@ async fn finish_connection(
         return Err(ConnectError::NotFound);
     }
     tracing::info!(connection_id = %connection_id, user_id = %user_id, provider = %provider_key, "connection activated");
-    // Kick an initial sync (webhook providers go 'awaiting'; others fetch now).
-    // The connect itself has succeeded either way, so a failure here is logged,
-    // not returned — but it must not be invisible.
+    // A failed initial sync is logged, not returned: the connect itself succeeded.
     match request_sync(db.clone(), deps, user_id, connection_id, Trigger::Initial).await {
         Ok(_) => {} // started or skipped: both already logged
         Err(e) => tracing::error!(

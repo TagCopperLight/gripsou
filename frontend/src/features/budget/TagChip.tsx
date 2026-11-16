@@ -6,8 +6,6 @@ import { tint } from "../../lib/color";
 
 type TagChipProps = {
   tag: Pick<BudgetTag, "name" | "color">;
-  /** See `CategoryChip`: inside a `group` that removes the chip, the tag icon
-   *  cross-fades into a cross on hover, at the same width. */
   removable?: boolean;
   className?: string;
 };

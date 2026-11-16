@@ -6,7 +6,6 @@ import { ConnectionRow } from "./ConnectionRow";
 import { renderWithApp, jsonResponse, stubFetch, requestsTo } from "../../test/kit";
 
 let fetchMock: ReturnType<typeof stubFetch>;
-/** The answer to POST /connections/c1/manage. */
 let manage: () => Promise<Response>;
 const syncs = () => requestsTo(fetchMock, "/connections/c1/sync");
 const manages = () => requestsTo(fetchMock, "/connections/c1/manage");
@@ -46,7 +45,6 @@ describe("ConnectionRow", () => {
 
   it("keeps the actions hidden until the row is expanded", () => {
     renderWithApp(<ConnectionRow conn={conn} onDelete={() => {}} />);
-    // Only the (desktop) icon buttons exist while collapsed.
     expect(screen.queryByText("LIVRET A")).toBeNull();
     expand();
     expect(screen.getByText("LIVRET A")).toBeInTheDocument();
@@ -56,7 +54,6 @@ describe("ConnectionRow", () => {
     const onDelete = vi.fn();
     renderWithApp(<ConnectionRow conn={conn} onDelete={onDelete} />);
     expand();
-    // Icon button + panel button share the label; the panel one is last.
     const syncButtons = screen.getAllByRole("button", { name: /sync now/i });
     fireEvent.click(syncButtons[syncButtons.length - 1]);
     await waitFor(() => expect(syncs()).toEqual([{ method: "POST", body: {} }]));
@@ -89,13 +86,11 @@ describe("ConnectionRow", () => {
 it("keeps the problem's message for the open row, under the accounts", () => {
   const health = { verified: true, lastUpdatedOn: "2026-10-08", state: "bug", errorMessage: "403 Client Error: Forbidden", nextRetryOn: "2026-10-11" };
   renderWithApp(<ConnectionRow conn={{...conn, lastSyncAt:Date.now(), accounts:[{...conn.accounts[0],health},{...conn.accounts[0],id:"a2",name:"Checking",health:{...health,lastUpdatedOn:"2099-10-10",state:null,errorMessage:null,nextRetryOn:null}}]}} />);
-  // The problem takes the sync time's place, and the logo carries an amber dot.
   expect(screen.getByText("Partial update")).toBeInTheDocument();
   expect(screen.queryByText(/403 Client Error: Forbidden/)).toBeNull();
   expect(screen.queryByText(/Synced/)).toBeNull();
   expect(screen.getByTestId("connection-warning-dot")).toBeInTheDocument();
   expand();
-  // Named after the account it concerns, the retry date under it.
   expect(screen.getByText(/403 Client Error: Forbidden/).parentElement?.textContent).toMatch(/^LIVRET A:\s403/);
   expect(screen.getByText(/Automatic retry on/)).toBeInTheDocument();
   const date = screen.getAllByTitle("Last update from the bank")[0];

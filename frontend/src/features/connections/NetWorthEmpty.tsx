@@ -7,14 +7,11 @@ import { Bone, Skeleton, TextBone } from "../../ui/Skeleton";
 import { useConnections } from "../../api/connections";
 import { netWorthEmptyKind } from "../../lib/connectionState";
 
-/** Stands in for the net worth chart while the user has no accounts. Only
- *  mounted then, so the dashboard doesn't read the connections otherwise. */
 export function NetWorthEmpty({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { data, isError } = useConnections();
   if (data === undefined && !isError) {
-    // The message's shape: in nearly every case it offers a button.
     return (
       <Skeleton className={`flex flex-col items-center justify-center gap-2 ${className}`}>
         <Bone className="size-6" />
@@ -25,8 +22,6 @@ export function NetWorthEmpty({ className = "" }: { className?: string }) {
     );
   }
 
-  // Unreachable connections: the points already say there are no accounts,
-  // and Settings · Connections is where to look either way.
   const kind = netWorthEmptyKind(data ?? []);
   const Icon = kind === "syncing" ? Loader2 : ChartLine;
   return (

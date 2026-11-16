@@ -10,8 +10,7 @@ import {
 } from "./budget";
 import type { BudgetCategory } from "../api/wire";
 
-// A private i18next instance: the app singleton's language must not leak
-// between test files.
+// A private i18next instance: the app singleton's language must not leak between test files.
 const t = i18n.createInstance();
 await t.init({ lng: "en", resources: { en: { translation: en }, fr: { translation: fr } } });
 
@@ -60,8 +59,7 @@ describe("sortCategories", () => {
       cat({ id: "n1", kind: "income", name: "Salary", defaultKey: null }),
       cat({ id: "e1", kind: "expense", name: "Groceries", defaultKey: null }),
     ];
-    // e2 before e1: the list arrives in the order the user arranged, and only
-    // the kind grouping is re-applied here.
+    // e2 before e1: only the kind grouping is re-applied, the list keeps the user's order.
     expect(sortCategories(rows).map((c) => c.id)).toEqual(["e2", "e1", "n1", "x", "i2"]);
   });
 });

@@ -121,7 +121,6 @@ describe("Dialog", () => {
       </Dialog>,
     );
     expect(inner).toHaveFocus();
-    // ...and Escape reaches the handler it was handed last.
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
   });

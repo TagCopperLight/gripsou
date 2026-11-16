@@ -1,28 +1,22 @@
-//! Money-weighted annualised return (XIRR) of the invested part of a user's
-//! holdings. Pure: the loader in `repo::returns` gathers the inputs.
+//! Pure: the loader in `repo::returns` gathers the inputs.
 
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use uuid::Uuid;
 
-/// One dated amount, negative when money goes in (a buy), positive when it
-/// comes out (a sale, a dividend, today's value). In the reporting currency.
+/// Negative when money goes in (a buy), positive when it comes out (a sale, a dividend,
+/// today's value).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Flow {
     pub day: NaiveDate,
     pub amount: f64,
 }
 
-/// The yearly rate `r` with `Σ amount · (1 + r)^(−days / 365) = 0`, counting
-/// days from the first flow. `None` when there is nothing to solve: no flows,
-/// all on one day, or no sign change over the search range (only money in, or
-/// a gain too extreme to annualise).
-///
-/// Bisection rather than Newton: no starting guess to get wrong. For the usual
-/// shape (money in first, money out later) the net present value falls as the
-/// rate rises, so the bracketed root is the return; flows of mixed shape can
-/// have several roots and bisection returns one of them.
+/// The yearly rate `r` with `Σ amount · (1 + r)^(−days / 365) = 0`, counting days from the first
+/// flow. `None` when there is nothing to solve: no flows, all on one day, or no sign change over
+/// the search range. Bisection, not Newton: no starting guess to get wrong. Flows of mixed shape
+/// can have several roots; one is returned.
 pub fn xirr(flows: &[Flow]) -> Option<f64> {
     let first = flows.iter().map(|f| f.day).min()?;
     let last = flows.iter().map(|f| f.day).max()?;
@@ -60,35 +54,27 @@ pub fn xirr(flows: &[Flow]) -> Option<f64> {
     Some(lo + (hi - lo) / 2.0)
 }
 
-/// One non-cash holding in scope. `value` is the Holdings table's figure
-/// (reporting currency); a sold-out holding is worth zero.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Position {
     pub holding_id: Uuid,
     pub account_id: Uuid,
     pub name: String,
-    /// The recorded lots explain the quantity held (buys − sells = quantity).
     pub complete: bool,
     pub value: Decimal,
-    /// The holding couldn't be valued today (no rate); its `value` is 0.
     pub fx_missing: bool,
 }
 
-/// A lot (`holding_id` set) or a dividend (`holding_id` none — transactions
-/// carry no instrument, so dividends belong to the account), signed like
-/// `Flow`, converted to the reporting currency on its own day. `amount` is
-/// `None` when that day's rate is missing.
+/// `holding_id` is none for dividends: transactions carry no instrument. `amount` is `None`
+/// when that day's rate is missing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CashFlow {
     pub holding_id: Option<Uuid>,
     pub account_id: Uuid,
     pub day: NaiveDate,
     pub amount: Option<Decimal>,
-    /// A purchase; otherwise a sale or a dividend.
     pub buy: bool,
 }
 
-/// A holding left out of a scope's figures.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Missing {
     pub holding_id: Uuid,
@@ -99,23 +85,17 @@ pub struct Missing {
 pub struct ScopeReturn {
     /// Per year, as a ratio (0.071 = +7.1 %/yr).
     pub annualised: Option<f64>,
-    /// First purchase the return covers.
     pub since: Option<NaiveDate>,
-    /// Every purchase the return counts, fees included. `None` when a rate is
-    /// missing for one of them.
+    /// `None` when a rate is missing for one of them.
     pub invested: Option<Decimal>,
-    /// Every sale (after fees) and dividend the return counts. `None` when a
-    /// rate is missing for one of them.
+    /// `None` when a rate is missing for one of them.
     pub received: Option<Decimal>,
     pub value: Decimal,
-    /// Left out: the lots don't explain the quantity held.
     pub missing: Vec<Missing>,
-    /// Left out: complete, but couldn't be valued today (no rate).
     pub unvalued: Vec<Missing>,
 }
 
 impl ScopeReturn {
-    /// `invested` and `received` to the cent.
     pub fn invested_cents(&self) -> Option<Decimal> {
         self.invested.map(|d| d.round_dp(2))
     }
@@ -124,8 +104,7 @@ impl ScopeReturn {
         self.received.map(|d| d.round_dp(2))
     }
 
-    /// value + received − invested, to the cent: the money the return
-    /// annualises. `None` when a rate is missing for a flow it needs.
+    /// The money the return annualises. `None` when a rate is missing for a flow it needs.
     pub fn gain(&self) -> Option<Decimal> {
         self.invested_cents()
             .zip(self.received_cents())
@@ -142,21 +121,9 @@ pub struct AccountReturn {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Returns {
     pub total: ScopeReturn,
-    /// Accounts with at least one position, largest value first.
     pub accounts: Vec<AccountReturn>,
 }
 
-/// The figures of one scope (an account, or everything).
-///
-/// Every figure covers the same positions: those whose lots explain what is
-/// held and that could be valued today. The others are left out of all of
-/// them and listed, so the page can say so: counted in the invested and value
-/// but not the return, they would make the two disagree, and one valued at
-/// zero against its full cost would show a loss that doesn't exist. The return covers
-/// the counted positions' lots, the dividends of accounts whose positions in
-/// scope are all counted (from the account's first recorded purchase on), and
-/// today their current value. A missing rate among those flows leaves the
-/// return unknown rather than wrong.
 pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDate) -> ScopeReturn {
     let listed = |keep: &dyn Fn(&Position) -> bool| {
         let mut v: Vec<Missing> = positions
@@ -178,9 +145,8 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
         .filter(|p| p.complete && !p.fx_missing)
         .collect();
     let value: Decimal = complete.iter().map(|p| p.value).sum();
-    // A dividend belongs to its account, so it counts only when every position
-    // of that account in scope is complete (else it may pay for a holding whose
-    // purchases we don't know) and from the account's first recorded purchase.
+    // A dividend counts only when every position of its account in scope is complete (else it
+    // may pay for a holding whose purchases we don't know), from the account's first purchase.
     let dividend_counts = |f: &CashFlow| {
         let mut of_account = positions.iter().filter(|p| p.account_id == f.account_id);
         if of_account.clone().next().is_none() || !of_account.all(|p| p.complete && !p.fx_missing) {
@@ -202,8 +168,7 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
         None => dividend_counts(f),
     };
     let included: Vec<&&CashFlow> = flows.iter().filter(|f| counts(f)).collect();
-    // Value + received − invested is the gain the return annualises: the same
-    // flows, so the two can't tell different stories about one account.
+    // Same flows as the return, so the two can't tell different stories about one account.
     let total = |buy: bool| -> Option<Decimal> {
         included
             .iter()
@@ -245,7 +210,6 @@ pub fn scope_return(positions: &[&Position], flows: &[&CashFlow], today: NaiveDa
     }
 }
 
-/// The total and one figure per account.
 pub fn returns(positions: &[Position], flows: &[CashFlow], today: NaiveDate) -> Returns {
     let all_positions: Vec<&Position> = positions.iter().collect();
     let all_flows: Vec<&CashFlow> = flows.iter().collect();
@@ -357,7 +321,6 @@ mod tests {
 
     #[test]
     fn dividends_count_at_account_level() {
-        // 1000 in; 50 paid out and 1050 held after a year: 1100 back, 10 %.
         let p = [pos(1, 10, true, "1050")];
         let fl = [
             lot(1, 10, "2025-01-01", "-1000"),
@@ -402,7 +365,6 @@ mod tests {
 
     #[test]
     fn an_unvalued_position_is_left_out_of_every_figure() {
-        // Valued at zero against its full cost, it would show a 100 % loss.
         let mut p = [pos(1, 10, true, "1100"), pos(2, 10, true, "0")];
         p[1].fx_missing = true;
         let fl = [
@@ -438,7 +400,6 @@ mod tests {
 
     #[test]
     fn sold_out_position_contributes_its_flows() {
-        // Bought 1000, sold 1100 a year later, nothing held: 10 %.
         let p = [pos(1, 10, true, "0")];
         let fl = [
             lot(1, 10, "2025-01-01", "-1000"),
@@ -454,9 +415,6 @@ mod tests {
 
     #[test]
     fn a_partial_sale_counts_in_what_was_invested_and_received() {
-        // #74: 1000 in, half sold for 750, the rest now worth 450. The cost of
-        // the shares still held (500) would show a loss next to a gain; every
-        // purchase and every euro back show the 200 the return annualises.
         let p = [pos(1, 10, true, "450")];
         let fl = [
             lot(1, 10, "2025-01-01", "-1000"),
@@ -520,7 +478,6 @@ mod tests {
 
     #[test]
     fn two_deposits_compound() {
-        // 1000 grows two years, 1000 one year, both at 10 %: 1210 + 1100.
         let r = xirr(&[
             f("2024-01-01", -1000.0),
             f("2024-12-31", -1000.0),
@@ -538,7 +495,6 @@ mod tests {
 
     #[test]
     fn short_periods_are_annualised() {
-        // +1 % in ~3 months is ~4 % a year.
         let r = xirr(&[f("2026-01-01", -1000.0), f("2026-04-02", 1010.0)]).unwrap();
         assert!(r > 0.039 && r < 0.042, "{r}");
     }

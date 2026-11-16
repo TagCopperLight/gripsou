@@ -20,8 +20,7 @@ fn dec(s: &str) -> Decimal {
 #[gripsou_core::testkit::db_test]
 async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    // This test is about day grouping, not currency: pin the equity to the
-    // pivot so the numbers below are pure valuation arithmetic.
+    // Pinned to the pivot so the numbers are plain valuation arithmetic.
     let mut equity = equity_holding(
         "acct-1",
         "US0378331005",
@@ -41,12 +40,11 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
     )
     .await?;
 
-    let ids = holding_ids(&pool).await; // [Apple, Euro] by instrument name
+    let ids = holding_ids(&pool).await;
     let (d1, d2) = (
         NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
         NaiveDate::from_ymd_opt(2026, 1, 2).unwrap(),
     );
-    // Day 1: apple value 600, cash 100 -> nw 700, invested 450+100
     stamp_on(&pool, ids[0], d1, Decimal::new(3, 0), Decimal::new(600, 0)).await;
     stamp_on(
         &pool,
@@ -56,7 +54,6 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
         Decimal::new(100, 0),
     )
     .await;
-    // Day 2: apple value 630
     stamp_on(&pool, ids[0], d2, Decimal::new(3, 0), Decimal::new(630, 0)).await;
     stamp_on(
         &pool,
@@ -82,14 +79,8 @@ async fn net_worth_series_groups_by_day(pool: PgPool) -> anyhow::Result<()> {
 async fn net_worth_excludes_pre_acquisition_and_values_by_price(
     pool: PgPool,
 ) -> anyhow::Result<()> {
-    // Cash held on both days; the equity is acquired only on d1 (its first
-    // snapshot is d1). A backfilled price exists on d0 too. The equity must NOT
-    // contribute on d0 (no phantom holding before acquisition), and on d1 it
-    // must be valued from the price series (qty x price), not snapshot.value.
+    // The equity is acquired only on d1: no phantom holding on d0, and d1 is valued from the price series, not snapshot.value.
     let conn_id = seed_connection(&pool).await;
-    // This test is about pre-acquisition exclusion and price-driven valuation,
-    // not currency: pin the equity to the pivot so the numbers below are pure
-    // valuation arithmetic.
     let mut equity = equity_holding(
         "acct-1",
         "US0378331005",
@@ -109,7 +100,7 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(
     )
     .await?;
 
-    let ids = holding_ids(&pool).await; // [Apple (equity), Euro (cash)] by name
+    let ids = holding_ids(&pool).await;
     let instrument_id: uuid::Uuid =
         sqlx::query_scalar("select id from instrument where kind <> 'cash'")
             .fetch_one(&pool)
@@ -118,7 +109,6 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(
     let d1 = NaiveDate::from_ymd_opt(2026, 1, 2).unwrap();
     let at = |d: NaiveDate| d.and_hms_opt(12, 0, 0).unwrap().and_utc();
 
-    // Cash: present on both days. Equity: first snapshot is d1 only.
     stamp_on(
         &pool,
         ids[1],
@@ -136,8 +126,7 @@ async fn net_worth_excludes_pre_acquisition_and_values_by_price(
     )
     .await;
     stamp_on(&pool, ids[0], d1, Decimal::new(3, 0), Decimal::new(600, 0)).await;
-    // Price exists on both days; 210 differs from snapshot.value (600) so we can
-    // tell price-based valuation (3*210=630) from snapshot-based (600).
+    // 210 differs from snapshot.value (600): price-based is 3*210 = 630.
     insert_price_on(&pool, instrument_id, at(d0), Decimal::new(210, 0)).await;
     insert_price_on(&pool, instrument_id, at(d1), Decimal::new(210, 0)).await;
 
@@ -185,7 +174,6 @@ async fn accounts_sum_latest_snapshot_per_account(pool: PgPool) -> anyhow::Resul
     let ids = holding_ids(&pool).await;
     let today = chrono::Utc::now().date_naive();
     let yesterday = today - chrono::Days::new(1);
-    // stamp yesterday first (value 100), then overwrite today's ingest snapshot with value 120
     stamp_on(
         &pool,
         ids[0],
@@ -274,7 +262,6 @@ async fn holdings_join_latest_price_and_spark(pool: PgPool) -> anyhow::Result<()
 #[gripsou_core::testkit::db_test]
 async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    // First sync: cash + equity.
     ingest(
         &pool,
         conn_id,
@@ -294,7 +281,6 @@ async fn holdings_excludes_closed_zero_quantity(pool: PgPool) -> anyhow::Result<
         },
     )
     .await?;
-    // Second sync drops the cash holding, so it is closed (quantity 0).
     ingest(
         &pool,
         conn_id,
@@ -354,14 +340,14 @@ async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
         base - chrono::Duration::days(10),
         Decimal::new(150, 0),
     )
-    .await; // outside window
+    .await;
     insert_price_on(
         &pool,
         instrument_id,
         base - chrono::Duration::days(1),
         Decimal::new(200, 0),
     )
-    .await; // inside
+    .await;
 
     let user_id = testkit::owner(&pool, conn_id).await;
     let from = base - chrono::Duration::days(3);
@@ -371,9 +357,6 @@ async fn holding_prices_windowed_and_owned(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Each price is converted at the last rate stamped on or before its day (the
-/// latest of that day when there are several), and has no account price
-/// before the first rate.
 #[gripsou_core::testkit::db_test]
 async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::testkit::{insert_price, rate_on, seed_cash_instrument};
@@ -406,7 +389,6 @@ async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow:
     rate_on(&pool, usd, d(5), Decimal::new(5, 1)).await;
     rate_on(&pool, usd, d(8), Decimal::new(7, 1)).await;
     let mut conn = pool.acquire().await?;
-    // A later rate the same day wins.
     insert_price(&mut conn, usd, at(8, 18), Decimal::new(8, 1), "EUR").await?;
     for day in [4, 5, 7, 8] {
         insert_price(
@@ -431,11 +413,9 @@ async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow:
             Some(Decimal::new(8, 0)),
         ]
     );
-    // The reader is in EUR like the account: the two prices agree.
     assert!(prices.iter().all(|p| p.reporting_price == p.account_price));
 
-    // Read in USD: the USD listing needs no rate; day 4 (no USD rate yet)
-    // stays unknown because the quote leg has none either.
+    // In USD the USD listing needs no rate; day 4 stays unknown since the quote leg has none.
     sqlx::query("update users set currency = 'USD' where id = $1")
         .bind(user_id)
         .execute(&pool)
@@ -454,9 +434,6 @@ async fn holding_prices_converts_at_the_rate_of_the_day(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-/// Each price point carries the position that day from `lot_basis`: none
-/// before the first lot, and a sale removes its share of the cost, not its
-/// proceeds.
 #[gripsou_core::testkit::db_test]
 async fn holding_prices_carry_the_position_of_the_day(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::testkit::{rate_on, seed_cash_instrument, seed_lot};
@@ -513,8 +490,6 @@ async fn holding_prices_carry_the_position_of_the_day(pool: PgPool) -> anyhow::R
     Ok(())
 }
 
-/// A holding with no lot at all (a balance-only provider) is held flat at its
-/// quantity and the provider's basis.
 #[gripsou_core::testkit::db_test]
 async fn holding_prices_hold_a_lotless_position_flat(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -595,9 +570,7 @@ async fn accounts_lists_latest_value_and_type(pool: PgPool) -> anyhow::Result<()
 
 #[gripsou_core::testkit::db_test]
 async fn accounts_value_equity_by_price(pool: PgPool) -> anyhow::Result<()> {
-    // The accounts grid (and the distribution pie drawn from it) must value an
-    // equity from the price series (so they sum to the net-worth figure), not from the provider
-    // valuation stored in snapshot.value.
+    // The accounts grid values equity from the price series, not snapshot.value, so it sums to net worth.
     let conn_id = seed_connection(&pool).await;
     ingest(
         &pool,
@@ -609,7 +582,7 @@ async fn accounts_value_equity_by_price(pool: PgPool) -> anyhow::Result<()> {
                 "US0378331005",
                 Decimal::new(3, 0),
                 Decimal::new(450, 0),
-                Some(Decimal::new(600, 0)), // provider valuation -> snapshot.value
+                Some(Decimal::new(600, 0)),
             )],
             ..Default::default()
         },
@@ -657,7 +630,6 @@ async fn account_series_groups_by_account_and_day(pool: PgPool) -> anyhow::Resul
     )
     .await?;
 
-    // Map each account's cash holding id via account.external_id.
     let pairs: Vec<(uuid::Uuid, String)> = sqlx::query_as(
         "select h.id, a.external_id from holding h join account a on a.id = h.account_id",
     )
@@ -750,7 +722,6 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
 
     let today = chrono::Utc::now().date_naive();
 
-    // No rate yet: the holding is worth zero and the day is flagged.
     let rows =
         valuation::net_worth_series(&pool, testkit::owner(&pool, conn_id).await, today, today)
             .await?;
@@ -761,7 +732,6 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
     );
     assert!(rows[0].fx_missing, "and the UI must be told");
 
-    // With a rate, 1000 CNY is 120 EUR.
     let cny_id: uuid::Uuid =
         sqlx::query_scalar("select id from instrument where kind = 'cash' and currency = 'CNY'")
             .fetch_one(&pool)
@@ -776,10 +746,6 @@ async fn net_worth_converts_foreign_cash_and_flags_a_missing_rate(
     Ok(())
 }
 
-/// A snapshot's value is in its account's currency, so a cash line in another
-/// currency is not worth its quantity there: with no rate it counts for
-/// nothing and says so, today and on derived days, rather than 1000 USD read
-/// as 1000 EUR.
 #[gripsou_core::testkit::db_test]
 async fn foreign_cash_without_a_rate_is_not_read_in_the_account_currency(
     pool: PgPool,
@@ -909,9 +875,7 @@ async fn holdings_report_converted_value_and_native_price(pool: PgPool) -> anyho
         "1800.00".parse()?,
         "10 * 200 USD * 0.90 = 1800 EUR"
     );
-    // cost_basis is amount-domain: the provider denominated it in the ACCOUNT's
-    // currency (EUR), so it converts at 1 — multiplying it by the USD rate
-    // would understate invested by ~14% and inflate gain %.
+    // cost_basis is in the account's currency (EUR), so it converts at 1: the USD rate would understate invested by about 14%.
     assert_eq!(h.invested, "1500".parse()?, "1500 is already EUR");
     assert_eq!(h.invested_native, "1500".parse()?);
     assert!(!h.fx_missing);
@@ -922,9 +886,7 @@ async fn holdings_report_converted_value_and_native_price(pool: PgPool) -> anyho
 async fn holdings_flag_and_zero_an_unconvertible_position(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
-    // The account must be CNY too: `holding_snapshot.value` is denominated in the
-    // account's currency, so a CNY cash position inside a EUR account would mean
-    // the provider valued it in EUR — convertible, and rightly not flagged.
+    // The account must be CNY too: snapshot values are in the account's currency, so CNY cash in a EUR account counts as valued in EUR.
     let mut cny_account = checking_account("acct-1");
     cny_account.currency = "CNY".to_string();
     let mut cny_cash = cash_holding("acct-1", Decimal::new(1000, 0));
@@ -949,16 +911,7 @@ async fn holdings_flag_and_zero_an_unconvertible_position(pool: PgPool) -> anyho
     Ok(())
 }
 
-/// All three valuation paths (holdings, accounts, net_worth_series)
-/// must sum to the exact same figure for the same portfolio: one EUR cash
-/// position, one CNY cash position with a seeded rate, a USD equity with a
-/// seeded price and rate, and — crucially — one equity with NO price row at all
-/// and a nonzero snapshot value, which can only be valued through the
-/// provider-valuation fallback. That last one is what proves `holdings()` shares
-/// the fallback: without it, the holdings table showed 0 while the accounts
-/// card, the pie and the net-worth chart all showed the provider valuation, on
-/// the same screen. If these ever disagree it means a second, divergent
-/// valuation path crept back in.
+/// All three valuation paths (holdings, accounts, net_worth_series) must give the same sum. One equity has no price row, so only the provider-valuation fallback can value it: this proves `holdings()` shares it.
 #[gripsou_core::testkit::db_test]
 async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -977,8 +930,6 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
     );
     equity.instrument.currency = "USD".to_string();
 
-    // No price will ever be inserted for this one, so `unit_value_asof` is NULL
-    // and only the snapshot fallback can value it.
     let mut unpriced = equity_holding(
         "acct-1",
         "FR0000120271",
@@ -1015,10 +966,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
         sqlx::query_scalar("select id from instrument where kind = 'cash' and currency = 'CNY'")
             .fetch_one(&pool)
             .await?;
-    // By ISIN, not just `kind = 'equity'`: there are two equities here and only
-    // this one may get a price row — the other must stay unpriced so the
-    // snapshot fallback is the thing under test. Without the filter the row
-    // picked is arbitrary and the test is flaky by construction.
+    // Select by ISIN: only this equity may get a price, the other must stay unpriced to exercise the fallback.
     let equity_id: uuid::Uuid =
         sqlx::query_scalar("select id from instrument where isin = 'US0378331005'")
             .fetch_one(&pool)
@@ -1044,11 +992,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
     .await?;
     drop(conn);
 
-    // Snapshots are what every reader values from; stamp today's for each holding.
-    // Every priced holding gets value 0 so that a path accidentally reading
-    // snapshot.value instead of the price would show up immediately; the
-    // unpriced one gets a real provider valuation of 400, which is the only way
-    // it can be valued at all.
+    // Priced holdings get snapshot value 0 so a path reading snapshot.value instead of the price shows up. The unpriced one gets 400, its only valuation.
     let today = chrono::Utc::now().date_naive();
     let rows: Vec<(uuid::Uuid, String, Decimal)> = sqlx::query_as(
         "select h.id, i.name, h.quantity
@@ -1083,16 +1027,12 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
         accounts_total, net_worth_total,
         "accounts vs net_worth_series"
     );
-    // 100 EUR cash + 1000 CNY x 0.12 + 10 x 200 USD x 0.90 + the unpriced
-    // position's provider valuation of 400, which is denominated in the ACCOUNT's
-    // currency (EUR) and so converts at 1 — not at the USD rate the instrument's
-    // quote currency would have suggested (that would give 360).
+    // The unpriced 400 is in the account's currency (EUR), so it converts at 1, not at the USD rate (that would give 360).
     assert_eq!(
         net_worth_total,
         "2420.00".parse()?,
         "100 + 120 + 1800 + 400 (fallback converted from the account currency)"
     );
-    // And the unpriced holding is not silently zeroed in the holdings table.
     let unpriced = valuation::holdings(&pool, user_id)
         .await?
         .into_iter()
@@ -1110,11 +1050,7 @@ async fn all_valuation_paths_agree(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A holding with neither a usable price nor a convertible snapshot value is
-/// zeroed AND flagged — and the flag keys on that failure, not on the
-/// instrument's quote currency. Here the instrument is labelled EUR (a rate that
-/// trivially exists) while its only price row is quoted in GBP (no rate): a flag
-/// keyed on `fx_asof(i.currency)` would show value 0 with no warning.
+/// Zeroed and flagged. The flag keys on the failed price, not the instrument's quote currency: labelled EUR (rate exists) but priced in GBP (none).
 #[gripsou_core::testkit::db_test]
 async fn a_price_in_an_unrated_currency_is_zeroed_and_flagged(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1177,10 +1113,7 @@ async fn a_price_in_an_unrated_currency_is_zeroed_and_flagged(pool: PgPool) -> a
     Ok(())
 }
 
-/// GBP here is reachable only through `price.currency` — no holding is
-/// denominated in it — so neither the cash-instrument backfill nor the
-/// eligibility union may key off `instrument.currency` alone, or the rate can
-/// never arrive and the position above stays zero forever.
+/// GBP is reachable only through `price.currency`, so the cash-instrument backfill and the eligibility union must not key off `instrument.currency` alone.
 #[gripsou_core::testkit::db_test]
 async fn a_price_row_currency_becomes_price_eligible(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1236,9 +1169,7 @@ async fn a_price_row_currency_becomes_price_eligible(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// A provider's malformed currency string must never become a globally-shared
-/// cash instrument (the `kind='cash'` unique index on `currency` would happily
-/// hold both "USD" and "usd") nor reach a live Yahoo URL.
+/// A malformed currency must never become a global cash instrument (the unique index would hold both "USD" and "usd") nor reach a Yahoo URL.
 #[gripsou_core::testkit::db_test]
 async fn a_malformed_currency_never_becomes_a_cash_instrument(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1274,8 +1205,6 @@ async fn a_malformed_currency_never_becomes_a_cash_instrument(pool: PgPool) -> a
     Ok(())
 }
 
-/// A derived row is a first-class point on the chart: net worth on a day with
-/// no snapshot comes from the backfill rather than from the older snapshot.
 #[gripsou_core::testkit::db_test]
 async fn net_worth_reads_derived_history(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1334,10 +1263,7 @@ async fn net_worth_reads_derived_history(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Seed one equity holding with a single snapshot on `anchor`, run the
-/// backfill, and return (user_id, instrument_id). The derived day is
-/// `anchor - 1`: the backfill horizon reaches one day past the earliest
-/// evidence, and days after the last snapshot have no anchor to walk from.
+/// Returns (user_id, instrument_id). The derived day is `anchor - 1`: the backfill horizon ends one day past the earliest evidence, and days after the last snapshot have no anchor.
 async fn seed_backfilled_equity(
     pool: &PgPool,
     anchor: NaiveDate,
@@ -1363,10 +1289,7 @@ async fn seed_backfilled_equity(
     Ok((user_id, instrument_id))
 }
 
-/// A security with no price row at all is valued on derived days by carrying
-/// the anchor snapshot's unit valuation flat backward (the held-flat rule,
-/// applied to price). Without that the chart would dip to zero on every derived day and
-/// spuriously raise fx_missing.
+/// A priceless security carries the anchor snapshot's unit valuation flat backward, or the chart dips to zero on derived days and raises fx_missing.
 #[gripsou_core::testkit::db_test]
 async fn a_priceless_security_keeps_its_valuation_on_derived_days(
     pool: PgPool,
@@ -1392,16 +1315,13 @@ async fn a_priceless_security_keeps_its_valuation_on_derived_days(
     Ok(())
 }
 
-/// The priced path is untouched: when a price exists, quantity × unit_value_asof
-/// wins and the backfill's stored `value` is never consulted.
 #[gripsou_core::testkit::db_test]
 async fn a_priced_security_is_valued_from_the_price_on_derived_days(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let anchor = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
     let derived_day = NaiveDate::from_ymd_opt(2026, 1, 9).unwrap();
-    // Provider valuation (1200) deliberately disagrees with the price (100/unit
-    // × 10 = 1000) so the assertion can only pass via the primary branch.
+    // Provider valuation (1200) differs from the price (10 x 100) so only the primary branch passes.
     let (user_id, instrument_id) =
         seed_backfilled_equity(&pool, anchor, Decimal::new(1200, 0)).await?;
     insert_price_on(
@@ -1425,9 +1345,7 @@ async fn a_priced_security_is_valued_from_the_price_on_derived_days(
     Ok(())
 }
 
-/// Seed one equity holding that was fully sold: a valued snapshot on `held_day`,
-/// a sell of the whole position on `sell_day`, and a zero-quantity snapshot on
-/// `anchor`. Returns (user_id, holding_id).
+/// Returns (user_id, holding_id).
 async fn seed_sold_equity(
     pool: &PgPool,
     held_day: Option<(NaiveDate, Decimal, Decimal)>,
@@ -1453,8 +1371,7 @@ async fn seed_sold_equity(
     if let Some((day, qty, value)) = held_day {
         stamp_on(pool, holding_id, day, qty, value).await;
     }
-    // Securities move by `lot`, not by `transaction`, so the sell that the
-    // backfill's quantity walk needs to see must be recorded there.
+    // Securities move by `lot`, so the backfill's quantity walk needs the sell recorded there.
     testkit::seed_lot(
         pool,
         holding_id,
@@ -1467,9 +1384,7 @@ async fn seed_sold_equity(
     Ok(user_id)
 }
 
-/// A fully-sold priceless security: every *later* snapshot has quantity zero, so
-/// the per-unit valuation has to be found by looking backward. Without that the
-/// chart dips to zero across exactly the window the position was held.
+/// Every later snapshot has quantity zero, so the per-unit valuation is found looking backward. Otherwise the chart dips to zero while the position was held.
 #[gripsou_core::testkit::db_test]
 async fn a_fully_sold_priceless_security_keeps_its_held_window_valued(
     pool: PgPool,
@@ -1504,17 +1419,12 @@ async fn a_fully_sold_priceless_security_keeps_its_held_window_valued(
     Ok(())
 }
 
-/// No snapshot anywhere carries a non-zero quantity, so no per-unit valuation
-/// exists at all. The derived `value` fallback still needs a number when nothing else is
-/// known: it falls back to `holding.cost_basis`, read flat (not a basis walk),
-/// because valuing an owned asset at zero is worse than valuing it at book —
-/// and a bare 0 here would also spuriously raise fx_missing on the read side.
+/// With no non-zero quantity anywhere, the derived value falls back to `holding.cost_basis` read flat: zero would undervalue an owned asset and raise fx_missing.
 #[gripsou_core::testkit::db_test]
 async fn a_priceless_security_with_no_valued_snapshot_falls_back_to_book_value(
     pool: PgPool,
 ) -> anyhow::Result<()> {
-    // With no earlier snapshot the horizon starts one day before the sell, so
-    // that is the only derived day on which the position is still held.
+    // With no earlier snapshot the horizon starts a day before the sell: the only derived day still held.
     let derived_day = NaiveDate::from_ymd_opt(2026, 1, 6).unwrap();
     let sell_day = NaiveDate::from_ymd_opt(2026, 1, 7).unwrap();
     let anchor = NaiveDate::from_ymd_opt(2026, 1, 10).unwrap();
@@ -1537,8 +1447,7 @@ async fn a_priceless_security_with_no_valued_snapshot_falls_back_to_book_value(
     Ok(())
 }
 
-/// The production gap shape: a derived day sitting *between* two snapshots must
-/// read the derived row, not the older snapshot carried forward.
+/// A derived day between two snapshots reads the derived row, not the older snapshot.
 #[gripsou_core::testkit::db_test]
 async fn net_worth_prefers_the_derived_row_inside_a_gap(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1606,7 +1515,6 @@ async fn net_worth_prefers_the_derived_row_inside_a_gap(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-/// A security position no lot explains is what the badge keys off.
 #[gripsou_core::testkit::db_test]
 async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1632,7 +1540,6 @@ async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Resul
     )
     .await;
 
-    // 30 of the 100 shares are explained by a lot.
     testkit::seed_lot(
         &pool,
         holding_id,
@@ -1653,7 +1560,6 @@ async fn reports_unexplained_quantity_per_holding(pool: PgPool) -> anyhow::Resul
     Ok(())
 }
 
-/// A fully explained position reports zero, not a negative shortfall.
 #[gripsou_core::testkit::db_test]
 async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1698,10 +1604,7 @@ async fn a_fully_explained_holding_reports_zero(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-/// An over-explained position (recorded buys exceeding the current quantity —
-/// realistic after a partial sale that was never recorded) reports a NEGATIVE
-/// shortfall. A `greatest(…, 0)` floor would hide this state: the user could
-/// never be told, and could never open the modal to fix it.
+/// Over-explained reports a negative shortfall: a `greatest(…, 0)` floor would hide it and block the fix modal.
 #[gripsou_core::testkit::db_test]
 async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1726,8 +1629,6 @@ async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyho
         Decimal::new(300, 0),
     )
     .await;
-    // 50 recorded buys against a 30-share holding — a sale must have gone
-    // unrecorded.
     testkit::seed_lot(
         &pool,
         holding_id,
@@ -1752,9 +1653,7 @@ async fn an_over_explained_holding_reports_a_negative_gap(pool: PgPool) -> anyho
     Ok(())
 }
 
-/// A holding with both buys and sells recorded must compute
-/// `quantity − Σbuys + Σsells`, exercising the `sell` branch of the case
-/// expression that no other test touches.
+/// Exercises the `sell` branch of the case expression.
 #[gripsou_core::testkit::db_test]
 async fn a_sell_increases_the_unexplained_quantity(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1814,7 +1713,6 @@ async fn a_sell_increases_the_unexplained_quantity(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-/// Cash has nothing to explain regardless of transaction history.
 #[gripsou_core::testkit::db_test]
 async fn cash_is_never_unexplained(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1858,10 +1756,7 @@ async fn cash_is_never_unexplained(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The gap-detection subquery must be scoped to (account, instrument), not the
-/// instrument alone: another user's buy of the same ETF must never reduce this
-/// holding's unexplained figure (mirroring the cross-user backfill-engine bug
-/// found earlier).
+/// The gap subquery is scoped to (account, instrument): another user's buy of the same ETF must not reduce it.
 #[gripsou_core::testkit::db_test]
 async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
     pool: PgPool,
@@ -1909,8 +1804,6 @@ async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
     )
     .await;
 
-    // User B buys 100 of the same instrument in their own account — must not
-    // explain user A's holding.
     testkit::seed_lot(
         &pool,
         holding_b,
@@ -1935,10 +1828,7 @@ async fn another_users_buy_of_the_same_instrument_does_not_explain_this_holding(
     Ok(())
 }
 
-/// A CTE join keyed on (instrument, day) or (currency, day) must not multiply
-/// rows when two holdings share an instrument or two accounts share a currency.
-/// This is the failure mode the rewrite introduces if the join keys are wrong,
-/// and it would silently double net worth rather than error.
+/// A join keyed on (instrument, day) or (currency, day) must not multiply rows, which would silently double net worth.
 #[gripsou_core::testkit::db_test]
 async fn sharing_an_instrument_or_currency_does_not_double_count(
     pool: PgPool,
@@ -1947,7 +1837,6 @@ async fn sharing_an_instrument_or_currency_does_not_double_count(
     let user_id = testkit::owner(&pool, conn_id).await;
     let mut conn = pool.acquire().await?;
 
-    // Two EUR accounts, each holding the same cash instrument: 40 + 60 = 100.
     let a1 = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
     let a2 = upsert_account(&mut conn, conn_id, &checking_account("acct-2")).await?;
     let eur = resolve_instrument(
@@ -1978,10 +1867,7 @@ async fn sharing_an_instrument_or_currency_does_not_double_count(
     Ok(())
 }
 
-/// `holding.cost_basis` is whatever the provider reported — for a
-/// PEA that is often nothing useful. Once the user's own lots explain the
-/// position exactly, they are strictly more truthful, so they win. Read-time
-/// only: nothing is written, so the next sync cannot clobber it.
+/// Once the user's lots explain the position exactly they beat the provider's `cost_basis`. Read-time only, so the next sync can't clobber it.
 #[gripsou_core::testkit::db_test]
 async fn complete_lots_override_the_providers_cost_basis(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -2039,16 +1925,11 @@ async fn complete_lots_override_the_providers_cost_basis(pool: PgPool) -> anyhow
         Decimal::new(500, 0),
         "μ × quantity, not the provider's 999"
     );
-    // The reporting-currency sibling too, not just the native one: both read
-    // `lot.basis`, but only this one passes through the fx conversion, so a
-    // regression isolated to that line would otherwise go uncaught. The account
-    // and the reporting currency are both EUR here, so the two must agree.
+    // Only the reporting-currency column passes through the fx conversion, so check it separately.
     assert_eq!(row.invested, Decimal::new(500, 0));
     Ok(())
 }
 
-/// A partial history is NOT more truthful than the provider's figure — it is
-/// only part of the story — so the override must not fire.
 #[gripsou_core::testkit::db_test]
 async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -2073,7 +1954,6 @@ async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyh
         Decimal::new(1200, 0),
     )
     .await;
-    // Only 10 of the 20 shares explained.
     testkit::seed_lot(
         &pool,
         holding_id,
@@ -2096,9 +1976,6 @@ async fn partial_lots_leave_the_providers_cost_basis_alone(pool: PgPool) -> anyh
     Ok(())
 }
 
-/// A holding whose lots explain its position exactly must report the SAME
-/// invested figure through holdings() as through the chart, or the table and
-/// the chart disagree on the same screen.
 #[gripsou_core::testkit::db_test]
 async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
@@ -2138,8 +2015,6 @@ async fn holdings_invested_is_fee_inclusive(pool: PgPool) {
     assert_eq!(h.mean_price, dec("98.895"));
 }
 
-/// The other half: the chart's invested line and the holdings table's Invested
-/// column must agree at today's date, because they are the same function.
 #[gripsou_core::testkit::db_test]
 async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
@@ -2181,9 +2056,7 @@ async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
     .await;
     stamp_on(&pool, holding_id, today, dec("2"), dec("220")).await;
 
-    // Another user's buy of the SAME instrument must not reach this user's
-    // `lb` array in net_worth_series (the `lot_basis` array param is built
-    // from `holding` joined through `connection.user_id = $1`, per-user).
+    // Another user's buy of the same instrument must not reach this user's `lb` array.
     let conn_b = seed_connection(&pool).await;
     let account_b = upsert_account(&mut conn, conn_b, &checking_account("acct-b"))
         .await
@@ -2220,10 +2093,7 @@ async fn chart_invested_matches_the_holdings_table(pool: PgPool) {
     );
 }
 
-/// The cash half of the chart's "Capital invested" line must move with the
-/// balance actually held on each day. Answering today's balance for every day
-/// would put the dashed invested line far *above* net worth on past days. Cash is
-/// valued at book on both sides, so the two must cancel exactly, every day.
+/// Cash cancels exactly every day: using today's balance on past days would put the invested line above net worth.
 #[gripsou_core::testkit::db_test]
 async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -2262,8 +2132,6 @@ async fn cash_invested_follows_the_balance_held_that_day(pool: PgPool) -> anyhow
     Ok(())
 }
 
-/// A reporting currency with no rate leaves the figure out and flags it,
-/// never shows the pivot figure under the reader's symbol.
 #[gripsou_core::testkit::db_test]
 async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
     pool: PgPool,
@@ -2282,7 +2150,6 @@ async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
     .await?;
     let today = chrono::Utc::now().date_naive();
 
-    // Switch to a currency no rate exists for.
     sqlx::query("update users set currency = 'USD' where id = $1")
         .bind(user_id)
         .execute(&pool)
@@ -2309,7 +2176,6 @@ async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
     assert_eq!(holdings[0].value, Decimal::ZERO);
     assert!(holdings[0].fx_missing);
 
-    // Once the rate lands the figure converts.
     let usd: uuid::Uuid = sqlx::query_scalar(
         "insert into instrument (kind, name, currency) values ('cash', 'Dollar', 'USD') returning id",
     )
@@ -2318,23 +2184,19 @@ async fn reporting_in_a_currency_with_no_rate_leaves_the_figure_out(
     insert_price_on(&pool, usd, chrono::Utc::now(), "0.80".parse()?).await;
     let rows = valuation::net_worth_series(&pool, user_id, today, today).await?;
     assert_eq!(rows[0].net_worth, Some("125".parse()?));
-    // The connections list shows the same converted figure, not the account's euros.
     let listed = gripsou_core::repo::connection::list_connection_accounts(&pool, user_id).await?;
     assert_eq!(listed[0].value, Some("125".parse()?));
     Ok(())
 }
 
-/// A position can be perfectly priceable while the account it sits in has no
-/// rate. Net worth counts it, so `invested` must flag the basis it could not
-/// convert: dropping it silently reads as a several-hundred-percent gain.
+/// A priceable position in an account with no rate: `invested` must flag the unconvertible basis, or the gain reads several hundred percent.
 #[gripsou_core::testkit::db_test]
 async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
     let mut cny_account = checking_account("acct-cny");
     cny_account.currency = "CNY".to_string();
-    // Priced in the pivot (insert_price_on stamps EUR), so the VALUE branch
-    // resolves; only the account-currency rate is missing.
+    // Priced in the pivot, so VALUE resolves; only the account-currency rate is missing.
     let equity = equity_holding(
         "acct-cny",
         "US0378331005",
@@ -2389,7 +2251,6 @@ async fn invested_flags_a_basis_it_could_not_convert(pool: PgPool) -> anyhow::Re
     assert_eq!(held[0].invested, Decimal::ZERO);
     assert!(held[0].fx_missing, "the holdings row says so too");
 
-    // With the rate, the basis converts and both flags clear.
     let cny: uuid::Uuid = sqlx::query_scalar(
         "insert into instrument (kind, name, currency) values ('cash', 'Yuan', 'CNY') returning id",
     )

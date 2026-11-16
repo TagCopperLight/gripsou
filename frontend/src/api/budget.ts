@@ -41,8 +41,7 @@ import type {
   UndoReviewReq,
 } from "./wire";
 
-/** The whole body that re-sends what `c` holds, with `patch` over it: the
- *  server has no partial update, so every write re-sends the whole row. */
+/** The server has no partial update: every write re-sends the whole row. */
 export function categoryBody(c: CategoryBody, patch: Partial<CategoryBody> = {}): CategoryBody {
   return { name: c.name, color: c.color, icon: c.icon, hint: c.hint, kind: c.kind, archived: c.archived, ...patch };
 }
@@ -71,23 +70,19 @@ export function useUpdateBudgetCategory() {
   });
 }
 
-/** Persists the whole list in display order; the server numbers it. The cache
- *  is moved optimistically so an arrow click lands at once instead of after a
- *  round trip, and is rolled back if the write fails. */
+/** The cache moves at once and rolls back if the write fails. */
 export function useReorderBudgetCategories() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (ids: string[]) => api("PUT /budget/categories/order", { body: { ids } }),
     onMutate: async (ids: string[]) => {
-      // An in-flight list refetch would otherwise land on top of the optimistic
-      // order and bounce the row back.
+      // An in-flight refetch would land on the optimistic order and bounce the row back.
       await qc.cancelQueries({ queryKey: keys.budgetCategories() });
       const previous = qc.getQueryData<BudgetCategory[]>(keys.budgetCategories());
       if (previous) {
         const byId = new Map(previous.map((c) => [c.id, c]));
         const next = ids.map((id) => byId.get(id)).filter((c): c is BudgetCategory => !!c);
-        // Only reorder what we can account for: a list that lost a row is a
-        // sign the cache moved under us, so leave it to the refetch.
+        // A list that lost a row means the cache moved under us: leave it to the refetch.
         if (next.length === previous.length) qc.setQueryData(keys.budgetCategories(), next);
       }
       return { previous };
@@ -139,31 +134,23 @@ export function useDeleteBudgetTag() {
   });
 }
 
-/** A bulk write as the list makes it: `filter` is the list's own filter,
- *  encoded on the way out. */
 export type BulkInput = Omit<BulkBody, "filter"> & { filter?: TransactionFilterQuery };
 
-/** The flag goes on the wire only when set. */
 function withConfirm<B extends { confirmBreakPairs?: boolean }>({ confirmBreakPairs, ...rest }: B) {
   return confirmBreakPairs ? { ...rest, confirmBreakPairs: true } : rest;
 }
 
-/** A write that only ticks or unticks ✓ touches nothing but the rows. */
 function onlyChecked(body: Pick<BulkBody, "categoryId" | "addTagIds" | "checked"> & { tagIds?: string[] | null }) {
   return body.checked != null && body.categoryId === undefined && body.tagIds == null && body.addTagIds == null;
 }
 
-/** A tag's place in the catalog; unknown tags sort after every known one. */
+/** Unknown tags sort after every known one. */
 function catalogRank(catalog: { id: string }[], id: string): number {
   const i = catalog.findIndex((tag) => tag.id === id);
   return i === -1 ? Number.MAX_SAFE_INTEGER : i;
 }
 
-/** The row as the server holds it once `body` is written, resolved from the
- *  category and tag catalogs in the cache. A user's category write makes the
- *  row `user`-sourced, which clears the confidence and the review flag; a
- *  confirmed one unlinks the pair. The *other* half of that pair is not known
- *  here: it arrives with the refetch. */
+/** The row as the server holds it after `body`. The other half of a broken pair is unknown here and arrives with the refetch. */
 function rowAfter(row: Transaction, body: TransactionPatch, qc: QueryClient): Transaction {
   const next = { ...row };
   if (body.categoryId !== undefined) {
@@ -184,8 +171,7 @@ function rowAfter(row: Transaction, body: TransactionPatch, qc: QueryClient): Tr
   }
   if (body.tagIds) {
     const catalog = qc.getQueryData<BudgetTag[]>(keys.budgetTags()) ?? [];
-    // In the catalog's order, which is the order the server sends a row's
-    // tags back in, so a new tag doesn't jump when the response lands.
+    // The catalog's order, as the server sends tags back, so a new tag doesn't jump when the response lands.
     next.tags = body.tagIds
       .map(
         (id) =>
@@ -198,8 +184,6 @@ function rowAfter(row: Transaction, body: TransactionPatch, qc: QueryClient): Tr
   return next;
 }
 
-/** One row. With `optimistic`, the cached row shows the write before the
- *  server answers, and goes back if the write fails or is refused. */
 export function usePatchTransaction() {
   const qc = useQueryClient();
   return useMutation({
@@ -207,8 +191,7 @@ export function usePatchTransaction() {
       api("PATCH /transactions/:id", { params: { id }, body: withConfirm(body) }),
     onMutate: async ({ id, body, optimistic }) => {
       if (!optimistic) return { previous: [] as [readonly unknown[], unknown][] };
-      // Every cached filter combination may hold this row, so patch the whole
-      // family rather than guessing which key the caller is reading.
+      // Every cached filter combination may hold this row.
       await qc.cancelQueries({ queryKey: keys.transactions() });
       const previous = qc.getQueriesData({ queryKey: keys.transactions() });
       qc.setQueriesData<InfiniteData<Transaction[]>>({ queryKey: keys.transactions() }, (data) =>
@@ -244,10 +227,7 @@ export function useApplyToDescription() {
   });
 }
 
-/** Ids for a hand-picked selection, `filter` for "select all shown" — which
- *  with no filter set is 3.5 years of rows, far too many to enumerate. The
- *  filter goes through the same encoder as the list and its counts, so the
- *  write and the view cannot disagree. */
+/** "Select all shown" with no filter is 3.5 years of rows, too many to enumerate, so it sends the filter, encoded as the list does. */
 export function useBulkTransactions() {
   const qc = useQueryClient();
   return useMutation({
@@ -263,11 +243,9 @@ export function useBulkTransactions() {
   });
 }
 
-/** Full replacement map of every model's prices, per million tokens. */
 export type BudgetAiPrices = Record<string, BudgetAiPriceReq>;
 
-/** A finished run has a durable timestamp, so a short run missed between
- *  polls still refreshes its dependent queries. */
+/** A durable timestamp lets a short run missed between polls still refresh its queries. */
 function onAiStatusChange(qc: QueryClient) {
   return (prev: AiStatus, next: AiStatus) => {
     const completed = next.lastRun !== null && next.lastRun.startedAt !== prev.lastRun?.startedAt;
@@ -277,8 +255,7 @@ function onAiStatusChange(qc: QueryClient) {
   };
 }
 
-/** Fast polls while running; idle checks discover automatic or short runs.
- *  The Overview fills in live; transaction rows catch up at completion. */
+/** Fast polls while running; idle checks find automatic or short runs. */
 export function useAiStatus() {
   const qc = useQueryClient();
   useEffect(() => watchQuery(qc, keys.budgetAiStatus(), onAiStatusChange(qc)), [qc]);
@@ -331,8 +308,7 @@ export function useSetBudgetAiSettings() {
   });
 }
 
-/** The models the provider offers, asked of the provider itself. Not
- *  retried: a failure falls back to typing the name. */
+/** Not retried: a failure falls back to typing the name. */
 export function useBudgetAiModels(provider: string | null) {
   return useQuery({
     queryKey: keys.budgetAiModels(provider ?? ""),

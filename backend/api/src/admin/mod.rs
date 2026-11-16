@@ -1,6 +1,3 @@
-//! Admin-only settings: account providers, provider API keys, the budget AI and its prices,
-//! users, invites and reset links.
-
 pub mod dto;
 
 use crate::error::Json;
@@ -19,8 +16,6 @@ use gripsou_core::repo::invite_token::TokenKind;
 use gripsou_core::repo::user::AdminGuarded;
 use gripsou_providers::registry;
 
-/// Every admin route. [`router`] puts them all behind the admin check, so
-/// none can be added without it.
 pub(crate) fn routes() -> Routes {
     Routes::default()
         .get("/users", users)
@@ -73,7 +68,6 @@ pub async fn api_keys(
     )
 }
 
-/// The longest value accepted: real keys are far shorter.
 const MAX_KEY_CHARS: usize = 1000;
 
 pub async fn set_api_key(
@@ -164,8 +158,6 @@ pub async fn set_budget_ai_settings(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// The models the provider offers, for the admin's model dropdown. Asked of
-/// the provider on every call: the list is short and only read by an admin.
 pub async fn budget_ai_models(
     State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
     _: AdminUser,
@@ -212,8 +204,6 @@ pub async fn budget_ai_usage(
     }))
 }
 
-/// Replaces the whole price map. Every value must be a non-negative decimal
-/// string (USD per million tokens); anything else is a 400 and saves nothing.
 pub async fn set_budget_ai_prices(
     State(pool): State<PgPool>,
     _: AdminUser,
@@ -262,7 +252,6 @@ pub async fn users(
     State(pool): State<PgPool>,
     AdminUser { user_id }: AdminUser,
 ) -> Result<Json<Vec<dto::User>>, ApiError> {
-    // Listing every account (names/emails/roles) is admin-only.
     let rows = gripsou_core::repo::user::list(&pool).await?;
     Ok(Json(
         rows.into_iter()
@@ -283,9 +272,6 @@ pub async fn create_invite(
     ))
 }
 
-/// Redeeming a reset link clears the target's second factors, so creating one
-/// needs a fresh reauth token, and never for oneself (Settings changes one's
-/// own password): a stolen admin session must not get past two-factor.
 pub async fn create_reset_link(
     State(pool): State<PgPool>,
     AdminUser { user_id }: AdminUser,
@@ -315,8 +301,6 @@ pub async fn set_role(
     Path(id): Path<Uuid>,
     Json(body): Json<dto::SetRoleReq>,
 ) -> Result<StatusCode, ApiError> {
-    // An admin demoting themselves would lose this page mid-sentence; another
-    // admin can do it.
     if id == user_id {
         return Err(ApiError::Conflict("cannot change your own role"));
     }
@@ -356,8 +340,6 @@ mod tests {
     use crate::testkit::*;
     use sqlx::PgPool;
 
-    /// Every admin route refuses a member before the handler runs (no body
-    /// is sent, so a handler would answer 4xx).
     #[gripsou_core::testkit::db_test]
     async fn every_admin_route_refuses_a_member(pool: PgPool) {
         use axum::body::Body;
@@ -465,8 +447,6 @@ mod tests {
         assert!(api_key_dto("brandfetch", &[("client_id", "c")]).0.ready);
     }
 
-    /// Whether an AI provider is picked doesn't matter: the key is what the
-    /// group needs.
     #[test]
     fn a_categoriser_is_ready_when_its_key_is_saved() {
         let (none, _) = api_key_dto("jev", &[]);
@@ -475,7 +455,6 @@ mod tests {
         assert!(api_key_dto("jev", &[("api_key", "k")]).0.ready);
     }
 
-    /// The answer to a save reflects the adapters the new keys build.
     #[gripsou_core::testkit::db_test]
     async fn saving_the_last_bank_key_answers_ready(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
@@ -546,7 +525,6 @@ mod tests {
         let admin = seed_admin(&pool, "admin@t.local").await;
         let principal = || AdminUser { user_id: admin };
 
-        // Disable powens (seeded enabled).
         let off = set_provider(
             State(pool.clone()),
             principal(),
@@ -558,7 +536,6 @@ mod tests {
         .0;
         assert!(!off.enabled);
 
-        // Idempotent: disabling again still reports disabled and does not error.
         let _ = set_provider(
             State(pool.clone()),
             principal(),
@@ -568,7 +545,6 @@ mod tests {
         .await
         .expect("second disable ok");
 
-        // Re-enable.
         let on = set_provider(
             State(pool.clone()),
             principal(),
@@ -580,7 +556,6 @@ mod tests {
         .0;
         assert!(on.enabled);
 
-        // Persisted: a fresh list reflects the enabled flag.
         let list = providers(State(pool.clone()), principal()).await.unwrap().0;
         assert!(list.iter().find(|p| p.key == "powens").unwrap().enabled);
     }
@@ -588,7 +563,6 @@ mod tests {
     #[gripsou_core::testkit::db_test]
     async fn set_provider_unknown_key_is_404(pool: PgPool) {
         let admin = seed_admin(&pool, "admin@t.local").await;
-        // 'yahoo' is a price provider, not an account provider: not found.
         for key in ["nope", "yahoo"] {
             let err = set_provider(
                 State(pool.clone()),
@@ -693,10 +667,8 @@ mod tests {
         let reauth = reauth_token(&pool, &who, PASSWORD).await;
         let err = create(admin, &reauth).await.unwrap_err();
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
-        // Refusing oneself did not spend the token.
         let (status, _) = create(target, &reauth).await.expect("ok");
         assert_eq!(status, StatusCode::CREATED);
-        // Single use.
         let err = create(target, &reauth).await.unwrap_err();
         assert_eq!(err.status(), StatusCode::FORBIDDEN);
     }
@@ -801,7 +773,6 @@ mod tests {
         let target = seed_user(&pool, "target@t.local").await;
         let who = principal_for(&pool, "a@t.local", PASSWORD).await;
 
-        // Case-insensitive email match succeeds.
         let ok = delete_user(
             State(pool.clone()),
             AdminUser {
@@ -836,7 +807,6 @@ mod tests {
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
-    /// An admin's budget AI choice persists (trimmed) and reads back as written.
     #[gripsou_core::testkit::db_test]
     async fn set_budget_ai_settings_persists(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
@@ -866,8 +836,6 @@ mod tests {
         assert_eq!(read.model.as_deref(), Some("some-model"));
     }
 
-    /// Blank strings switch the AI off (stored as null), rather than storing a
-    /// provider named "" that the scheduler would then try to look up.
     #[gripsou_core::testkit::db_test]
     async fn set_budget_ai_settings_blank_clears(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;
@@ -892,8 +860,6 @@ mod tests {
         assert_eq!((s.provider, s.model), (None, None));
     }
 
-    /// A provider key outside the registry is a 400 and leaves the previous
-    /// choice in place, so a typo cannot silently disable categorisation.
     #[gripsou_core::testkit::db_test]
     async fn set_budget_ai_settings_rejects_unknown_provider(pool: PgPool) {
         let admin = seed_admin(&pool, "a@t.local").await;

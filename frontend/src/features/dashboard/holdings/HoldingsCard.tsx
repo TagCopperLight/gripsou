@@ -32,15 +32,11 @@ type Column = {
   labelKey: string;
   align: "left" | "right";
   sort?: HoldingSortKey;
-  /** The column's grid track (see `gridTable.ts`). */
   track: Track;
-  /** Its gutter: every cell pays for the space on its right. */
   pad: string;
 };
 
-// Only the asset column grows; the others have floors (and the text ones
-// ceilings, truncating past them), so searching or filtering never moves a
-// column. Below the sum of the floors the table scrolls sideways.
+// Only the asset column grows; the others have floors, so searching or filtering never moves a column. Below the sum of the floors the table scrolls sideways.
 const COLUMNS: Column[] = [
   { labelKey: "dashboard.holdings.columns.asset", align: "left", sort: "asset", track: { min: "220px", max: "3fr" }, pad: "pl-3 pr-4" },
   { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty", track: { min: "96px", max: "max-content" }, pad: "pr-4" },
@@ -85,8 +81,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
           </CardTitle>
           <label className="flex w-full items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 has-disabled:opacity-40 md:w-64">
             <Search className="size-4 text-fg-faint shrink-0" />
-            {/* The label dims as a whole, box and icon included: the input
-                mustn't dim a second time inside it. */}
+            {/* The label dims as a whole: the input mustn't dim a second time inside it. */}
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -123,7 +118,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
               </button>
             );
           })}
-          {/* The account types come with the holdings. */}
           {!ready && (
             <Skeleton className="flex gap-1.5">
               <Bone className="h-6 w-20 rounded-lg" />
@@ -177,8 +171,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
               // No rate: the value is zero, so a gain would be invented.
               const showPnl = hasPnl && !line.fxMissing;
               const accountName = line.account?.name ?? t("dashboard.holdings.multipleAccounts");
-              // Cash rows are summary lines (no asset detail / purchase history),
-              // so they are not clickable.
               return (
                 <tr
                   key={line.key}
@@ -209,8 +201,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                             ticker={h.ticker}
                             className="size-8 rounded-lg text-[13px]"
                           />
-                          {/* The ring is load-bearing: without it the dot
-                              disappears into a light logo. */}
+                          {/* The ring keeps the dot from disappearing into a light logo. */}
                           <span
                             data-testid="gap-dot"
                             className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-amber ring-2 ring-surface"
@@ -312,8 +303,6 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
           holding={selected}
           netWorth={netWorth}
           onClose={() => setSelected(null)}
-          // One modal at a time: the asset modal closes as the record modal
-          // opens, so the user never has two stacked dialogs.
           onRecordLots={() => {
             setLotFor(selected);
             setSelected(null);
@@ -326,11 +315,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
   );
 }
 
-/** Four rows in the table's columns while the holdings load: a badge and two
- *  lines for the asset, a bone per figure, a block for the sparkline. The
- *  table's body can't hold a `Skeleton`, so each row pulses on its own and is
- *  hidden from screen readers; the account-type chips' skeleton says the card
- *  is loading. */
+/** The table's body can't hold a `Skeleton`, so each row pulses on its own and is hidden from screen readers. */
 function HoldingRowsSkeleton() {
   return [56, 40, 48, 32].map((w) => (
     <tr key={w} role="row" aria-hidden className={`${ROW_CELLS} motion-safe:animate-pulse`}>

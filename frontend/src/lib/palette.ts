@@ -1,6 +1,4 @@
-// The account palette is shared with the backend, which gives an imported
-// account a random colour from it. `account.color` stores the chosen hex
-// verbatim.
+// Shared with the backend, which gives an imported account a random colour from it.
 import ACCOUNT_PALETTE from "../../../shared/account-palette.json";
 
 export { ACCOUNT_PALETTE };
@@ -9,8 +7,7 @@ const [blue, teal, purple, gold, pink, olive, orange, steel, lavender, mint] = A
 
 export { mint as MINT, orange as ORANGE };
 
-/** The category and tag swatches: the account palette's hues plus enough
- *  others to fill one row, ordered around the colour wheel. */
+/** The account palette's hues plus others to fill one row, in colour-wheel order. */
 export const BUDGET_PALETTE: readonly string[] = [
   "#e0605f",
   orange,

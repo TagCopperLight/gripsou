@@ -7,23 +7,17 @@ import * as v from "../views/budget.ts";
 const taken = (rows: { name: string }[], name: string) =>
   rows.some((r) => r.name.trim().toLowerCase() === name.trim().toLowerCase());
 
-/** Rows sharing `row`'s description, not already in `categoryId`: what an
- *  "apply to the others" would reach. */
 function sameDescription(store: Store, row: TxnRow, categoryId: string | null, scope: SameDescriptionScope = "all"): TxnRow[] {
   return store.txns.filter(
     (x) => x !== row && x.source === "cash" && x.description === row.description && x.categoryId !== categoryId && (scope === "all" || x.needsReview),
   );
 }
 
-/** `"2026-09"`, as the server's `Month::parse` reads it. */
 const isMonth = (s: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
 
 const isNeutral = (store: Store, categoryId: string | null) =>
   store.categories.find((c) => c.id === categoryId)?.kind === "neutral";
 
-/** A user's category write, as the server makes it: final, out of review, and
- *  outside a neutral category it unlinks both halves of the row's pair. A
- *  partner pairing filed is left an orphan. */
 function file(store: Store, row: TxnRow, categoryId: string | null) {
   Object.assign(row, { categoryId, categorySource: categoryId ? "user" : null, categoryConfidence: null, needsReview: false });
   if (row.pairId === null || isNeutral(store, categoryId)) return;
@@ -32,8 +26,6 @@ function file(store: Store, row: TxnRow, categoryId: string | null) {
   row.pairId = null;
 }
 
-/** Filing a paired transfer outside a neutral category breaks its pair, so the
- *  server asks first: how many pairs it would break, nothing written. */
 function pairBreaks(store: Store, rows: TxnRow[], categoryId: string | null | undefined, confirmed?: boolean): number {
   if (categoryId === undefined || confirmed) return 0;
   return isNeutral(store, categoryId) ? 0 : rows.filter((x) => x.pairId !== null).length;
@@ -75,7 +67,7 @@ export function budgetRoutes(r: Router<Store>): void {
     if (!ids && !b.filter) return fail(400, "ids or filter required");
     const f = ids ? null : v.parseTransactionFilter(b.filter!);
     if (typeof f === "string") return fail(400, f);
-    // A filter selects what "select all shown" covers: the cash rows only.
+    // "Select all shown" covers the cash rows only.
     const rows = ids
       ? store.txns.filter((x) => ids.includes(x.id))
       : v.matching(store, f!).filter((x) => x.source === "cash");
@@ -102,7 +94,6 @@ export function budgetRoutes(r: Router<Store>): void {
   });
   r.route("GET /budget/categories", ({ store }) => v.categories(store));
   r.route("GET /budget/tags", ({ store }) => v.tags(store));
-  // A name already used (any case) is refused, as the server does.
   r.route("POST /budget/categories", ({ store, body: b }) => {
     if (taken(store.categories, b.name)) return fail(409, "duplicate name");
     const row = { ...b, archived: b.archived ?? false, id: store.ids.next("category"), defaultKey: null, seedKey: null, systemKey: null, sortOrder: store.categories.length };
@@ -113,7 +104,7 @@ export function budgetRoutes(r: Router<Store>): void {
     const cat = store.categories.find((c) => c.id === params.id);
     if (!cat) return fail(404, "no such category");
     if (taken(store.categories.filter((c) => c !== cat), b.name)) return fail(409, "duplicate name");
-    // A rename clears the default key (the server's update_category).
+    // A rename clears the default key (as update_category).
     const defaultKey = b.name === cat.name ? cat.defaultKey : null;
     Object.assign(cat, { ...b, defaultKey, archived: b.archived ?? cat.archived });
     return v.categories(store).find((c) => c.id === cat.id)!;
@@ -125,7 +116,7 @@ export function budgetRoutes(r: Router<Store>): void {
     });
     return reply(204);
   });
-  // Its rows go back to uncategorised, as on the server.
+  // Its rows go back to uncategorised.
   r.route("DELETE /budget/categories/:id", ({ store, params }) => {
     store.categories = store.categories.filter((c) => c.id !== params.id);
     for (const x of store.txns) if (x.categoryId === params.id) Object.assign(x, { categoryId: null, categorySource: null, categoryConfidence: null });
@@ -164,7 +155,6 @@ export function budgetRoutes(r: Router<Store>): void {
     if (n < 1 || n > TREND_MONTHS_MAX) return fail(400, `months must be 1..=${TREND_MONTHS_MAX}`);
     return v.trend(store, anchor, n);
   });
-  // As the server: refused unless the admin set up an AI and the user opted in.
   r.route("POST /budget/categorize", ({ store }) =>
     store.aiStatus.configured && store.user.prefs.budgetAiEnabled ? reply(202) : fail(409, "no AI categorisation for this user"),
   );

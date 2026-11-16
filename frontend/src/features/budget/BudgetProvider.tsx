@@ -6,17 +6,13 @@ import type { Period } from "../../lib/period";
 
 const NOTHING: Selection = { mode: "ids", ids: new Set<string>() };
 
-/** Lives in the `/budget` layout route, above the mode outlet, so filters
- *  survive a mode switch within a visit and reset on leaving the page. */
+/** Lives above the mode outlet so filters survive a mode switch and reset on leaving the page. */
 export function BudgetProvider({ children }: { children: ReactNode }) {
   const [filters, setFiltersState] = useState<BudgetFilters>(EMPTY_FILTERS);
   const [selection, setSelection] = useState<Selection>(NOTHING);
   const [period, setPeriod] = useState<Period | null>(null);
 
-  // Any filter change clears the selection. Without this, "all shown" would
-  // silently retarget a different set between the user selecting and acting —
-  // and a hand-picked row could scroll out of the filtered list while still
-  // counting towards a bulk write.
+  // "All shown" would silently retarget a different set, and a hand-picked row could scroll out of the list while still counting towards a bulk write.
   const setFilters = useCallback((next: BudgetFilters) => {
     setFiltersState(next);
     setSelection(NOTHING);
@@ -26,12 +22,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
     (
       patch: Partial<BudgetFilters> | ((prev: BudgetFilters) => Partial<BudgetFilters>),
     ) => {
-      // Functional form, not `{...filters, ...patch}`: two patches batched into
-      // one tick would otherwise both read the same stale snapshot and the second
-      // would silently discard the first. The updater-function form of `patch`
-      // extends this to derived writes (e.g. toggling an id into an existing
-      // list) so the derivation itself sees the current state, not a
-      // pre-batch closure snapshot.
+      // Functional form: two patches batched in one tick would both read the same stale snapshot. Updater patches derive from current state.
       setFiltersState((prev) => ({
         ...prev,
         ...(typeof patch === "function" ? patch(prev) : patch),
@@ -43,8 +34,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
 
   const toggleRow = useCallback((id: string) => {
     setSelection((prev) => {
-      // Picking a row out of "all shown" starts a fresh explicit selection —
-      // "all but this one" is not a set the bulk endpoint can express.
+      // "All but this one" is not a set the bulk endpoint can express.
       const ids = new Set(prev.mode === "ids" ? prev.ids : []);
       if (ids.has(id)) ids.delete(id);
       else ids.add(id);
@@ -54,8 +44,7 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
 
   const selectAllShown = useCallback(() => setSelection({ mode: "allShown" }), []);
   const clearSelection = useCallback(() => setSelection(NOTHING), []);
-  // Changes only with the selection, not with every keystroke in the search
-  // box: the table derives each row's `selected` from it.
+  // Changes only with the selection, not with every keystroke in the search box.
   const isSelected = useCallback(
     (id: string) => selection.mode === "allShown" || selection.ids.has(id),
     [selection],

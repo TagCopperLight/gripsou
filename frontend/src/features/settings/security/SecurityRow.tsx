@@ -14,7 +14,6 @@ export function SecurityRow({
   action,
 }: {
   icon: ReactNode;
-  /** The icon turns green: this protection is set up. */
   on?: boolean;
   title: string;
   hint?: ReactNode;
@@ -38,12 +37,8 @@ export function SecurityRow({
   );
 }
 
-/** What a row's action is while two-factor's status loads: by default a bone
- *  the size of a text button. */
 type PendingAction = { pending?: ReactNode };
 
-/** The authenticator app's row. `action` shows once two-factor's status is
- *  known. */
 export function TotpRow({ action, pending }: { action: ReactNode } & PendingAction) {
   const { t } = useTranslation();
   const on = useMfaStatus().data?.totp ?? false;
@@ -51,7 +46,6 @@ export function TotpRow({ action, pending }: { action: ReactNode } & PendingActi
   return <MfaRow icon={<Icon className="size-4.5" strokeWidth={2} />} on={on} title={t("settings.account.twoFactor")} action={action} pending={pending} />;
 }
 
-/** The passkeys' row. `action` shows once two-factor's status is known. */
 export function PasskeyRow({ hint, action, pending }: { hint?: ReactNode; action: ReactNode } & PendingAction) {
   const { t } = useTranslation();
   const on = (useMfaStatus().data?.passkeys.length ?? 0) > 0;
@@ -60,8 +54,6 @@ export function PasskeyRow({ hint, action, pending }: { hint?: ReactNode; action
   );
 }
 
-/** A row whose state comes from two-factor's status: `pending` while it
- *  loads, a retry once it failed. */
 function MfaRow({ hint, action, pending, ...row }: { icon: ReactNode; on: boolean; title: string; hint?: ReactNode; action: ReactNode } & PendingAction) {
   const { t } = useTranslation();
   const mfa = useMfaStatus();

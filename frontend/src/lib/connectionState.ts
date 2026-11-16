@@ -7,18 +7,15 @@ export function flattenConnections(groups: ProviderGroup[] | undefined): SyncCon
   return (groups ?? []).flatMap((g) => g.connections);
 }
 
-/** A sync is in flight: the icon spins and the list polls fast. */
 export function isSyncing(status: ConnectionStatus): boolean {
   return status === "syncing" || status === "awaiting";
 }
 
-/** A connection still being set up (or about to be deleted): listed, but not
- *  a bank yet. */
+/** Being set up, or about to be deleted. */
 export function isPending(status: ConnectionStatus): boolean {
   return status === "pending";
 }
 
-/** No result to judge yet: a sync in flight, or a pending connection. */
 function isUnsettled(status: ConnectionStatus): boolean {
   return isSyncing(status) || isPending(status);
 }
@@ -27,9 +24,7 @@ export function anySyncing(groups: ProviderGroup[] | undefined): boolean {
   return flattenConnections(groups).some((c) => isSyncing(c.status));
 }
 
-/** Whether a sync finished between two reads of the list. Read per
- *  connection: one can finish while another runs, or start and finish
- *  between two reads (its `lastSyncAt` moved). */
+/** Per connection: one can finish while another runs, or start and finish between two reads. */
 export function syncFinished(prev: ProviderGroup[], next: ProviderGroup[]): boolean {
   const previous = new Map(flattenConnections(prev).map((c) => [c.id, c]));
   return flattenConnections(next).some((c) => {
@@ -39,8 +34,8 @@ export function syncFinished(prev: ProviderGroup[], next: ProviderGroup[]): bool
   });
 }
 
-// A freshness warning is a heuristic, separate from confirmed provider errors.
-// Allow three calendar days for weekends and slower bank connectors.
+// Freshness is a heuristic, separate from provider errors. Three calendar days
+// covers weekends and slow bank connectors.
 const STALE_AFTER_DAYS = 3;
 export type HealthIssue = { kind: "error" | "stale" | "unknown"; health: SyncHealth; accounts: string[] };
 
@@ -72,21 +67,17 @@ export function connectionIssues(conn: SyncConnection, today = zonedDay()): Heal
 
 export type ConnectionAlert = "error" | "warning";
 
-/** The dot on a connection's logo: red for a failed sync, amber for a health
- *  issue; none while there is no result to judge yet. */
 export function connectionAlert(conn: SyncConnection, today = zonedDay()): ConnectionAlert | null {
   if (conn.status === "error") return "error";
   if (isUnsettled(conn.status)) return null;
   return connectionIssues(conn, today).length > 0 ? "warning" : null;
 }
 
-/** The dot on the global sync button: the worst of the connections' dots. */
 export function overallAlert(groups: ProviderGroup[] | undefined, today = zonedDay()): ConnectionAlert | null {
   const alerts = flattenConnections(groups).map((c) => connectionAlert(c, today));
   return alerts.includes("error") ? "error" : alerts.includes("warning") ? "warning" : null;
 }
 
-/** The health line under a connection's name, when it has issues. */
 export function issuesSummaryKey(conn: SyncConnection, issues: HealthIssue[]): string {
   const partial = conn.accounts.some((a) => !healthIssue(a.health)) && issues.some((i) => i.accounts.length > 0);
   if (partial) return "settings.connections.health.partial";
@@ -104,7 +95,6 @@ export type ConnectionProblem = {
   technical?: boolean;
 };
 
-/** What is wrong with a connection, in words, one entry per problem. */
 export function connectionProblems(
   conn: SyncConnection,
   issues: HealthIssue[],
@@ -130,13 +120,9 @@ export function connectionProblems(
   return problems;
 }
 
-/** Why the net worth card has nothing to plot. */
 export type NetWorthEmptyKind = "noConnection" | "syncing" | "nothingCameIn";
 
-/** The server sends no points while the user has no accounts. Read off the
- *  connections: none yet, one still bringing its first accounts in, or
- *  connected but nothing gripsou can show (a failed first sync, or a bank
- *  holding only loans and cards, which are skipped). */
+/** The server sends no points while the user has no accounts; this reads the connections to say why. */
 export function netWorthEmptyKind(groups: ProviderGroup[]): NetWorthEmptyKind {
   const conns = flattenConnections(groups);
   if (conns.length === 0) return "noConnection";

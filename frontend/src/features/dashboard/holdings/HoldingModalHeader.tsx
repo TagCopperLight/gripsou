@@ -5,15 +5,13 @@ import type { Holding } from "../../../api/wire";
 import { accountTypeLabel } from "../../../lib/accounts";
 import { ColorSquare } from "../../../ui/ColorSquare";
 
-/** The identity bar shared by `AssetModal` and `RecordLotsModal`. One of them
- *  opens the other, so any difference between the two reads as a glitch. */
+/** Shared by `AssetModal` and `RecordLotsModal`: one opens the other, so any difference reads as a glitch. */
 export function HoldingModalHeader({
   holding,
   afterName,
   children,
 }: {
   holding: Holding;
-  /** Right after the name: the window's private-mode eye. */
   afterName?: React.ReactNode;
   children?: React.ReactNode;
 }) {

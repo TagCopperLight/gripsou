@@ -3,14 +3,11 @@ import { Check } from "lucide-react";
 type CheckboxProps = {
   checked: boolean;
   onChange: () => void;
-  /** Accessible name: these never sit next to a visible `<label>`. */
+  /** These never sit next to a visible `<label>`. */
   label: string;
   "data-testid"?: string;
-  /** Extra classes for the box itself — visibility (opacity), mostly. */
   className?: string;
-  /** "solid" fills green when checked, for a deliberate act like selecting a
-   *  row. "soft" only tints, for a marker that sits ticked on many rows at
-   *  once and would otherwise shout. */
+  /** "soft" only tints, for a marker ticked on many rows. */
   tone?: "solid" | "soft";
 };
 
@@ -19,11 +16,7 @@ const TONE = {
   soft: "peer-checked:border-green/40 peer-checked:bg-green-soft peer-checked:text-green",
 } as const;
 
-/** The app's checkbox: a rounded square on the card surface with a faint edge
- *  that lifts to `fg-faint` while the pointer is on it, filling green when
- *  checked. The native input stays in the DOM, unstyled and
- *  transparent on top of the box, so focus, keyboard and testing-library's
- *  `getByRole("checkbox")` all keep working — only the paint is ours. */
+/** The native input stays in the DOM, transparent over the box, so focus, keyboard and `getByRole` keep working. */
 export function Checkbox({
   checked, onChange, label, className = "", tone = "solid", ...rest
 }: CheckboxProps) {

@@ -1,6 +1,3 @@
-//! Budget HTTP surface: the taxonomy, its tags, and what a user does to a
-//! transaction.
-
 pub mod dto;
 use dto::*;
 
@@ -86,8 +83,7 @@ pub async fn delete_category(
     AuthUser { user_id, .. }: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    // A system row is refused with 409, not 404: the UI draws a lock for it,
-    // and "not found" would read as a bug.
+    // Refused with 409, not 404: the UI draws a lock for a system row.
     match category::delete_category(&pool, user_id, id).await? {
         category::DeleteCategory::Deleted => Ok(StatusCode::NO_CONTENT),
         category::DeleteCategory::NotFound => Err(ApiError::NotFound("not found")),
@@ -97,10 +93,7 @@ pub async fn delete_category(
     }
 }
 
-/// The client sends the whole list in its new order and the server numbers it.
-/// Sending the list rather than "move this row up" keeps the decision where the
-/// rows are actually laid out — the client knows which siblings are hidden
-/// behind the archived toggle, and the server does not need to.
+/// The client sends the whole list in its new order: only it knows which siblings the archived toggle hides.
 pub async fn reorder_categories(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -183,15 +176,13 @@ fn period_from(p: &SummaryParams) -> Result<Period, ApiError> {
         (None, Some(from), Some(to)) => Err(ApiError::BadRequest(format!(
             "from {from} is after to {to}"
         ))),
-        // Same loud-failure rule as parse_ids/parse_bucket: an ambiguous
-        // period must never be silently resolved to one reading.
+        // An ambiguous period must never be silently resolved to one reading.
         _ => Err(ApiError::bad_request(
             "pass either month, or both from and to",
         )),
     }
 }
 
-/// The user's categories by id, as chips.
 async fn category_refs(
     pool: &PgPool,
     user_id: Uuid,
@@ -212,8 +203,7 @@ async fn category_refs(
         .collect())
 }
 
-/// The chip payload for a slice. A category deleted since the rows were read
-/// shows as uncategorised, which is what its rows are.
+/// A category deleted since the rows were read shows as uncategorised.
 fn slice_dto(slice: Slice, refs: &HashMap<Uuid, CategoryRefDto>) -> SliceDto {
     match slice {
         Slice::Uncategorised => SliceDto::Uncategorised,
@@ -227,8 +217,7 @@ fn slice_dto(slice: Slice, refs: &HashMap<Uuid, CategoryRefDto>) -> SliceDto {
     }
 }
 
-/// A twelve-month mean, to the cent: dividing by the month count otherwise
-/// sends up to 28 digits.
+/// Rounded to the cent: dividing by the month count otherwise yields up to 28 digits.
 fn mean_to_string(d: Decimal) -> String {
     d.round_dp_with_strategy(2, rust_decimal::RoundingStrategy::MidpointAwayFromZero)
         .to_string()
@@ -300,13 +289,9 @@ pub async fn summary(
     }))
 }
 
-/// More than this and the chart is unreadable and the window pointlessly wide.
 pub const MAX_TREND_MONTHS: u32 = 24;
 
-/// The trend chart's own default width, deliberately not the summary's
-/// baseline length even though both are 12: the chart's bars end with the
-/// anchor month included, while the baseline excludes the selected month. The
-/// two are free to diverge.
+/// Not the summary's baseline length (also 12): the trend includes the anchor month, the baseline excludes the selected one.
 pub const TREND_DEFAULT_MONTHS: u32 = 12;
 
 pub async fn trend_handler(
@@ -341,7 +326,6 @@ pub async fn trend_handler(
     }))
 }
 
-/// Resolves `scope` against the reader's own review threshold.
 async fn same_description(
     pool: &PgPool,
     user_id: Uuid,
@@ -365,7 +349,6 @@ impl From<assign::Refusal> for ApiError {
     }
 }
 
-/// Category, tags and ✓ are saved together or not at all.
 pub async fn patch_transaction(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -390,7 +373,6 @@ pub async fn patch_transaction(
         }
         assign::WriteOutcome::Refused(r) => return Err(r.into()),
     }
-    // Only a category change makes "apply to the others?" a question.
     let same_description_count = match b.category_id {
         Some(_) => {
             let scope = same_description(&pool, user_id, b.offer_scope).await?;
@@ -423,8 +405,6 @@ pub async fn apply_to_description(
     UpdatedResponse::answer(outcome.map(|ids| (ids.len() as i64, Some(ids)))).map(Json)
 }
 
-/// More explicit ids than a selection of loaded rows can reach; a larger
-/// target goes through `filter`.
 const MAX_BULK_IDS: usize = 10_000;
 
 pub async fn bulk_transactions(

@@ -1,5 +1,3 @@
-// What each route takes and answers, read off the generated `Api`. Shared by
-// the client and the review mode's fake API (mock/router.ts).
 
 import type { Api } from "./routes";
 
@@ -17,5 +15,4 @@ type ParamNames<P extends string> = P extends `${string}:${infer N}/${infer Rest
     ? N
     : never;
 
-/** The `:name` segments of the route's path. */
 export type Params<K extends Key> = { [N in ParamNames<K>]: string };

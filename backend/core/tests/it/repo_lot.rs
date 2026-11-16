@@ -124,8 +124,6 @@ async fn save_then_list_round_trips_the_fee(pool: PgPool) {
     assert!(rows[0].manual);
 }
 
-/// The delete path's whole security model. A provider-owned lot must survive a
-/// delete request naming its id, even one without a stable `external_id`.
 #[gripsou_core::testkit::db_test]
 async fn delete_refuses_a_provider_lot(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
@@ -164,7 +162,6 @@ async fn delete_refuses_a_provider_lot(pool: PgPool) {
     );
 }
 
-/// The same id twice is one delete, not a shortfall that rejects the batch.
 #[gripsou_core::testkit::db_test]
 async fn a_repeated_delete_id_is_one_delete(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
@@ -189,9 +186,7 @@ async fn a_repeated_delete_id_is_one_delete(pool: PgPool) {
     assert_eq!(lot_count(&pool, holding_id).await, 0);
 }
 
-/// Every connection of a user starts its history on the same day, the day
-/// before the user's earliest evidence. A lot dated before it moves that day
-/// for the user's other connections too.
+/// Every connection of a user starts its history the day before the user's earliest evidence, so an earlier lot moves it for all of them.
 #[gripsou_core::testkit::db_test]
 async fn saving_a_lot_rebuilds_every_connection_of_the_user(pool: PgPool) {
     let (user_id, conn_a) = testkit::seed_user_and_connection(&pool).await;
@@ -231,8 +226,7 @@ async fn saving_a_lot_rebuilds_every_connection_of_the_user(pool: PgPool) {
     assert_eq!(first_b, Some(lot_day - chrono::Duration::days(1)));
 }
 
-/// The preview must leave nothing behind: it computes inside a rolled-back
-/// transaction so it cannot possibly diverge from the saved figure.
+/// The preview runs in a rolled-back transaction so it can't diverge from the saved figure.
 #[gripsou_core::testkit::db_test]
 async fn preview_computes_without_writing(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
@@ -255,8 +249,6 @@ async fn preview_computes_without_writing(pool: PgPool) {
     );
 }
 
-/// A provider's lots are not the user's to replace: the preview keeps them, as
-/// saving does, so the figures while editing are the figures after saving.
 #[gripsou_core::testkit::db_test]
 async fn preview_keeps_the_provider_lots(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;
@@ -286,8 +278,6 @@ async fn preview_keeps_the_provider_lots(pool: PgPool) {
     assert_eq!(preview.account.invested, dec("330"));
 }
 
-/// A holding that belongs to a different user reads as unknown, and nothing
-/// is written: neither the preview's rows nor a save's.
 #[gripsou_core::testkit::db_test]
 async fn a_foreign_holding_is_not_found(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;

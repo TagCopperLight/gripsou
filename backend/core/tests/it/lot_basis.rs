@@ -47,8 +47,6 @@ async fn basis_on(
     .unwrap()
 }
 
-/// Seed one equity holding whose provider-reported quantity and cost basis are
-/// given, so the "lots explain it exactly" branch can be exercised either way.
 async fn seed(pool: &PgPool, quantity: &str, cost_basis: &str) -> Uuid {
     let conn_id = seed_connection(pool).await;
     let mut conn = pool.acquire().await.unwrap();
@@ -65,8 +63,7 @@ async fn seed(pool: &PgPool, quantity: &str, cost_basis: &str) -> Uuid {
     holding_id
 }
 
-/// A sample trade: 2 shares at 98,37 with a 1,05 fee. Fee-inclusive PRMP
-/// must give 197,79 — reconciling to Powens' own ACHAT COMPTANT cash line.
+/// Fee-inclusive PRMP must reconcile to Powens' ACHAT COMPTANT cash line (197,79).
 #[gripsou_core::testkit::db_test]
 async fn fee_is_part_of_the_basis(pool: PgPool) {
     let h = seed(&pool, "2", "197.78").await;
@@ -77,8 +74,7 @@ async fn fee_is_part_of_the_basis(pool: PgPool) {
     assert_eq!(mean_price, Some(dec("98.895")));
 }
 
-/// A sale must remove qty x mu from the basis, NEVER its proceeds — folding
-/// realised P/L into the basis makes the invested line move with the market.
+/// A sale removes qty x mu from the basis, never its proceeds.
 #[gripsou_core::testkit::db_test]
 async fn a_sale_removes_cost_not_proceeds(pool: PgPool) {
     let h = seed(&pool, "5", "500").await;
@@ -94,8 +90,6 @@ async fn a_sale_removes_cost_not_proceeds(pool: PgPool) {
     assert_eq!(realised, dec("500"), "5 x (200 - 100)");
 }
 
-/// The basis walks backward through the lots: before the sale, all ten shares
-/// are still held and the basis is the full 1000.
 #[gripsou_core::testkit::db_test]
 async fn basis_walks_backward_through_the_lots(pool: PgPool) {
     let h = seed(&pool, "5", "500").await;
@@ -109,8 +103,6 @@ async fn basis_walks_backward_through_the_lots(pool: PgPool) {
     assert_eq!(r_after_buy, dec("0"), "nothing is realised before the sale");
 }
 
-/// When the lots do NOT explain the position, the provider's figure anchors
-/// today and the unexplained remainder is carried flat backward.
 #[gripsou_core::testkit::db_test]
 async fn partial_lots_anchor_on_the_provider_figure(pool: PgPool) {
     let h = seed(&pool, "10", "1200").await;
@@ -126,8 +118,6 @@ async fn partial_lots_anchor_on_the_provider_figure(pool: PgPool) {
     );
 }
 
-/// No buys at all means no mean, so there is nothing to override with: the
-/// provider's figure is used, flat.
 #[gripsou_core::testkit::db_test]
 async fn no_lots_falls_back_to_the_provider_figure(pool: PgPool) {
     let h = seed(&pool, "10", "1200").await;
@@ -142,9 +132,7 @@ async fn no_lots_falls_back_to_the_provider_figure(pool: PgPool) {
     );
 }
 
-/// mu is order-independent by construction: a buy recorded after a sell still
-/// shifts the mean for that earlier sale. Documented, deliberate, and pinned so
-/// nobody "fixes" it into a running average without changing the spec too.
+/// mu is order-independent: a later buy shifts the mean of an earlier sale. Pinned so nobody turns it into a running average.
 #[gripsou_core::testkit::db_test]
 async fn mean_price_is_order_independent(pool: PgPool) {
     let a = seed(&pool, "15", "0").await;
@@ -160,10 +148,7 @@ async fn mean_price_is_order_independent(pool: PgPool) {
     );
 }
 
-/// A cash holding has no lots, so its basis is simply what it held — but *on
-/// the day asked*, read from `holding_point` the same way the net-worth query
-/// reads it. Answering `holding.cost_basis` flat would back-date today's
-/// balance across all of history.
+/// Cash basis is read from `holding_point` on the day asked, not `holding.cost_basis`, which would back-date today's balance.
 #[gripsou_core::testkit::db_test]
 async fn cash_basis_is_the_balance_on_that_day(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;

@@ -1,6 +1,3 @@
-//! The one error every handler and extractor returns. Each case knows its
-//! status; handlers use `?`, and an unexpected error becomes `Internal`.
-
 use axum::extract::FromRequest;
 use axum::extract::rejection::JsonRejection;
 use axum::http::{HeaderValue, StatusCode, header::RETRY_AFTER};
@@ -8,8 +5,7 @@ use axum::response::{IntoResponse, Response};
 use gripsou_core::error::CoreError;
 use serde::Serialize;
 
-/// `axum::Json`, except that a body that isn't the expected JSON is an
-/// [`ApiError`]: 400 whether it is malformed or merely the wrong shape.
+/// Like `axum::Json`, but a body that isn't the expected JSON is a 400 [`ApiError`].
 #[derive(Debug, FromRequest)]
 #[from_request(via(axum::Json), rejection(ApiError))]
 pub struct Json<T>(pub T);
@@ -42,37 +38,27 @@ impl From<JsonRejection> for ApiError {
 #[derive(Debug, PartialEq, Eq)]
 pub enum ApiError {
     BadRequest(String),
-    /// No session, or one that no longer exists. The only 401 besides a
-    /// refused login or setup code: the client signs out on it.
+    /// The only 401 besides a refused login or setup code: the client signs out on it.
     Unauthorized,
     InvalidCredentials,
     WrongSetupCode,
-    /// The session is fine but the action needs a fresh password check (a
-    /// reauth token), and the one sent is missing, used or someone else's.
     ReauthRequired,
     Forbidden(&'static str),
     NotFound(&'static str),
     Conflict(&'static str),
-    /// A login or passkey challenge that is used up or expired.
     ChallengeExpired,
     Unprocessable(&'static str),
     TooMany {
         retry_after: u64,
     },
     BadGateway(String),
-    /// A request body axum refused before parsing it (wrong content type,
-    /// too large).
     Rejected(StatusCode, String),
     /// Already logged by [`ApiError::internal`].
     Internal,
 }
 
 impl ApiError {
-    /// The real error goes to the log; the client gets a fixed message.
-    /// sqlx/Postgres error strings quote the failing statement and its
-    /// parameters, so returning them hands an untrusted caller a view of the
-    /// schema and of whatever input reached the query. The request span
-    /// supplies the route and request_id.
+    /// The client gets a fixed message: sqlx errors quote the failing statement and parameters, which would show an untrusted caller the schema and input.
     pub fn internal(e: impl std::fmt::Display) -> Self {
         tracing::error!(error = %e, "internal error");
         ApiError::Internal
@@ -82,7 +68,6 @@ impl ApiError {
         ApiError::BadRequest(msg.into())
     }
 
-    /// A unique-constraint violation becomes 409 with `msg`; anything else 500.
     pub fn conflict_on_unique(msg: &'static str) -> impl Fn(CoreError) -> Self {
         move |e| match &e {
             CoreError::Db(sqlx::Error::Database(db)) if db.is_unique_violation() => {
@@ -147,8 +132,6 @@ impl From<crate::auth::throttle::Blocked> for ApiError {
     }
 }
 
-/// A core `NotFound` is a 404. Any other error is ours: logged with its
-/// causes, answered 500.
 impl From<CoreError> for ApiError {
     fn from(e: CoreError) -> Self {
         match e {
@@ -158,8 +141,6 @@ impl From<CoreError> for ApiError {
     }
 }
 
-/// Errors that can only mean something broke on our side: logged with their
-/// causes, answered 500.
 macro_rules! internal_errors {
     ($($t:ty),* $(,)?) => {$(
         impl From<$t> for ApiError {

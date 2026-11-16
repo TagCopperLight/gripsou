@@ -9,7 +9,6 @@ import type { EnabledProvider } from "../../api/wire";
 
 type AddConnectionModalProps = {
   onClose: () => void;
-  /** Where to go when the provider needs no redirect. */
   returnTo?: string;
 };
 

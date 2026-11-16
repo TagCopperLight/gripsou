@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { timeZoneOptions } from "./timeZoneList";
 
-// A winter day: Paris is UTC+1, New York UTC-5.
 const WINTER = new Date(Date.UTC(2026, 0, 15, 12));
 
 describe("timeZoneOptions", () => {

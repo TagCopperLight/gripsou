@@ -1,11 +1,8 @@
 import type { ApiKeyProvider, KeyGroup, Provider } from "../../api/wire";
 import { POWENS_KEY } from "../../lib/powens";
 
-/** The server setup's sections, in the order they are shown. */
 const KEY_GROUPS: readonly KeyGroup[] = ["bank", "categorize", "logos"];
 
-/** A group's screens: its keys, then real-time sync when one of its
- *  providers offers it (a webhook, too long to sit beside the keys). */
 export type ServerPart = "keys" | "realtime";
 
 export function serverParts(group: KeyGroup, keys: ApiKeyProvider[]): ServerPart[] {
@@ -13,7 +10,6 @@ export function serverParts(group: KeyGroup, keys: ApiKeyProvider[]): ServerPart
   return realtime ? ["keys", "realtime"] : ["keys"];
 }
 
-/** Whether a group's real-time sync field is filled in. */
 export function realtimeSet(group: KeyGroup, keys: ApiKeyProvider[]): boolean {
   return keys.some((k) => {
     const f = k.group === group ? realtimeField(k) : undefined;
@@ -21,22 +17,18 @@ export function realtimeSet(group: KeyGroup, keys: ApiKeyProvider[]): boolean {
   });
 }
 
-/** The provider's field that only real-time sync needs, if it has one. */
 export function realtimeField(provider: ApiKeyProvider) {
   const field = KEY_GUIDES[provider.key]?.realtime?.field;
   return provider.fields.find((f) => f.key === field);
 }
 
-/** The groups that have a provider. */
 export function serverGroups(keys: ApiKeyProvider[]): KeyGroup[] {
   return KEY_GROUPS.filter((group) => keys.some((k) => k.group === group));
 }
 
-/** A section's chip: some provider in it works, none is set up, or every
- *  bank provider is turned off. */
 export type GroupState = "ready" | "notSetUp" | "off";
 
-/** Only bank providers can be turned off (Settings → Server → Data providers). */
+/** Only bank providers can be turned off (Settings, Server, Data providers). */
 function turnedOn(key: ApiKeyProvider, providers: Provider[]): boolean {
   return key.group !== "bank" || providers.some((p) => p.key === key.key && p.enabled);
 }
@@ -47,10 +39,7 @@ export function groupState(group: KeyGroup, keys: ApiKeyProvider[], providers: P
   return members.every((k) => !turnedOn(k, providers)) ? "off" : "notSetUp";
 }
 
-/** How to get a provider's keys, by provider key: the i18n keys of its steps
- *  (an `<a>` in a step goes to `link`), and the field that only real-time
- *  sync needs, on its own screen. A provider without an entry just shows its
- *  fields. */
+/** An `<a>` in a step goes to `link`; the field only real-time sync needs sits on its own screen. */
 export type KeyGuide = {
   steps: string[];
   link?: string;

@@ -19,7 +19,6 @@ export function testUser(overrides: Partial<SessionUser> = {}): SessionUser {
   };
 }
 
-/** A signed-in user's auth context; every action is a `vi.fn()` that resolves. */
 export function authValue(overrides: Partial<AuthValue> = {}): AuthValue {
   const prefs = overrides.prefs ?? DEFAULT_PREFS;
   return {
@@ -42,7 +41,6 @@ export function signedOut(overrides: Partial<AuthValue> = {}): AuthValue {
   return authValue({ isAuthenticated: false, user: null, ...overrides });
 }
 
-/** A client that reports a failure at once instead of retrying it. */
 export function testQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -51,17 +49,11 @@ export function testQueryClient(): QueryClient {
 
 export type AppOptions = {
   client?: QueryClient;
-  /** The auth context: a fixed value, `"provider"` for the app's own
-   *  AuthProvider (signs in from the stored token), or `null` for none.
-   *  Defaults to `authValue({ prefs })`. */
   auth?: AuthValue | "provider" | null;
-  /** Shorthand for a signed-in user with these prefs. */
   prefs?: UserPrefs;
   strict?: boolean;
 };
 
-/** The providers the app wraps every page in, as a `wrapper` for
- *  `render`/`renderHook`. */
 export function appWrapper({ client = testQueryClient(), auth, prefs, strict = false }: AppOptions = {}) {
   const value = auth === undefined ? authValue(prefs ? { prefs } : {}) : auth;
   function Wrapper({ children }: { children: ReactNode }) {
@@ -89,14 +81,12 @@ export function jsonResponse(body: unknown, status = 200, headers: Record<string
 
 export type FetchHandler = (url: string, init?: RequestInit) => Response | Promise<Response>;
 
-/** Replace `fetch` with `handler` (default: 204 to everything) and return the mock. */
 export function stubFetch(handler: FetchHandler = () => new Response(null, { status: 204 })): Mock<FetchHandler> {
   const mock = vi.fn<FetchHandler>(handler);
   vi.stubGlobal("fetch", mock);
   return mock;
 }
 
-/** The requests `fetchMock` sent to a URL containing `path`, oldest first. */
 export function requestsTo(fetchMock: Mock<FetchHandler>, path: string): { method: string; body: unknown }[] {
   return fetchMock.mock.calls
     .filter(([url]) => String(url).includes(path))

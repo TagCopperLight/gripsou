@@ -11,8 +11,7 @@ import { useReauthStep } from "../../../auth/useReauthStep";
 import { useCreateResetLink } from "../../../api/admin";
 import type { User } from "../../../api/wire";
 
-/** A reset link for another user: the admin's password first (redeeming the
- *  link clears the user's second factors), then the link to share. */
+/** Redeeming the link clears the user's second factors, hence the admin's password first. */
 export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => void }) {
   const { t } = useTranslation();
   const { password, setPassword, error, checking, check } = useReauthStep();

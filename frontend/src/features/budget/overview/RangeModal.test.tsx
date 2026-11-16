@@ -12,9 +12,9 @@ function renderModal() {
 
 describe("RangeModal", () => {
   beforeEach(() => {
-    // Only `Date` is faked: the dialog's own timers must keep running.
+    // Only `Date` is faked: the dialog's timers must keep running.
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 8, 21, 12)); // 21 September 2026, local
+    vi.setSystemTime(new Date(2026, 8, 21, 12));
   });
   afterEach(() => vi.useRealTimers());
 

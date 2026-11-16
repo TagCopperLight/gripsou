@@ -21,28 +21,18 @@ type ColKey = BreakdownSortKey | "share" | "avg12";
 
 type LoadedProps = {
   rows: BreakdownRow[];
-  /** The period's total expenses (the expenses figure), so SHARE is
-   *  arithmetic here rather than a second server opinion that could round
-   *  differently from the column beside it. */
+  /** SHARE is computed here from this total, so it can't round differently from the column beside it. */
   expensesTotal: string;
-  /** A row was clicked: open Transactions filtered to the period AND this
-   *  slice. Never called for the `other` row. */
   onOpen: (slice: Slice) => void;
-  /** Private mode: amounts hidden, shares and percentages kept. */
   masked?: boolean;
-  /** The rows are a previous period's, while this one's load. */
   stale?: boolean;
 };
 
 type BreakdownSurfaceProps =
   | LoadedProps
-  /** Still loading: the title and the column headers, and bone rows. */
   | { rows?: undefined; expensesTotal?: undefined; onOpen?: undefined; masked?: undefined; stale?: undefined };
 
-// On the shared grid table (`gridTable.ts`), like Holdings and Transactions:
-// CATEGORY and SHARE grow, the figures have floors, so sorting never moves a
-// column. SHARE orders exactly like AMOUNT and the 12-month column is a ratio
-// with gaps, so neither sorts. The last track holds the row's caret.
+// CATEGORY and SHARE grow, the figures have floors, so sorting never moves a column. SHARE and the 12-month column don't sort.
 const COLUMNS: { key: ColKey; labelKey: string; right: boolean; track: Track; pad: string; sort?: BreakdownSortKey }[] = [
   { key: "category", labelKey: "category", right: false, track: { min: "180px", max: "2fr" }, pad: "pl-3 pr-4", sort: "category" },
   { key: "amount", labelKey: "amount", right: true, track: { min: "7rem", max: "max-content" }, pad: "pr-4", sort: "amount" },
@@ -104,7 +94,6 @@ export function BreakdownSurface(props: BreakdownSurfaceProps) {
               <BoneRows rows={4} className={ROW_CELLS}>
                 {(w) => (
                   <>
-                    {/* A category chip: a text-xs line in py-1. */}
                     <td role="cell" className={`py-2 ${PAD.category}`}>
                       <Bone className="h-6 rounded-xl" style={{ width: w * 2.4 }} />
                     </td>
@@ -173,8 +162,7 @@ function LoadedRows({ rows, expensesTotal, onOpen, masked = false, sort }: Loade
                 }}
               />
             </span>
-            {/* One decimal whatever the percentDecimals pref:
-             *  compact, and 61.86 % doesn't read as 62 %. */}
+            {/* One decimal whatever the percentDecimals pref, so 61.86 % doesn't read as 62 %. */}
             <span data-testid="share" className="text-xs text-fg-faint">
               <Percent value={share} fractionDigits={1} />
             </span>
@@ -188,8 +176,6 @@ function LoadedRows({ rows, expensesTotal, onOpen, masked = false, sort }: Loade
             <span className="text-sm text-fg-faint">—</span>
           ) : (
             <span data-tone={vsAvg.tone} className={`text-sm ${TONE_CLASS[vsAvg.tone]}`}>
-              {/* Same rule as the figures above: against a zero
-                  average the change is an amount, not a percentage. */}
               {vsAvg.ratio === undefined ? (
                 <MaskedMoney masked={masked} value={vsAvg.delta} signed />
               ) : (
@@ -204,9 +190,7 @@ function LoadedRows({ rows, expensesTotal, onOpen, masked = false, sort }: Loade
               type="button"
               data-testid="row-caret"
               aria-label={t("budget.overview.breakdown.open")}
-              // The row itself is a click target but not focusable:
-              // this button is the keyboard way in. Stopping propagation here keeps `onOpen` firing
-              // exactly once instead of twice per click.
+              // The row isn't focusable; this button is the keyboard way in. Stopping propagation keeps `onOpen` to one call per click.
               onClick={(e) => {
                 e.stopPropagation();
                 onOpen(row.slice);

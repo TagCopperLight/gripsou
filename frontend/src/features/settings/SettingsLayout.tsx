@@ -4,7 +4,6 @@ import { SettingsSidebar } from "./SettingsSidebar";
 import { useSettingsNav } from "./settingsNav";
 import { LogoutButton } from "./LogoutButton";
 
-// Phone: the sidebar becomes a scrollable tab row above the page.
 const tabClassName =
   "flex shrink-0 items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium text-fg-dim transition-colors data-[status=active]:bg-surface-2 data-[status=active]:text-fg data-[status=active]:font-semibold";
 
@@ -29,8 +28,7 @@ export function SettingsLayout() {
         </div>
       </div>
 
-      {/* Stays in view while the page scrolls, where it starts (under the
-          main area's top padding). */}
+      {/* Stays in view while the page scrolls, where it starts (under the main area's top padding). */}
       <div className="hidden md:sticky md:top-6 md:block md:self-start">
         <SettingsSidebar />
       </div>

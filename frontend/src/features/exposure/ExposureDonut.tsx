@@ -18,40 +18,26 @@ import { STRIPE_CSS, stripePattern, type DonutItem } from "./exposureColors";
 type ExposureDonutProps = {
   title: string;
   items: DonutItem[];
-  /** Value the shares are of: shown in the middle when nothing is hovered,
-   *  and the base of each legend row's amount. */
   total: number;
-  /** Full-width card: the legend spreads over two columns on desktop. */
   wide?: boolean;
-  /** What the middle says over the total; "Value" by default. */
   centerLabel?: string;
-  /** The items are on their way: a grey ring and legend rows in their place. */
   loading?: boolean;
-  /** Shown under the title instead of the chart (an error). */
   placeholder?: ReactNode;
-  /** Set when `total` leaves holdings out for want of an exchange rate: how
-   *  many (0 when unknown). An asterisk on the total, a footnote under the card. */
+  /** How many holdings `total` leaves out for want of an exchange rate (0 when unknown): asterisk on the total, footnote under the card. */
   fxExcluded?: number;
-  /** Private mode masks the amounts (the shares stay). Given, they follow an
-   *  eye above several donuts; left out, the card carries its own eye. */
+  /** Private mode masks the amounts (the shares stay). When given, they follow an eye above several donuts; otherwise the card carries its own. */
   masked?: boolean;
-  /** Slices up to this share stay out of the ring (still in the legend). */
   minSlice?: number;
   className?: string;
 };
 
-// Hover keys: a top-level item is its own key; a child is "parent/child".
 const childKey = (parent: string, child: string) => `${parent}/${child}`;
 const parentOf = (key: string) => key.split("/")[0];
 
-// Hover dims the rest by opacity, not colour, so a faded slice keeps its hue
-// (and the striped leftover its stripes).
+// Hover dims by opacity, not colour, so a faded slice keeps its hue and the striped leftover its stripes.
 const DONUT_DIM = 0.3;
 const LEGEND_DIM = 0.45;
 
-/** A donut and its legend, the legend always showing every row so nothing
- *  moves under the pointer. Items with children (regions and their
- *  countries) get a thin outer ring in shades of their colour. */
 export function ExposureDonut({
   title,
   items,
@@ -71,18 +57,13 @@ export function ExposureDonut({
   const privacy = usePrivacy();
   const ownEye = sharedMask === undefined;
   const masked = ownEye ? privacy.masked : sharedMask;
-  // The hole's diameter, as a share of the chart's width.
   const hole = nested ? 0.5 : 0.62;
-  // Nothing has a share (every account at zero or below): a plain grey ring,
-  // so no slice pretends to be data.
   const blank = !items.some((i) => (i.share ?? 0) > 0);
 
-  // Hovering a child also lights its parent, whose row is highlighted
-  // alongside the child's; its siblings fade with everything else.
+  // Hovering a child also lights its parent and its row; siblings fade.
   const activeParent = active === null ? null : parentOf(active);
   const isLit = (key: string) => {
     if (active === null) return true;
-    // A hovered child: itself and its parent. A hovered parent: its whole family.
     if (active.includes("/")) return key === active || key === activeParent;
     return parentOf(key) === active;
   };
@@ -92,8 +73,7 @@ export function ExposureDonut({
     background: item.other ? STRIPE_CSS : item.color,
   });
 
-  // The outer ring follows the inner one slice for slice: an item without
-  // children fills its stretch with itself.
+  // The outer ring follows the inner one slice for slice: an item without children fills its stretch with itself.
   const outer = items.flatMap((i) =>
     i.children && i.children.length > 0 ? i.children.map((c) => ({ ...c, key: childKey(i.key, c.key) })) : [i],
   );
@@ -149,9 +129,7 @@ export function ExposureDonut({
 
   const amount = (item: DonutItem) => item.value ?? (item.share ?? 0) * total;
 
-  // Every row gets the same column widths, so the shares and amounts
-  // line up down the legend: each column is as wide as its longest entry (in
-  // `ch` of the mono font they are set in).
+  // Every row shares column widths (in `ch` of the mono font) so shares and amounts line up.
   const all = items.flatMap((i) => [i, ...(i.children ?? [])]);
   const amountCh = Math.max(...all.map((i) => formatMoney(amount(i), { fractionDigits: 0 }).length));
 
@@ -172,7 +150,6 @@ export function ExposureDonut({
       <span className={`min-w-0 truncate ${child ? "text-xs text-fg-dim" : "text-sm text-fg"}`} title={item.label}>
         {item.label}
       </span>
-      {/* No share (overdrawn, or nothing owned): the amount alone. */}
       <span className="text-right font-mono text-sm" style={{ width: "6ch" }}>
         {item.share !== null && <span className={`text-fg ${child ? "text-xs" : ""}`}>{formatShare(item.share, 1)}</span>}
       </span>
@@ -200,8 +177,7 @@ export function ExposureDonut({
         <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>
           <div className={`relative shrink-0 ${wide ? "size-64" : "size-50"}`}>
             <ReactECharts option={option} onEvents={onEvents} style={{ height: "100%", width: "100%" }} />
-            {/* Kept inside the hole: a long name wraps, then is cut, rather
-                than running over the ring. */}
+            {/* Kept inside the hole: a long name wraps, then is cut, rather than running over the ring. */}
             <div
               className="pointer-events-none absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center text-center"
               style={{ width: `${hole * 72}%` }}
@@ -243,8 +219,6 @@ export function ExposureDonut({
   );
 }
 
-/** The card's layout in grey: a ring as wide as the donut's, its middle label
- *  over a bone for the total, and four legend rows. */
 function DonutSkeleton({ wide, centerLabel }: { wide: boolean; centerLabel: string }) {
   return (
     <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>

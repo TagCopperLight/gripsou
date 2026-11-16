@@ -16,7 +16,6 @@ pub use scheduler::run_scheduler;
 pub use sync::{Trigger, request_sync};
 pub use webhook::{WebhookOutcome, handle_webhook};
 
-/// Entry points for tests.
 #[cfg(feature = "test-util")]
 pub mod testing {
     use std::sync::Arc;
@@ -26,8 +25,7 @@ pub mod testing {
 
     use crate::{Deps, Trigger};
 
-    /// Claims the connection and runs its sync to the end, without the AI
-    /// run. `None` when the claim is refused; else whether it ingested.
+    /// `None` when the claim is refused; else whether it ingested. Skips the AI run.
     pub async fn sync(
         db: Db,
         deps: Arc<Deps>,
@@ -39,7 +37,6 @@ pub mod testing {
         Some(claimed.spawn(db, deps).await.expect("supervised sync"))
     }
 
-    /// Deps built from an empty provider config, with the test key.
     pub fn deps() -> Deps {
         Deps::build(
             gripsou_core::testkit::encryption_key(),

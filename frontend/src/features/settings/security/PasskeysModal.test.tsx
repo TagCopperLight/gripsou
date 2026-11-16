@@ -13,8 +13,6 @@ const USED = Date.now() - 3 * 3_600_000;
 const MAC: Pk = { id: "p1", name: "MacBook", createdAt: CREATED, lastUsedAt: USED };
 const PHONE: Pk = { id: "p2", name: "Phone", createdAt: CREATED, lastUsedAt: null };
 
-/** A fetch backed by a mutable passkey list, so refetches see renames/deletes.
- *  `fail` makes PATCH/DELETE answer 500. */
 function stubApi(initial: Pk[], fail = false) {
   let list = [...initial];
   const fetchMock = stubFetch(async (url: string, init?: RequestInit) => {
@@ -151,7 +149,6 @@ describe("PasskeysModal delete", () => {
     const { user } = await renderModal();
     await askDelete(user, 0);
     const dialog = screen.getByRole("group", { name: "Delete MacBook?" });
-    // The rest of the list stays in view.
     expect(screen.getByText("Phone")).toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("group")).not.toBeInTheDocument();

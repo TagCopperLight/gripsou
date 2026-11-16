@@ -1,11 +1,9 @@
-// The look every gripsou chart shares: axes, tooltip box and tooltip rows.
 import type { TooltipComponentOption, XAXisComponentOption, YAXisComponentOption } from "echarts";
 
 import { FG, FG_DIM, FG_FAINT, FONT_MONO, SURFACE_3 } from "./theme";
 
 export const CHART_BASE = { backgroundColor: "transparent", animation: false } as const;
 
-/** The plot area of an axis chart: edge to edge, the labels inside it. */
 export const AXIS_GRID = { top: 16, right: 0, bottom: 24, left: 0, containLabel: true };
 
 const AXIS_LABEL = { color: FG_FAINT, fontFamily: FONT_MONO, fontSize: 11 };
@@ -24,7 +22,6 @@ export function categoryAxis(data: string[]): XAXisComponentOption {
   return { type: "category", data, ...BARE_AXIS, axisLabel: AXIS_LABEL };
 }
 
-/** `min: 0` anchors a composition at zero; `scale` fits the axis to the data. */
 export function valueAxis(
   format: (value: number) => string,
   extent: { min?: number; scale?: boolean } = {},
@@ -55,9 +52,7 @@ export function chartTooltip(
   };
 }
 
-/** Escapes text ECharts will drop into tooltip HTML as `innerHTML` — every
- *  label here ultimately comes from user-editable data (a category or tag
- *  name), so an unescaped `<img src=x onerror=…>` would execute. */
+/** Labels come from user-editable data (category and tag names): unescaped HTML would execute. */
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -67,9 +62,7 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** One line of a chart tooltip: swatch, label, right-aligned value. Pass
- *  `"transparent"` as the colour for a swatch-less row. A row on its own takes
- *  `marginTop` 0. */
+/** Pass "transparent" as the colour for a swatch-less row. A row on its own takes `marginTop` 0. */
 export function tooltipRow(
   color: string,
   label: string,
@@ -90,8 +83,6 @@ export function tooltipRow(
     </div>`;
 }
 
-/** A tooltip of rows under a heading (the hovered date), with an optional
- *  total set apart below them. */
 export function tooltipCard(
   heading: string,
   rows: string[],

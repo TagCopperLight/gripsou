@@ -1,9 +1,7 @@
-//! Jev (TypeSafe) adapter for the categorisation port:
-//! one `choice` question per transaction, since the API evaluates a single
-//! `state` per request. Up to eight requests run at once. The first failure
-//! stops the batch: nothing more is sent, the requests already in flight are
-//! awaited, and every answer received is returned with the failure so none
-//! is paid for twice.
+//! Jev (TypeSafe) adapter for the categorisation port: one `choice` question per transaction, since
+//! the API evaluates a single `state` per request. Up to eight requests run at once. The first
+//! failure stops the batch: the requests in flight are awaited and every answer received is
+//! returned with the failure, so none is paid for twice.
 
 mod map;
 
@@ -64,7 +62,6 @@ impl JevCategorizer {
         self
     }
 
-    /// The saved key, or `None` when absent or blank (the provider is then off).
     pub fn api_key(config: &ProviderConfig) -> Option<String> {
         config
             .get(KIND.about.key, "api_key")
@@ -106,14 +103,12 @@ impl Categorizer for JevCategorizer {
                 gate.clone(),
             );
             set.spawn(async move {
-                // Closed after a failure: this item is not sent.
                 let Ok(_permit) = gate.clone().acquire_owned().await else {
                     return Ok(None);
                 };
                 let answer = ask(&http, &url, &key, &body).await;
                 if answer.is_err() {
-                    // Before the permit is released, so no waiting item
-                    // slips through.
+                    // Before the permit is released, so no waiting item slips through.
                     gate.close();
                 }
                 answer.map(|json| Some((idx, json)))
@@ -174,7 +169,6 @@ impl Categorizer for JevCategorizer {
     }
 }
 
-/// Sends `req`, refusing a non-success status.
 async fn send(req: reqwest::RequestBuilder) -> Result<reqwest::Response, CategorizeError> {
     let resp = req.timeout(TIMEOUT).send().await.map_err(|e| {
         CategorizeError::Other(format!(
@@ -195,8 +189,8 @@ async fn send(req: reqwest::RequestBuilder) -> Result<reqwest::Response, Categor
     Ok(resp)
 }
 
-/// One item's request. `Ok(None)` is a body that could not be read: the item
-/// is left unanswered (sent again by a later run) and the batch goes on.
+/// `Ok(None)` is a body that could not be read: the item is left unanswered (sent again later) and
+/// the batch goes on.
 async fn ask(
     http: &reqwest::Client,
     url: &str,

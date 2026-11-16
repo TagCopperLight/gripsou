@@ -10,40 +10,30 @@ pub struct ConnectInit {
     pub redirect_url: Option<String>,
 }
 
-/// The `provider_meta` key holding the provider-native connection id, which
-/// a webhook's [`WebhookSignal`] is matched on.
+/// The `provider_meta` key holding the provider-native connection id, matched by a webhook's [`WebhookSignal`].
 pub const EXTERNAL_CONNECTION_ID: &str = "external_connection_id";
 
 #[derive(Debug, Clone, Default)]
 pub struct CompleteConnect {
-    /// Secrets to encrypt + store in connection.credentials.
     pub credentials: serde_json::Value,
-    /// Provider-native ids for correlation; stored in connection.provider_meta.
-    /// A webhook's [`WebhookSignal`] is matched on its [`EXTERNAL_CONNECTION_ID`].
+    /// Provider-native ids for correlation. A webhook's [`WebhookSignal`] is matched on [`EXTERNAL_CONNECTION_ID`].
     pub provider_meta: serde_json::Value,
 }
 
-/// How a connection's sync is started.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RefreshMode {
-    /// Fetch now.
     Direct,
-    /// Ask the provider to refresh ([`AccountProvider::request_refresh`]) and
-    /// fetch when its webhook says it is done.
+    /// Ask the provider to refresh ([`AccountProvider::request_refresh`]) and fetch when its webhook says it is done.
     Webhook,
 }
 
-/// What the provider made of a refresh request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refresh {
-    /// A refresh started: its webhook will follow.
     Requested,
     /// The provider holds the latest data already and sends no webhook.
     AlreadyFresh,
 }
 
-/// What a verified incoming webhook tells us: which provider-native connection
-/// finished syncing. Correlated to our row via [`EXTERNAL_CONNECTION_ID`].
 #[derive(Debug, Clone)]
 pub struct WebhookSignal {
     pub provider_connection_id: String,
@@ -59,24 +49,19 @@ pub enum ProviderError {
 
 #[async_trait]
 pub trait AccountProvider: Send + Sync {
-    /// Begin a connection; may return a redirect/webview URL.
     async fn connect(&self) -> Result<ConnectInit, ProviderError>;
 
-    /// Finish an external auth round-trip, yielding credentials to persist.
-    /// `params` is the callback's query, decoded.
     async fn complete_connect(
         &self,
         params: &HashMap<String, String>,
     ) -> Result<CompleteConnect, ProviderError>;
 
-    /// Pull canonical accounts / holdings / transactions for a connection.
     async fn sync(&self, credentials: &serde_json::Value) -> Result<SyncResult, ProviderError>;
 
     fn supports_manage(&self) -> bool {
         false
     }
 
-    /// Open an existing provider connection without creating a local row.
     async fn manage(
         &self,
         _credentials: &serde_json::Value,
@@ -85,13 +70,11 @@ pub trait AccountProvider: Send + Sync {
         Err(ProviderError::NotImplemented)
     }
 
-    /// How a sync of the connection with this `provider_meta` starts.
     fn refresh_mode(&self, _provider_meta: &serde_json::Value) -> RefreshMode {
         RefreshMode::Direct
     }
 
-    /// Ask the provider to force a fresh pull for one connection. Called before
-    /// awaiting the webhook. `provider_meta` carries ids stored at connect time.
+    /// Called before awaiting the webhook.
     async fn request_refresh(
         &self,
         _credentials: &serde_json::Value,
@@ -100,9 +83,8 @@ pub trait AccountProvider: Send + Sync {
         Err(ProviderError::NotImplemented)
     }
 
-    /// Verify + correlate an incoming webhook. `path` is the request path used in
-    /// the signature. `Err` => reject (401). `Ok(None)` => valid but ignored
-    /// event. `Ok(Some(_))` => a connection finished syncing; go full-fetch it.
+    /// `path` is the request path used in the signature. `Err` rejects (401), `Ok(None)` is valid but ignored,
+    /// `Ok(Some(_))` means a connection finished syncing.
     fn verify_webhook(
         &self,
         _path: &str,
@@ -117,18 +99,15 @@ pub trait AccountProvider: Send + Sync {
 pub trait PriceProvider: Send + Sync {
     fn key(&self) -> &str;
 
-    /// Cheap, local eligibility check — no network.
     fn supports(&self, instrument: &InstrumentRef) -> bool;
 
-    /// Resolve a provider-native symbol for this instrument. `Ok(None)` means
-    /// "no match found" (distinct from a transient `Err`).
+    /// `Ok(None)` means no match, distinct from a transient `Err`.
     async fn resolve_symbol(
         &self,
         instrument: &InstrumentRef,
     ) -> Result<Option<String>, ProviderError>;
 
-    /// Fetch daily price points for an already-resolved native symbol.
-    /// `since = None` → full backfill; `since = Some(ts)` → points from `ts`.
+    /// `since = None` is a full backfill.
     async fn fetch_prices(
         &self,
         symbol: &str,
@@ -136,19 +115,16 @@ pub trait PriceProvider: Send + Sync {
     ) -> Result<Vec<PricePoint>, ProviderError>;
 }
 
-/// Scrapes an ETF's country/sector breakdown. One implementation (Boursorama);
-/// the trait lives in `core` to keep the provider→core dependency direction.
+/// The trait lives in `core` to keep the provider→core dependency direction.
 #[async_trait]
 pub trait CompositionProvider: Send + Sync {
     fn key(&self) -> &str;
 
-    /// Resolve a provider-native symbol for this instrument. `Ok(None)` means
-    /// "not a tracker / no composition page" (distinct from a transient `Err`).
+    /// `Ok(None)` means not a tracker or no composition page.
     async fn resolve_symbol(
         &self,
         instrument: &InstrumentRef,
     ) -> Result<Option<String>, ProviderError>;
 
-    /// Fetch composition for an already-resolved native symbol.
     async fn fetch_composition(&self, symbol: &str) -> Result<Composition, ProviderError>;
 }

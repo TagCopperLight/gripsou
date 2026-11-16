@@ -18,13 +18,10 @@ import { DeleteCategoryModal } from "./DeleteCategoryModal";
 import { CategoryIcon } from "../CategoryIcon";
 import { List, ListBadge, ListHeadingBone, ListRow, ListRowBone, ListTile } from "./SettingsList";
 
-/** Only on the hovered row, faded rather than removed so nothing shifts under
- *  the pointer; `focus-within` keeps them reachable by keyboard. */
+/** Faded rather than removed so nothing shifts under the pointer; `focus-within` keeps them keyboard reachable. */
 const ARROWS =
   "flex gap-0.5 opacity-0 transition-opacity duration-140 group-hover:opacity-100 focus-within:opacity-100";
 
-/** Dead-looking at the ends of a kind rather than hidden, so both arrows keep
- *  their place. */
 const ARROW_BTN =
   "flex size-7 items-center justify-center rounded-md text-fg-faint enabled:hover:bg-surface-3 enabled:hover:text-fg transition-colors duration-140 cursor-pointer disabled:opacity-25";
 
@@ -81,8 +78,6 @@ export function CategoriesSurface() {
           </span>
         }
         extra={
-          // Archived rows have no place in the order: it only ranks the
-          // categories the pickers show.
           c.archived ? undefined : (
             <div className={ARROWS}>
               {([-1, 1] as const).map((dir) => (

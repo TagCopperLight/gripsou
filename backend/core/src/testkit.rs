@@ -1,6 +1,5 @@
-//! Seeders and fixtures shared by the tests of every crate, behind the
-//! `test-util` feature. Seeding uses the runtime `query()` API (no offline
-//! cache needed); the library code under test uses the checked macros.
+//! Shared by the tests of every crate, behind the `test-util` feature. Seeding uses the runtime
+//! `query()` API (no offline cache needed).
 
 use chrono::{DateTime, NaiveDate, Utc};
 
@@ -20,33 +19,25 @@ mod harness;
 pub use gripsou_test_macros::db_test;
 pub use harness::{Outcome, run_db_test};
 
-/// The migrations every [`db_test`] database gets.
 pub static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../migrations");
 
-/// The key every test encrypts with: `"a"` 64 times.
 pub fn encryption_key() -> EncryptionKey {
     EncryptionKey::parse(Some(&"a".repeat(64))).unwrap()
 }
 
-/// Insert a user with a unique email, the user role and a password hash that
-/// matches nothing. Every other column keeps its default.
 pub async fn seed_user(pool: &PgPool) -> Uuid {
     let id = Uuid::new_v4();
     seed_user_with_id(pool, id, &format!("u-{id}@test.local"), Role::User, "x").await
 }
 
-/// Same, with a chosen email.
 pub async fn seed_user_email(pool: &PgPool, email: &str) -> Uuid {
     seed_user_as(pool, email, Role::User, "x").await
 }
 
-/// Insert a user with a chosen email, role and password hash.
 pub async fn seed_user_as(pool: &PgPool, email: &str, role: Role, password_hash: &str) -> Uuid {
     seed_user_with_id(pool, Uuid::new_v4(), email, role, password_hash).await
 }
 
-/// Push the expiry of a session, challenge or invite/reset link (matched by
-/// `table`'s `where_sql`, binding `$1` to `key`) an hour into the past.
 pub async fn expire<K>(pool: &PgPool, table: &str, where_sql: &str, key: K)
 where
     K: for<'q> sqlx::Encode<'q, sqlx::Postgres> + sqlx::Type<sqlx::Postgres> + Send,
@@ -82,15 +73,12 @@ async fn seed_user_with_id(
     id
 }
 
-/// Insert a user + connection, returning the connection id.
 pub async fn seed_connection(pool: &PgPool) -> Uuid {
     let (_user_id, conn_id) = seed_user_and_connection(pool).await;
     conn_id
 }
 
-/// Same, but hands back the owning user so a test can add a second connection
-/// under it (the backfill horizon is user-wide). The user is in UTC, so a
-/// test's "today" does not depend on the hour it runs at.
+/// The user is in UTC, so a test's "today" does not depend on the hour it runs at.
 pub async fn seed_user_and_connection(pool: &PgPool) -> (Uuid, Uuid) {
     let user_id = seed_user(pool).await;
     sqlx::query("update users set time_zone = 'UTC' where id = $1")
@@ -102,7 +90,6 @@ pub async fn seed_user_and_connection(pool: &PgPool) -> (Uuid, Uuid) {
     (user_id, conn_id)
 }
 
-/// Insert another connection belonging to an existing user.
 pub async fn seed_connection_for(pool: &PgPool, user_id: Uuid) -> Uuid {
     let conn_id = Uuid::new_v4();
     sqlx::query(
@@ -168,10 +155,6 @@ pub fn equity_holding(
     }
 }
 
-/// A transaction of a given type, spent today, with no description and no
-/// separate booking day. Chain [`CanonicalTransaction::on`],
-/// [`CanonicalTransaction::booked_on`] and [`CanonicalTransaction::described`]
-/// for the rest.
 pub fn txn(
     account_external_id: &str,
     external_id: &str,
@@ -195,8 +178,6 @@ impl CanonicalTransaction {
         Self { spent_on, ..self }
     }
 
-    /// The day the balance moved, when it differs from the spend day: the real
-    /// shape of most Powens rows.
     pub fn booked_on(self, day: NaiveDate) -> Self {
         Self {
             booked_on: Some(day),
@@ -212,8 +193,6 @@ impl CanonicalTransaction {
     }
 }
 
-/// An account in a given currency. `checking_account` hardcodes EUR, and the
-/// budget aggregates exist to convert across currencies.
 pub fn checking_account_in(external_id: &str, currency: &str) -> CanonicalAccount {
     CanonicalAccount {
         currency: currency.to_string(),
@@ -221,7 +200,6 @@ pub fn checking_account_in(external_id: &str, currency: &str) -> CanonicalAccoun
     }
 }
 
-/// Upsert one price point, in any currency.
 pub async fn insert_price(
     conn: &mut sqlx::PgConnection,
     instrument_id: Uuid,
@@ -233,7 +211,6 @@ pub async fn insert_price(
     Ok(())
 }
 
-/// Insert one price point for an instrument.
 pub async fn insert_price_on(
     pool: &PgPool,
     instrument_id: Uuid,
@@ -246,7 +223,6 @@ pub async fn insert_price_on(
         .unwrap();
 }
 
-/// Stamp a snapshot for a holding on a specific day.
 pub async fn stamp_on(
     pool: &PgPool,
     holding_id: Uuid,
@@ -260,7 +236,6 @@ pub async fn stamp_on(
         .unwrap();
 }
 
-/// Fetch holding ids, in instrument-name order.
 pub async fn holding_ids(pool: &PgPool) -> Vec<Uuid> {
     sqlx::query_scalar(
         "select h.id from holding h join instrument i on i.id = h.instrument_id order by i.name",
@@ -270,11 +245,7 @@ pub async fn holding_ids(pool: &PgPool) -> Vec<Uuid> {
     .unwrap()
 }
 
-/// Upsert one equity holding and hand back its id. Wraps the
-/// resolve-instrument-then-upsert-holding dance every lot test needs.
-///
-/// `account_id` is the account's own id (an `upsert_account` return value),
-/// not its external id — the caller must have upserted the account first.
+/// `account_id` is the account's own id, not its external id: upsert the account first.
 pub async fn seed_equity_holding(
     pool: &PgPool,
     account_id: Uuid,
@@ -291,7 +262,6 @@ pub async fn seed_equity_holding(
         .unwrap()
 }
 
-/// A purchase or sale as a test records it: entered by hand, no fee.
 #[derive(Debug, Clone, Copy)]
 pub struct Lot {
     pub side: LotSide,
@@ -325,7 +295,6 @@ impl Lot {
         Self { fee, ..self }
     }
 
-    /// A lot the provider reported, which the user may not delete.
     pub fn from_provider(self) -> Self {
         Self {
             source: LotSource::Provider,
@@ -334,7 +303,6 @@ impl Lot {
     }
 }
 
-/// Insert a lot on a holding, whoever owns it, and return its id.
 pub async fn seed_lot(db: impl sqlx::PgExecutor<'_>, holding_id: Uuid, lot: Lot) -> Uuid {
     sqlx::query_scalar(
         "insert into lot (holding_id, side, acquired_on, quantity, unit_price, fee, source) \
@@ -352,7 +320,6 @@ pub async fn seed_lot(db: impl sqlx::PgExecutor<'_>, holding_id: Uuid, lot: Lot)
     .unwrap()
 }
 
-/// The user who owns a connection.
 pub async fn owner(pool: &PgPool, connection_id: Uuid) -> Uuid {
     crate::repo::connection::user_id(pool, connection_id)
         .await
@@ -360,8 +327,6 @@ pub async fn owner(pool: &PgPool, connection_id: Uuid) -> Uuid {
         .expect("the connection exists")
 }
 
-/// Rebuilds the derived history of the user owning `connection_id`, under
-/// their write lock, as a sync does. Returns the number of rows written.
 pub async fn backfill(pool: &PgPool, connection_id: Uuid) -> Result<u64, CoreError> {
     let mut tx = crate::db::begin_user_writes(pool, owner(pool, connection_id).await).await?;
     let written = crate::backfill::backfill_user(&mut tx).await?;
@@ -369,9 +334,8 @@ pub async fn backfill(pool: &PgPool, connection_id: Uuid) -> Result<u64, CoreErr
     Ok(written)
 }
 
-/// A synced connection holding one equity: three USD-quoted shares (bought
-/// for 450, valued at 600 by the provider) in an EUR checking account.
-/// Returns the connection id.
+/// Three USD-quoted shares (bought for 450, valued at 600 by the provider) in an EUR checking
+/// account.
 pub async fn seed_one_equity(pool: &PgPool) -> Uuid {
     let conn_id = seed_connection(pool).await;
     let sync = crate::dto::SyncResult {
@@ -389,7 +353,6 @@ pub async fn seed_one_equity(pool: &PgPool) -> Uuid {
     conn_id
 }
 
-/// The cash instrument of a currency.
 pub async fn seed_cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
     let mut conn = pool.acquire().await.unwrap();
     crate::repo::instrument::ensure_cash(&mut conn, currency)
@@ -398,7 +361,6 @@ pub async fn seed_cash_instrument(pool: &PgPool, currency: &str) -> Uuid {
         .id
 }
 
-/// One rate for one currency on one day.
 pub async fn rate_on(pool: &PgPool, instrument_id: Uuid, d: NaiveDate, rate: Decimal) {
     let mut conn = pool.acquire().await.unwrap();
     insert_price(
@@ -412,9 +374,7 @@ pub async fn rate_on(pool: &PgPool, instrument_id: Uuid, d: NaiveDate, rate: Dec
     .unwrap();
 }
 
-/// File one of the user's rows under a category (or clear it) the way the
-/// user does, pair breaks confirmed. Panics when the row or the category is
-/// not the user's.
+/// Panics when the row or the category is not the user's.
 pub async fn set_category(pool: &PgPool, user_id: Uuid, txn_id: Uuid, category_id: Option<Uuid>) {
     patch(
         pool,
@@ -428,8 +388,7 @@ pub async fn set_category(pool: &PgPool, user_id: Uuid, txn_id: Uuid, category_i
     .await;
 }
 
-/// Replace one of the user's rows' tags the way the user does. Panics when
-/// the row or a tag is not the user's.
+/// Panics when the row or a tag is not the user's.
 pub async fn set_tags(pool: &PgPool, user_id: Uuid, txn_id: Uuid, tag_ids: &[Uuid]) {
     patch(
         pool,
@@ -450,8 +409,7 @@ async fn patch(pool: &PgPool, user_id: Uuid, txn_id: Uuid, patch: &TransactionPa
     assert_eq!(outcome, WriteOutcome::Done(()));
 }
 
-/// A price provider for currencies only: answers every rate with `rate`
-/// stamped today, or fails every request when `rate` is `None` (Yahoo down).
+/// Fails every request when `rate` is `None` (Yahoo down).
 pub struct FixedRateProvider {
     pub rate: Option<Decimal>,
 }

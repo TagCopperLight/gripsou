@@ -18,7 +18,6 @@ async fn inserts_once_then_updates_in_place(pool: PgPool) -> anyhow::Result<()> 
     .await?;
     assert_eq!(first, TxnWrite::Inserted);
 
-    // Powens corrects the row after the fact: same external_id, new amount.
     let second = upsert_transaction(
         &mut conn,
         account_id,

@@ -18,17 +18,11 @@ import { WelcomeFooter, WelcomeSkip } from "./WelcomeFooter";
 
 const route = getRouteApi("/signedIn/welcome");
 
-/** A first bank. The bank's page sends the user back here
- *  (`/welcome?step=bank`), where the connection is finished. `onNext` is
- *  undefined while it isn't known whether a screen follows. */
 export function BankScreen({
   keysMissing, last, finishing, onBack, onNext, onSetUpKeys,
 }: {
-  /** An admin whose server has no working bank keys: connecting would fail. */
   keysMissing: boolean;
-  /** No screen follows: the button finishes the welcome flow. */
   last: boolean;
-  /** The welcome flow is being finished (from this screen's last button). */
   finishing: boolean;
   onBack: () => void;
   onNext: (() => void) | undefined;
@@ -42,8 +36,7 @@ export function BankScreen({
   const flow = useStartConnection({ returnTo: "/welcome?step=bank", errorMessage: t("welcome.bank.connectError") });
   const providers = flow.providers.data;
 
-  // Coming back from the provider with its query string (ConnectionCallback
-  // hands it over; an empty one still counts): finish the connection here.
+  // An empty query string still counts as coming back from the provider.
   const callback = useFinishConnection(search.callback);
   const connecting = callback.status === "connecting";
   const [retried, setRetried] = useState(false);
@@ -70,7 +63,6 @@ export function BankScreen({
   );
   const skip = <WelcomeSkip onClick={onNext} disabled={!onNext || connecting} />;
   const loading = connectionsQuery.isPending || flow.providers.isPending;
-  // Back stays usable while the step loads, as a window's Cancel does.
   const footer = (
     <WelcomeFooter onBack={onBack}>
       <LoadingFrame loading={loading}>
@@ -93,8 +85,7 @@ export function BankScreen({
     </WelcomeFooter>
   );
 
-  // Until the user's banks are known, whether the guide or the banks show is
-  // a guess: back from a bank, its row; else, on a first visit, the guide.
+  // Until the user's banks are known this is a guess: back from a bank, its row; else on a first visit, the guide.
   return (
     <>
       {connectionsQuery.isPending && callback.status !== "idle" ? (

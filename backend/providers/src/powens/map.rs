@@ -1,5 +1,3 @@
-//! Pure mapping: Powens wire models -> gripsou canonical DTOs.
-
 use std::collections::{HashMap, HashSet};
 
 use gripsou_core::dto::{
@@ -11,10 +9,8 @@ use serde_json::json;
 
 use crate::powens::model::{BankAccount, Connection, Investment, PowensTransaction};
 
-/// Collapse a Powens `AccountTypeName` onto one of gripsou's seeded
-/// `account_type` keys. `None` marks a liability (loan, card):
-/// gripsou tracks assets only, and mapping these onto an asset type
-/// would add their balance to net worth with the wrong sign.
+/// `None` marks a liability (loan, card): as an asset type its balance would be added to net worth
+/// with the wrong sign.
 pub fn map_type_key(name: &str) -> Option<&'static str> {
     Some(match name {
         "checking" | "joint" | "deposit" => "checking",
@@ -23,32 +19,26 @@ pub fn map_type_key(name: &str) -> Option<&'static str> {
         "lifeinsurance" => "life_insurance",
         "per" | "perp" | "pee" | "perco" | "madelin" | "article83" | "rsp" => "retirement",
         "loan" | "card" => return None,
-        // `real_estate` lands here deliberately: a real-estate placement shows
-        // as Brokerage. Don't give it its own type without reconsidering.
-        // Anything unrecognised is assumed to be an invest wrapper. A new
-        // liability type would be caught by the arm above once named.
+        // `real_estate` lands here deliberately (shown as Brokerage).
+        // Unrecognised types are assumed to be an invest wrapper.
         _ => "brokerage",
     })
 }
 
-/// Whether Powens holds this account's value in investments (its `balance`
-/// lags, the `XX-liquidity` line is the cash) rather than as a plain balance.
+/// Powens `balance` lags for these accounts; the `XX-liquidity` line is the cash.
 pub fn is_invest_type(name: &str) -> bool {
     !matches!(map_type_key(name), Some("checking" | "savings") | None)
 }
 
-/// Powens reports an investment account's un-invested cash sleeve as an
-/// investment carrying the pseudo-code `XX-liquidity`. It is cash, not a
-/// security; it's mapped into the account's cash holding rather than shown as
-/// its own line.
+/// The `XX-liquidity` investment is the un-invested cash sleeve: it goes into the cash holding,
+/// not a line of its own.
 pub fn is_liquidity(inv: &Investment) -> bool {
     inv.code.as_deref() == Some("XX-liquidity")
         || inv.stock_symbol.as_deref() == Some("XX-liquidity")
 }
 
-/// Extract the institution from the connections endpoint. With one connection
-/// per token the first connector is correct; a token carrying several would
-/// need matching by the accounts' `id_connection`.
+/// With one connection per token the first connector is correct; several would need matching by
+/// the accounts' `id_connection`.
 fn map_institution(connections: &[Connection]) -> Institution {
     connections
         .iter()
@@ -60,14 +50,10 @@ fn map_institution(connections: &[Connection]) -> Institution {
         .unwrap_or_default()
 }
 
-/// The date part of a Powens datetime, a Paris day (#38).
 fn day(value: Option<&str>) -> Option<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(value?.get(..10)?, "%Y-%m-%d").ok()
 }
 
-/// Map a Powens bank account onto a canonical account. The provider-supplied
-/// `original_name` seeds the display name (gripsou later preserves user edits);
-/// `meta` stashes provider specifics for debugging and the escape hatch.
 pub fn map_account(acct: &BankAccount, type_key: &str) -> CanonicalAccount {
     let type_name = acct.r#type.as_deref().unwrap_or("unknown");
     let is_invest = is_invest_type(type_name);
@@ -95,9 +81,8 @@ pub fn map_account(acct: &BankAccount, type_key: &str) -> CanonicalAccount {
             "number": acct.number,
             "id_connection": acct.id_connection,
         }),
-        // `last_update` is when Powens last read the account at the bank. It
-        // stops moving while the bank can't be reached, and Powens keeps
-        // returning that day's balances.
+        // `last_update` stops moving while the bank is unreachable; Powens keeps returning that
+        // day's balances.
         balance_as_of: day(acct.last_update.as_deref()),
         health: None,
     }
@@ -110,18 +95,14 @@ fn instrument_currency(inv: &Investment, account_currency: &str) -> String {
         .unwrap_or_else(|| account_currency.to_string())
 }
 
-/// Map a single Powens investment to a canonical security holding. Returns
-/// `None` when the investment is deleted or carries no usable instrument
-/// identity (no ISIN, ticker, or code). `kind` is a generic `equity` because
-/// Powens does not reliably distinguish equities from ETFs/funds; the core
-/// dedups securities by ISIN, so this is harmless on the common path.
+/// `None` when deleted or without a usable identity (no ISIN, ticker, or code). `kind` is a
+/// generic `equity`: Powens does not tell equities from ETFs/funds.
 pub fn map_investment(inv: &Investment, account_currency: &str) -> Option<CanonicalHolding> {
     if inv.deleted.is_some() {
         return None;
     }
 
-    // The liquidity sleeve is cash, not a security; `map_sync` folds its value
-    // into the account's cash holding instead (see `is_liquidity`).
+    // The liquidity sleeve is cash; `map_sync` folds it into the cash holding.
     if is_liquidity(inv) {
         return None;
     }
@@ -155,23 +136,10 @@ pub fn map_investment(inv: &Investment, account_currency: &str) -> Option<Canoni
     })
 }
 
-/// Build the cash holding for an account.
-///
-/// Non-invest accounts always yield a cash holding from `balance` (including a
-/// zero balance or a negative overdraft).
-///
-/// Invest accounts get their cash sleeve from `liquidity`:
-/// - `Some(v)` — Powens itemised an `XX-liquidity` sleeve summing to `v`. That
-///   is authoritative cash; `balance` is **ignored** because for invest accounts
-///   it lags the live investment valuations (observed: a PEA whose `balance`
-///   sat below its securities' market value, which would make a residual
-///   negative).
-/// - `None` — no liquidity sleeve was reported, so fall back to the residual
-///   `balance - invested` (covers accounts whose cash is only implied by the
-///   balance, e.g. a first sync before investments populate).
-///
-/// A zero or negative result is dropped, since that cash sleeve would be
-/// nonexistent or nonsensical.
+/// Non-invest accounts take cash from `balance`, even zero or an overdraft. Invest accounts take it
+/// from the `XX-liquidity` sleeve (`liquidity`) and ignore `balance`, which lags the live valuations
+/// (a PEA's `balance` sat below its securities' value, giving negative cash). With no sleeve reported,
+/// the cash is the residual `balance - invested`. A zero or negative result is dropped.
 fn cash_holding(
     acct: &BankAccount,
     invested: Decimal,
@@ -217,19 +185,9 @@ fn cash_holding(
     })
 }
 
-/// Top-level mapping: Powens accounts + investments + transactions, with the
-/// token's connections for the institution and the health, -> a canonical
-/// `SyncResult`.
-///
-/// Deleted accounts (and their holdings) are skipped; each surviving account
-/// contributes its security holdings and a cash holding per `cash_holding`.
-///
-/// Transactions are filtered here rather than in `map_transactions` because
-/// only this function knows which accounts were emitted: `/users/me/transactions`
-/// is user-scoped, so it returns rows belonging to the accounts skipped above
-/// (a loan, a deferred-debit card, a deleted account). Emitting those would
-/// hand the core a dangling `account_external_id`, which is exactly the kind of
-/// dangling reference the core is entitled to treat as a bug.
+/// Transactions are filtered here, not in `map_transactions`: `/users/me/transactions` is user-scoped
+/// and returns rows of skipped accounts (loan, deferred-debit card, deleted), which would hand the
+/// core a dangling `account_external_id`.
 pub fn map_sync(
     accounts: &[BankAccount],
     investments: &[Investment],
@@ -254,8 +212,6 @@ pub fn map_sync(
             result.skipped.accounts += 1;
             continue;
         }
-        // A liability maps to no asset type; skip the account entirely so
-        // neither it nor its holdings reach the database.
         let powens_type = acct.r#type.as_deref().unwrap_or("unknown");
         let Some(type_key) = map_type_key(powens_type) else {
             tracing::debug!(powens_type, "account skipped: no asset type");
@@ -267,8 +223,7 @@ pub fn map_sync(
         let account_currency = acct.currency.as_ref().map(|c| c.id.as_str()).unwrap_or("");
 
         let mut invested = Decimal::ZERO;
-        // `None` until a liquidity line is seen, so `cash_holding` can tell
-        // "no sleeve reported" apart from "a sleeve worth 0".
+        // `None` until a liquidity line is seen, to tell "no sleeve" from "a sleeve worth 0".
         let mut liquidity: Option<Decimal> = None;
         if let Some(invs) = by_account.get(&acct.id) {
             for inv in invs {
@@ -300,16 +255,13 @@ pub fn map_sync(
         .into_iter()
         .filter(|t| emitted.contains(t.account_external_id.as_str()))
         .collect();
-    // Pending, deleted, incomplete, or on an account skipped above.
     result.skipped.transactions = transactions.len().saturating_sub(result.transactions.len());
 
     apply_health(&mut result, accounts, connections);
     result
 }
 
-/// Powens appends the card's last four digits to the wording on ~77% of card
-/// rows. It carries no information the app uses, and it defeats
-/// search.
+/// Powens appends the card's last four digits to card wordings; they defeat search.
 pub fn strip_card_mask(wording: &str) -> &str {
     let Some(idx) = wording.rfind("CB*") else {
         return wording;
@@ -321,10 +273,8 @@ pub fn strip_card_mask(wording: &str) -> &str {
     wording[..idx].trim_end()
 }
 
-/// Direction comes from the sign of `value`; the Powens `type` only picks a
-/// semantic label the sign cannot express. Stated this way because
-/// `market_fee` rows were observed carrying positive "INTERETS" values, and
-/// Powens warns that new type strings appear without notice.
+/// Direction comes from the sign of `value`; `type` only picks a label. `market_fee` rows were seen
+/// with positive "INTERETS" values and Powens adds new type strings without notice.
 pub fn map_txn_type(powens_type: Option<&str>, value: Decimal) -> &'static str {
     let negative = value < Decimal::ZERO;
     match powens_type.unwrap_or("") {
@@ -350,17 +300,14 @@ pub fn map_txn_type(powens_type: Option<&str>, value: Decimal) -> &'static str {
     }
 }
 
-/// `None` for a row that must not enter the ledger: pending, deleted, or
-/// missing the two fields the ledger cannot do without. Pending rows must stay
-/// out: the backfill walks back from `balance`, which is settled-only, so one
-/// pending row would shift every derived day by its amount.
+/// `None` for pending, deleted or incomplete rows. Pending must stay out: the backfill walks back
+/// from the settled-only `balance`, so one pending row would shift every derived day.
 pub fn map_transaction(t: &PowensTransaction) -> Option<CanonicalTransaction> {
     if t.coming || t.deleted.is_some() {
         return None;
     }
     let value = t.value?;
-    // `spent_on` is the spend date, `booked_on` the day the balance moved. Both fall
-    // back to the other when the provider reports only one.
+    // `spent_on` is the spend date, `booked_on` the day the balance moved; each falls back to the other.
     let spent_on = t.rdate.or(t.date)?;
     let booked_on = t.date.or(t.rdate);
     Some(CanonicalTransaction {
@@ -379,8 +326,8 @@ pub fn map_transactions(txns: &[PowensTransaction]) -> Vec<CanonicalTransaction>
     txns.iter().filter_map(map_transaction).collect()
 }
 
-/// Keep account timestamps independent from the parent/source timestamps: a
-/// successful checking update must not make blocked savings appear current.
+/// Account timestamps stay independent of the parent's: a successful checking update must not make
+/// blocked savings look current.
 fn apply_health(result: &mut SyncResult, accounts: &[BankAccount], connections: &[Connection]) {
     fn health(
         raw: Option<&crate::powens::model::SourceHealth>,

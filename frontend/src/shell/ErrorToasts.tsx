@@ -3,9 +3,6 @@ import { useTranslation } from "react-i18next";
 
 import { dismissError, useErrorToasts } from "../lib/errorToasts";
 
-/** Failed actions (and a few finished ones, in green), in the bottom-right
- *  corner of the screen, above any open window, newest at the bottom. Each
- *  goes after 5 seconds, or when closed. */
 export function ErrorToasts() {
   const { t } = useTranslation();
   const toasts = useErrorToasts();

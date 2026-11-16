@@ -13,7 +13,6 @@ use self::search::{Candidate, select_symbol};
 
 pub struct YahooPriceProvider {
     connector: YahooConnector,
-    /// The pivot currency FX rates are quoted against (see migration 0010).
     pivot: String,
 }
 
@@ -39,12 +38,10 @@ impl PriceProvider for YahooPriceProvider {
         &self,
         instrument: &InstrumentRef,
     ) -> Result<Option<String>, ProviderError> {
-        // An FX pair is deterministic — no search round trip needed.
         if instrument.kind == "cash" {
             return Ok(Some(fx_symbol(&instrument.currency, &self.pivot)));
         }
 
-        // Prefer ISIN for the search query; fall back to a provider symbol.
         let query = instrument
             .isin
             .as_deref()
@@ -85,10 +82,8 @@ impl PriceProvider for YahooPriceProvider {
             .await
             .map_err(|e| ProviderError::Other(gripsou_core::logs::error_chain(&e)))?;
 
-        // Report Yahoo's own currency for the listing. If it's missing we do NOT
-        // guess (an empty string won't match any instrument currency, so the
-        // orchestrator's currency guard drops these points rather than mislabel
-        // a foreign-currency price as the base currency).
+        // Report Yahoo's own currency. If missing, do not guess: an empty string matches no instrument
+        // currency, so the orchestrator's currency guard drops the points rather than mislabel them.
         let currency = resp
             .metadata()
             .ok()
@@ -105,21 +100,16 @@ impl PriceProvider for YahooPriceProvider {
     }
 }
 
-/// Yahoo's ticker for "one unit of `currency`, priced in `pivot`".
 pub(crate) fn fx_symbol(currency: &str, pivot: &str) -> String {
     format!("{currency}{pivot}=X")
 }
 
-/// A well-formed ISO 4217 code. Anything else (a provider's lowercase `"usd"`,
-/// a free-text label, an injection attempt) must never reach `fx_symbol` and so
-/// a live Yahoo URL.
+/// A well-formed ISO 4217 code. Anything else (lowercase, free text, an injection attempt) must never
+/// reach `fx_symbol` and so a live Yahoo URL.
 fn is_iso_currency(code: &str) -> bool {
     code.len() == 3 && code.bytes().all(|b| b.is_ascii_uppercase())
 }
 
-/// Eligible if it is a foreign cash instrument (its FX pair), or a security we
-/// have an identifier for. Cash in the pivot needs no rate (it is 1 by
-/// definition).
 pub(crate) fn is_supported(instrument: &InstrumentRef, pivot: &str) -> bool {
     if instrument.kind == "cash" {
         return is_iso_currency(&instrument.currency) && instrument.currency != pivot;

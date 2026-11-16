@@ -17,7 +17,6 @@ vi.mock("../../ui/EChart", () => ({
   },
 }));
 
-// What the server sends while the user has no accounts.
 const NO_ACCOUNTS: NetWorthResponse = {
   points: [],
   summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false },

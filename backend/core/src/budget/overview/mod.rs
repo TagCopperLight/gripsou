@@ -1,6 +1,4 @@
-//! The Budget Overview: the summary and the trend chart, each read in one
-//! fetch of `repo::budget::summary::day_category_totals` and reduced by
-//! [`calc`].
+//! The Budget Overview: one fetch of `repo::budget::summary::day_category_totals`, reduced by [`calc`].
 
 pub mod calc;
 
@@ -10,8 +8,7 @@ use crate::error::CoreError;
 use crate::repo::budget::{category, summary::day_category_totals};
 use calc::{Month, Period, Summary, Trend};
 
-/// The Overview of `period`. One fetch covers the period and, for a month,
-/// its baseline, so no figure on the page can disagree with another.
+/// One fetch covers the period and its baseline, so no figure can disagree with another.
 pub async fn summary(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -22,8 +19,7 @@ pub async fn summary(
     Ok(calc::summarise(&rows, period))
 }
 
-/// `months` bars of expenses ending at and including `anchor`. `months` is
-/// at least 1.
+/// `months` is at least 1.
 pub async fn trend_for(
     pool: &sqlx::PgPool,
     user_id: Uuid,

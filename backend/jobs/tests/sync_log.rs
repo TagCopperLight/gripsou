@@ -1,6 +1,3 @@
-//! The `sync finished` line is what sync history reads (CLAUDE.md "Logs").
-//! These tests pin its shape: one per sync, with the agreed fields.
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -138,7 +135,6 @@ async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) 
     .unwrap();
     assert_eq!(started, 1);
 
-    // The fake bank has no website on record, so its logo is missing.
     let no_logo: i64 = sqlx::query_scalar(
         "select count(*) from log where level = 'warn' and message = 'institution has no logo'",
     )
@@ -168,7 +164,6 @@ async fn a_failed_sync_logs_one_sync_finished_with_the_step_and_error(pool: PgPo
     assert!(f["error"].as_str().unwrap().contains("503"));
     assert_eq!(f["trigger"], "daily");
     assert!(f["duration_ms"].is_u64());
-    // The failure is logged once, as sync finished: no separate error line.
     let errors: i64 = sqlx::query_scalar("select count(*) from log where level = 'error'")
         .fetch_one(&pool)
         .await
@@ -206,8 +201,6 @@ async fn a_panicking_sync_logs_one_sync_finished_and_frees_the_lock(pool: PgPool
     assert_ne!(status, "syncing");
 }
 
-/// A provider that never answers must not hold the connection: the sync is
-/// stopped at its time limit and recorded like any other failure.
 #[gripsou_core::testkit::db_test]
 async fn a_sync_past_its_time_limit_is_stopped_and_frees_the_lock(pool: PgPool) {
     let (_g, mut writer) = gripsou_core::logs::capture(1000);
@@ -249,7 +242,6 @@ async fn a_sync_that_cannot_start_logs_sync_skipped(pool: PgPool) {
         .await
         .unwrap();
 
-    // Already syncing: the second request is refused and says why.
     let r = gripsou_jobs::request_sync(pool.clone(), &deps(Mode::Ok), user, conn, Trigger::Manual)
         .await
         .unwrap();

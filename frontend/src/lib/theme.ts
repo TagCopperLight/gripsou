@@ -1,7 +1,5 @@
-// The theme's tokens as literal values, for what cannot read a `var(--…)`:
-// ECharts draws to a canvas, and a colour mixed into a tint or an alpha needs
-// its hex. They are read from the stylesheet's `@theme` block, the one place
-// they are written.
+// Literal token values for what cannot read `var(--…)`: ECharts draws to a canvas.
+// Read from the stylesheet's `@theme` block, the one place they are written.
 import css from "../index.css?raw";
 
 function token(name: string): string {

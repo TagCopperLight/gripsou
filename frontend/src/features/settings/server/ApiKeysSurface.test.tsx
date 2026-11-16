@@ -29,7 +29,7 @@ beforeEach(() => {
   stubFetch(async (_url: string, init?: RequestInit) => jsonResponse(init?.method === "PATCH" ? KEYS[0] : KEYS));
 });
 
-describe("ApiKeysSurface — secret", () => {
+describe("ApiKeysSurface: secret", () => {
   it("sends nothing when the new key is typed and the field is left", async () => {
     renderCard();
     fireEvent.click(await screen.findByRole("button", { name: "Replace" }));
@@ -60,7 +60,7 @@ describe("ApiKeysSurface — secret", () => {
   });
 });
 
-describe("ApiKeysSurface — plain field", () => {
+describe("ApiKeysSurface: plain field", () => {
   it("removes the value when emptied and left, and sends nothing on Escape", async () => {
     renderCard();
     const input = await screen.findByLabelText("Client ID");

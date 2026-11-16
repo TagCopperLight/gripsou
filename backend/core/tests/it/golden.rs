@@ -1,16 +1,6 @@
-//! Whole-output regression tests.
+//! Whole-output regression: no number may move anywhere. Days are offsets from today, since everything anchors on `now()`.
 //!
-//! The tests in `backfill.rs` check specific days and holdings. These check
-//! that not a single number moves anywhere in the output — which is the only
-//! thing that can catch an optimisation that is 99.99% right.
-//!
-//! Days are recorded as offsets from today, never as calendar dates, because
-//! every computation here anchors on `now()`. Absolute dates would rot
-//! overnight.
-//!
-//! Regenerate deliberately, never reflexively:
-//!     UPDATE_GOLDEN=1 cargo test -p gripsou-core --test golden
-//! A failing golden file is a conversation about which answer is correct.
+//! Regenerate deliberately: UPDATE_GOLDEN=1 cargo test -p gripsou-core --test golden
 
 use chrono::{Duration, NaiveDate, Utc};
 use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
@@ -28,8 +18,6 @@ fn dec(s: &str) -> Decimal {
     s.parse().unwrap()
 }
 
-/// Compare `actual` against the committed reference, or rewrite it when
-/// UPDATE_GOLDEN=1 is set.
 fn assert_golden(name: &str, actual: &str) {
     let path = format!("tests/golden/{name}.txt");
     if std::env::var("UPDATE_GOLDEN").is_ok() {
@@ -40,7 +28,6 @@ fn assert_golden(name: &str, actual: &str) {
     let expected = std::fs::read_to_string(&path)
         .unwrap_or_else(|_| panic!("missing {path}; run with UPDATE_GOLDEN=1 to create it"));
     if expected != actual {
-        // Show the first differing line rather than dumping thousands.
         let first_diff = expected
             .lines()
             .zip(actual.lines())
@@ -58,9 +45,6 @@ fn assert_golden(name: &str, actual: &str) {
     }
 }
 
-/// One fixed scenario: two accounts (checking + PEA), a EUR cash line, a USD
-/// cash line, two securities, snapshot gaps, a sale, and a stretch that dips
-/// below zero. Everything is placed relative to `today`.
 async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     let today = Utc::now().date_naive();
     let day = |back: i64| today - Duration::days(back);
@@ -90,7 +74,6 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     .await
     .unwrap();
 
-    // EUR cash on the checking account.
     let eur = resolve_instrument(
         &mut conn,
         &InstrumentRef {
@@ -124,7 +107,6 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     .await
     .unwrap();
 
-    // USD cash on the PEA: exercises the FX path and the held-flat branch.
     let usd = resolve_instrument(
         &mut conn,
         &InstrumentRef {
@@ -167,7 +149,6 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     .await
     .unwrap();
 
-    // Two securities, one of them sold to zero.
     let mut security_holdings = Vec::new();
     for (n, account_id, ext) in [(0u32, checking, "g-checking"), (1, pea, "g-pea")] {
         let iref = InstrumentRef {
@@ -219,8 +200,7 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
         .execute(&mut *conn)
         .await
         .unwrap();
-        // Securities move by `lot`, not by `transaction`, so the backfill's
-        // quantity walk needs its own record of this buy.
+        // Securities move by `lot`, so the backfill's quantity walk needs this record.
         testkit::seed_lot(
             &mut *conn,
             holding_id,
@@ -229,8 +209,6 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
         .await;
     }
 
-    // Sell the second security to zero, so the nearest-non-zero snapshot search
-    // has to reach backwards past the sale.
     let (sold_holding, _sold_instrument, sold_account) = security_holdings[1];
     sqlx::query(
         "insert into transaction \
@@ -244,8 +222,6 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     .execute(&mut *conn)
     .await
     .unwrap();
-    // Same reason as the buy above: the sale must exist as a `lot` for the
-    // quantity walk to see it.
     testkit::seed_lot(
         &mut *conn,
         sold_holding,
@@ -253,8 +229,6 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     )
     .await;
 
-    // Cash movements, including one large withdrawal that drives a stretch
-    // below zero so the lift branch is exercised.
     for (i, (back, kind, amount)) in [
         (110i64, "deposit", "500"),
         (80, "withdrawal", "-2000"),
@@ -279,7 +253,6 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
         .unwrap();
     }
 
-    // Snapshots with deliberate gaps.
     for holding_id in [
         eur_holding,
         usd_holding,
@@ -301,9 +274,7 @@ async fn seed_scenario(pool: &PgPool) -> (Uuid, Uuid) {
     (user_id, connection_id)
 }
 
-/// Render as `<days-before-today> <holding-index> <quantity> <value> <cost>`.
-/// Holdings are numbered by a stable ordering, never by uuid, which changes
-/// every run.
+/// Holdings are numbered by a stable order, never by uuid.
 async fn backfill_digest(pool: &PgPool) -> String {
     let rows: Vec<(NaiveDate, String, Decimal, Decimal)> = sqlx::query_as(
         "select hb.as_of, i.name || '/' || a.external_id, hb.quantity, hb.value \
@@ -379,11 +350,7 @@ async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     )
     .await?;
 
-    // account_series orders by account uuid, which is regenerated (and thus
-    // reshuffled) every test run. Re-sort here on content instead: (as_of,
-    // name) is a total order over these two distinctly-named accounts, with
-    // no room for value in the key — if the optimisation under test changes
-    // a value, that value must show up as a diff, not silently reorder rows.
+    // account_series orders by regenerated uuids, so re-sort on (as_of, name), a total order here.
     rows.sort_by(|a, b| (a.as_of, &a.name).cmp(&(b.as_of, &b.name)));
 
     let mut out = String::new();
@@ -399,14 +366,7 @@ async fn account_series_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// `max` must give the same answer as asking for exactly the range that has
-/// data. This is what makes the clamp safe.
-///
-/// Both arms clamp, so this pins that the clamp is deterministic, not that it
-/// preserves the unclamped answer. That part is structural: `holding_day_values`
-/// values a holding on a day only through an inner lateral join on its latest
-/// `holding_point` at or before that day, so a day before `history_start` has
-/// no row with or without the clamp.
+/// `max` gives the same answer as the exact data range. Both arms clamp: `holding_day_values` has no row before `history_start` either way.
 #[gripsou_core::testkit::db_test]
 async fn clamping_does_not_change_the_answer(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
@@ -437,8 +397,6 @@ async fn clamping_does_not_change_the_answer(pool: PgPool) -> anyhow::Result<()>
     Ok(())
 }
 
-/// Today is always the final point, and its value is exact — the headline
-/// net-worth figure reads it.
 #[gripsou_core::testkit::db_test]
 async fn today_is_the_final_point_and_is_exact(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
@@ -460,14 +418,7 @@ async fn today_is_the_final_point_and_is_exact(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-/// Stretches the scenario's history to 1000 days with one old snapshot, so
-/// the chart's sample target forces a stride above 1 and sampling is exercised
-/// for real, unlike the other tests above where every range clamps to the same
-/// 121-day scenario and always yields step 1. Proves three things at once: the
-/// last point is exactly `today`, every returned point is that day's real value
-/// (sampling SELECTS, never averages), and the exact set of returned days
-/// matches an independently computed `sample_days` call — pinning the stride
-/// itself, not just its endpoints.
+/// 1000 days of history force a stride above 1: pins that sampling selects real days, and the exact set of returned days.
 #[gripsou_core::testkit::db_test]
 async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;
@@ -502,11 +453,8 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
         "the stride must be above 1 for this test to mean anything"
     );
 
-    // (a) today is exact.
     assert_eq!(sampled.last().unwrap().as_of, today);
 
-    // (b) returned points are that day's real value on its own — proves
-    // sampling selects real days rather than averaging or interpolating.
     for point in sampled.iter().step_by(25) {
         let single = gripsou_core::repo::valuation::net_worth_series(
             &pool,
@@ -522,8 +470,6 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
         );
     }
 
-    // (c) the returned as_of sequence is exactly what sample_days computes
-    // independently over the same (clamped) history window — pins the stride.
     let history_start = gripsou_core::repo::series::history_start(&pool, user_id)
         .await?
         .expect("scenario has history");
@@ -538,13 +484,7 @@ async fn sampling_selects_real_days_at_a_forced_stride(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-/// The accounts list (and the distribution pie drawn from it). Same standard
-/// as the series above: every figure must stay identical.
-///
-/// The digest is ordered by account name, not by the query's own value-descending
-/// order, because a uuid and a randomly-assigned colour cannot anchor a stable
-/// file. The value ordering is a real part of the contract though — the pie shows
-/// the largest slice first — so it is asserted separately below.
+/// The digest is ordered by account name, since uuid and colour are random. Value ordering is asserted separately.
 #[gripsou_core::testkit::db_test]
 async fn accounts_output_is_stable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, connection_id) = seed_scenario(&pool).await;

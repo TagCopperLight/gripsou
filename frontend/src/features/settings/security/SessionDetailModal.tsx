@@ -8,14 +8,12 @@ import type { Session } from "../../../api/wire";
 
 type SessionDetailModalProps = {
   session: Session;
-  /** Omitted for the current session, which can't revoke itself. */
   onRevoke?: () => void;
   revoking?: boolean;
   onClose: () => void;
 };
 
-// The phone list shows one summary line per session; the detail lives here so
-// every row in that list can stay the same height.
+// The phone list shows one summary line per session; the detail lives here so rows keep the same height.
 export function SessionDetailModal({
   session,
   onRevoke,

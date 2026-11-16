@@ -1,8 +1,3 @@
-//! What the dashboard reads: net worth and account history, holdings, a
-//! holding's price history and today's accounts, all valued by the one SQL
-//! surface (`holding_valuation`, `holding_day_values`, `fx_convert`) and
-//! scoped by `connection.user_id`. Money stays Decimal end-to-end.
-
 use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -16,14 +11,10 @@ pub struct NetWorthRow {
     pub net_worth: Option<Decimal>,
     /// Null when the reader's currency has no rate that day.
     pub invested: Option<Decimal>,
-    /// Something on this day was left out for want of a rate: a holding
-    /// valued at zero, a basis missing from `invested`, or, when the reader's
-    /// currency had no rate, the whole day.
+    /// Something this day was left out for want of a rate, up to the whole day.
     pub fx_missing: bool,
 }
 
-/// The days a chart over `from..=to` is computed on: clamped to the user's
-/// real history, then sampled ([`series::sample_days`]).
 async fn chart_days(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -44,8 +35,7 @@ pub async fn net_worth_series(
 ) -> Result<Vec<NetWorthRow>, CoreError> {
     let days = chart_days(pool, user_id, from, to).await?;
 
-    // Net worth is the sum of the account values: rows come ordered by day,
-    // so each day's accounts are consecutive.
+    // Rows come ordered by day, so each day's accounts are consecutive.
     let mut rows: Vec<NetWorthRow> = Vec::new();
     for r in account_day_values(pool, user_id, &days).await? {
         match rows.last_mut() {
@@ -65,8 +55,6 @@ pub async fn net_worth_series(
     Ok(rows)
 }
 
-/// One account on one day, valued for both the net-worth line and the
-/// stacked accounts chart.
 struct AccountDayRow {
     account_id: Uuid,
     name: String,
@@ -77,11 +65,7 @@ struct AccountDayRow {
     fx_missing: bool,
 }
 
-/// The one per-day valuation (`holding_day_values`), grouped by (day,
-/// account), ordered by day.
-///
-/// `days` is not every day in the range: [`chart_days`] clamps the axis to
-/// real history and samples it down first.
+/// `days` is not every day in the range: [`chart_days`] clamps and samples it first.
 async fn account_day_values(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -115,77 +99,55 @@ pub struct HoldingRow {
     pub symbol: Option<String>,
     pub instrument_name: String,
     pub kind: String,
-    /// With `kind`, what the logo is built from (`Logos::instrument` in `providers`).
     pub instrument_isin: Option<String>,
     /// The identity column, not the display `symbol`.
     pub instrument_symbol: Option<String>,
-    /// The instrument's own currency — the currency the security is *quoted* in.
-    /// Not the currency of any amount on this row.
+    /// The currency the security is quoted in, not the currency of any amount on this row.
     pub currency: String,
-    /// Currency of the `price` row `price` came from — the price domain. May
-    /// differ from `currency` (Powens labels an instrument EUR, Yahoo resolves a
-    /// London listing quoted GBP). NULL when there is no price row.
+    /// Currency of the price row `price` came from. May differ from `currency` (Powens labels an
+    /// instrument EUR, Yahoo resolves a London listing quoted GBP). NULL with no price row.
     pub price_currency: Option<String>,
-    /// The account's currency — the amount domain. `cost_basis`,
-    /// `invested_native`, snapshot values and transaction amounts are all in it.
+    /// The account's currency: `cost_basis`, `invested_native`, snapshot values and transaction
+    /// amounts are all in it.
     pub account_currency: String,
     pub account_id: Uuid,
     pub account_name: String,
     pub account_color: String,
-    /// Stable account-type key (`checking`, `pea`, …); the frontend translates it.
     pub type_key: String,
     pub quantity: Decimal,
-    /// Latest unit price, in `price_currency` (NOT `currency`).
+    /// In `price_currency`, not `currency`.
     pub price: Option<Decimal>,
-    /// Last 30 daily unit prices, ascending by time. Empty if none.
     pub spark: Vec<Decimal>,
-    /// ETF/fund country and sector breakdown, when available in instrument.meta.
     pub composition: Option<crate::dto::Composition>,
-    /// Position value in the reader's reporting currency. Zero when a rate is
-    /// unknown (see `fx_missing`).
+    /// Zero when a rate is unknown (see `fx_missing`).
     pub value: Decimal,
-    /// Cost basis in the reader's reporting currency. Zero when a rate is
-    /// unknown (see `fx_missing`).
+    /// Zero when a rate is unknown (see `fx_missing`).
     pub invested: Decimal,
-    /// Cost basis in the *account's* currency — the amount-domain figure, which
-    /// is what the provider denominated it in. Label it with `account_currency`,
-    /// never with `currency` or `price_currency`.
+    /// Label it with `account_currency`, never with `currency` or `price_currency`.
     pub invested_native: Decimal,
-    /// `value` or `invested` reads zero for want of a rate
-    /// (`holding_valuation`).
+    /// `value` or `invested` reads zero for want of a rate.
     pub fx_missing: bool,
-    /// Shares no recorded lot explains: `quantity − Σ buys + Σ sells`.
-    /// Signed: positive means shares no lot explains, negative means more is
-    /// recorded than held (an unrecorded sale). Non-zero means the cost basis
-    /// and the pre-purchase history are guesses, which the Holdings badge says
-    /// out loud. Always zero for cash — a cash line has nothing to explain.
+    /// Signed: positive means shares no lot explains, negative means more is recorded than held
+    /// (an unrecorded sale). Non-zero means the cost basis and pre-purchase history are guesses,
+    /// which the Holdings badge says. Always zero for cash.
     pub unexplained_quantity: Decimal,
-    /// Fee-inclusive mean buy price, amount domain (account currency). When
-    /// no buy is recorded (a provider that reports a balance but no lots), the
-    /// basis over the quantity, so a real position does not read as zero.
+    /// With no buy recorded, the basis over the quantity, so a real position doesn't read as zero.
     pub mean_price: Decimal,
 }
 
 impl HoldingRow {
-    /// The kind shown for the holding.
-    ///
-    /// `instrument.kind` is whatever the provider said and is never rewritten:
-    /// it is half the natural key the next sync re-resolves the row by. Powens
-    /// cannot tell an ETF from a share and reports every security as `equity`,
-    /// so a tracker is recognised by its scraped composition, which only ever
-    /// exists for one (anything else is marked `composition_status = "none"`).
-    /// An ETF whose scrape has not landed yet reads as `equity`.
+    /// `instrument.kind` is never rewritten (it is half the natural key the next sync
+    /// re-resolves the row by). Powens reports every security as `equity`, so a tracker is
+    /// recognised by its scraped composition.
     pub fn display_kind(&self) -> &str {
         display_kind(&self.kind, self.composition.is_some())
     }
 
-    /// A unit of cash is worth one unit of its own currency by definition:
-    /// its `price` row holds an exchange rate, not a unit price.
+    /// A cash `price` row holds an exchange rate, not a unit price.
     fn is_cash(&self) -> bool {
         self.kind == "cash"
     }
 
-    /// The unit price, in [`Self::unit_price_currency`]; zero with no price.
     pub fn unit_price(&self) -> Decimal {
         if self.is_cash() {
             Decimal::ONE
@@ -194,9 +156,7 @@ impl HoldingRow {
         }
     }
 
-    /// The currency stamped on the price row the unit price comes from, which
-    /// may differ from the instrument's (Yahoo can resolve a listing quoted
-    /// elsewhere). The instrument's own when there is no price row.
+    /// Differs from the instrument's when Yahoo resolves a listing quoted elsewhere.
     pub fn unit_price_currency(&self) -> &str {
         match &self.price_currency {
             Some(c) if !self.is_cash() => c,
@@ -204,12 +164,10 @@ impl HoldingRow {
         }
     }
 
-    /// `quantity × unit price`, before any conversion; `None` without a price.
     pub fn value_native(&self) -> Option<Decimal> {
         (self.is_cash() || self.price.is_some()).then(|| self.quantity * self.unit_price())
     }
 
-    /// The recent prices, for a security that has some.
     pub fn spark(&self) -> Option<&[Decimal]> {
         (!self.is_cash() && !self.spark.is_empty()).then_some(self.spark.as_slice())
     }
@@ -252,18 +210,12 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
     let bases = sqlx::query_as!(
         Base,
         r#"
-        -- Valued by the same rule as every other reader (`holding_valuation`),
-        -- from the holding's current quantity and its latest snapshot. The
-        -- snapshot lateral is LEFT because a holding ingested before its first
-        -- snapshot must still list (it just has no provider valuation).
+        -- Restates `holding_day_values`' inputs for today alone, for speed: a change to what
+        -- feeds `holding_valuation` is made in both. The snapshot lateral is LEFT so a holding
+        -- ingested before its first snapshot still lists.
         --
-        -- This restates `holding_day_values`' inputs for today alone, kept
-        -- apart for speed: a change to what feeds `holding_valuation` is made
-        -- in both.
-        --
-        -- Today is `user_today($1)` in each call, never a sub-select: Postgres
-        -- does not inline a SQL function given a sub-select argument, and the
-        -- opaque calls' cost estimate turns on JIT, which takes a second.
+        -- Today is `user_today($1)` in each call, never a sub-select: Postgres doesn't inline a
+        -- SQL function given one, and the opaque cost estimate turns on JIT (about a second).
         with grid as materialized (
             select * from valuation_grid($1, array[user_today($1)])
         ),
@@ -273,12 +225,9 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
             where currency = (select currency from users where id = $1)
         )
         select h.id            as "holding_id!",
-               -- Display ticker, not the identity column. `symbol` is null on
-               -- the ISIN path (ISIN is the identity there, and tickers are not
-               -- globally unique), so the resolved Yahoo ticker in meta is what
-               -- the user should see. Cash is excluded: its meta holds an FX
-               -- pair like `CNYEUR=X`, a fetch detail, and the UI falls back to
-               -- the ISO code.
+               -- Display ticker, not the identity column: `symbol` is null on the ISIN path, so
+               -- the resolved Yahoo ticker in meta is shown. Cash is excluded (its meta holds an FX
+               -- pair like `CNYEUR=X`).
                coalesce(
                    i.symbol,
                    case when i.kind <> 'cash' then i.meta->>'yahoo_symbol' end
@@ -303,14 +252,9 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
                lot.basis      as "invested_native!",
                lot.mean_price as "mean_price!",
                v.fx_missing   as "fx_missing!",
-               -- Shares no recorded lot explains. Scoped to THIS holding's
-               -- (account, instrument) via the `lot` lateral — never the
-               -- instrument alone, or another user's buy of the same ETF would
-               -- reduce this figure.
-               --
-               -- SIGNED, deliberately: negative means more is recorded than is
-               -- held. Flooring it at zero would hide that state, and the user
-               -- could never open the modal to fix it.
+               -- Scoped to this holding's (account, instrument) via the `lot` lateral, or another
+               -- user's buy of the same ETF would reduce it. SIGNED on purpose: flooring at zero
+               -- would hide an over-recorded state the user must open the modal to fix.
                case when i.kind = 'cash' then 0
                     else h.quantity - coalesce(lot.explained_qty, 0)
                end as "unexplained_quantity!"
@@ -357,15 +301,9 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
 
     let mut out = Vec::with_capacity(bases.len());
     for b in bases {
-        // Cash rows show no sparkline (their "prices" are FX rates), so don't
-        // pay for the query.
-        // The last 30 *days*, not the last 30 rows: a row count silently covers a
-        // different window whenever the feed's cadence changes, so the "30D"
-        // label stops meaning 30D. A market instrument yields ~21 points here
-        // (weekends have no price), which is the honest shape.
-        //
-        // No cap on the row count: a daily feed makes this ~30 rows. An
-        // intraday feed would need a sample-down (repo::series).
+        // Cash rows show no sparkline (their prices are FX rates), so skip the query.
+        // The last 30 days, not 30 rows: a row count covers a different window when the feed's
+        // cadence changes. An intraday feed would need a sample-down (repo::series).
         let spark: Vec<Decimal> = if b.kind == "cash" {
             Vec::new()
         } else {
@@ -414,25 +352,17 @@ pub async fn holdings(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<HoldingR
 
 pub struct PricePointRow {
     pub ts: DateTime<Utc>,
-    /// In the price row's own currency (the listing's quote).
     pub unit_price: Decimal,
-    /// The same price in the holding's account currency, at that day's rates:
-    /// the domain lots are recorded in, so it can sit next to them. Null when
-    /// either rate is unknown.
+    /// In the holding's account currency, the one lots are recorded in. Null when either rate is
+    /// unknown.
     pub account_price: Option<Decimal>,
-    /// The same price in the reader's currency at that day's rates. Null when
-    /// either rate is unknown.
+    /// In the reader's currency. Null when either rate is unknown.
     pub reporting_price: Option<Decimal>,
-    /// Shares held that day as the lots explain them. Null before the first lot.
     pub qty: Option<Decimal>,
-    /// Cost basis that day (`lot_basis`), in the account's currency. Null
-    /// before the first lot.
     pub invested: Option<Decimal>,
-    /// `invested` in the reader's currency. Null when either rate is unknown.
     pub reporting_invested: Option<Decimal>,
 }
 
-/// `NotFound` when the holding isn't the user's.
 pub async fn holding_prices(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -485,8 +415,7 @@ pub async fn holding_prices(
         left join rates rp on rp.currency = pts.rep and rp.as_of = pts.day
         cross join lots
         left join basis b on b.as_of = pts.day
-        -- No position before the first lot. A holding with no lot at all (a
-        -- provider that reports balances only) is held flat at its quantity.
+        -- A holding with no lot at all (a balances-only provider) is held flat at its quantity.
         left join lateral (
             select case when lots.first_day is null then lots.held
                         else b.explained_qty end as qty,
@@ -520,9 +449,6 @@ pub struct AccountRow {
     pub provider_key: String,
 }
 
-/// One row per account valued today (`account_values_today`, from the same
-/// `holding_day_values` as the net-worth chart), so the accounts grid sums to
-/// the chart's last point.
 pub async fn accounts(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<AccountRow>, CoreError> {
     let rows = sqlx::query_as!(
         AccountRow,
@@ -561,8 +487,6 @@ pub struct AccountSeriesRow {
     pub value: Option<Decimal>,
 }
 
-/// Stacked-area source: each account's value per day over a window, from the
-/// same valuation as [`net_worth_series`].
 pub async fn account_series(
     pool: &sqlx::PgPool,
     user_id: Uuid,

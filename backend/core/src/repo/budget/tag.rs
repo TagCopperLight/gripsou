@@ -1,5 +1,4 @@
-//! Tag CRUD. A tag is free-form and cross-cutting: unlike a category it is
-//! never summed and never exclusive, so it carries no kind and no hint.
+//! Tag CRUD. A tag is never summed and never exclusive, so it carries no kind and no hint.
 
 use uuid::Uuid;
 
@@ -80,8 +79,6 @@ pub async fn update_tag(
     Ok(row)
 }
 
-/// Deleting a tag removes it from every transaction (the join table cascades)
-/// and nothing else: no aggregate counts it.
 pub async fn delete_tag(pool: &sqlx::PgPool, user_id: Uuid, id: Uuid) -> Result<bool, CoreError> {
     let done = sqlx::query!(
         "delete from budget_tag where id = $1 and user_id = $2",

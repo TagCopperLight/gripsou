@@ -1,5 +1,4 @@
-//! Budget pipeline stages that are not persistence: internal-transfer
-//! pairing, the AI run, and the Overview arithmetic.
+//! Budget pipeline stages that are not persistence.
 
 pub mod ai;
 pub mod ai_cost;

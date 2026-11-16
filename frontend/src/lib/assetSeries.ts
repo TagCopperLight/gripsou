@@ -1,17 +1,13 @@
 import type { PricePoint } from "../api/wire";
 
-// Return over the displayed window, rebased so the window starts at 0%:
-// profit made since the start, over the capital that was at work for it.
-// ponytail: simple-Dietz denominator (start value + net contributions since),
-// not time-weighted — a big deposit late in the window still flatters it
-// slightly. Swap for TWR if that ever matters.
+// Return over the displayed window, rebased to start at 0%.
+// ponytail: simple-Dietz denominator (start value + net contributions since), not time-weighted: a big late deposit flatters it slightly. Swap for TWR if that matters.
 export function windowReturn(
   values: [number, number | null][],
   invested: [number, number | null][],
 ): [number, number | null][] {
   const investedAt = new Map(invested);
-  // A day without a value (no rate) stays a gap, and the window starts at
-  // the first day with one.
+  // A day without a value (no rate) stays a gap; the window starts at the first day with one.
   const start = values.find(([, v]) => v !== null);
   const v0 = start?.[1] ?? 0;
   const inv0 = (start && investedAt.get(start[0])) ?? 0;
@@ -26,10 +22,7 @@ export function windowReturn(
 
 type Point = [number, number];
 
-/** The asset tab's chart and header: the unit price over the window, in the
- *  price row's currency or, when `reporting`, in the reader's (days without a
- *  rate dropped). The header is the current price, or the converted series'
- *  last point. */
+/** Header is the current price, or the converted series' last point. */
 export function priceChart(prices: PricePoint[], currentPrice: string, reporting: boolean) {
   const points: Point[] = reporting
     ? prices.filter((p) => p.reportingPrice !== null).map((p) => [p.t, Number(p.reportingPrice)])
@@ -44,11 +37,7 @@ export function priceChart(prices: PricePoint[], currentPrice: string, reporting
   };
 }
 
-/** The purchases tab's chart and header: the position's value and invested
- *  lines, both in the account's currency or, when `reporting`, in the
- *  reader's. Days before the first lot or without a rate are dropped. The
- *  header is the chart's own last point. The gain is the value's change minus
- *  what was bought or sold meanwhile: a purchase is money put in, not a gain. */
+/** Days before the first lot or without a rate are dropped. The gain is the value's change minus what was bought or sold meanwhile: a purchase is money put in, not a gain. */
 export function positionChart(prices: PricePoint[], reporting: boolean) {
   const value: Point[] = [];
   const invested: Point[] = [];

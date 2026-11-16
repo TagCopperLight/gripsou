@@ -17,7 +17,6 @@ function renderSurface() {
 const writes = (method: string) =>
   vi.mocked(fetch).mock.calls.filter(([, i]) => (i as RequestInit | undefined)?.method === method);
 
-/** Opens the window of a new tag and types its name. */
 async function newTag(name: string) {
   renderSurface();
   await screen.findByText("Holiday");

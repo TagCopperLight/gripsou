@@ -5,9 +5,7 @@ import { showError } from "../lib/errorToasts";
 import { useReauth } from "../api/auth";
 import { passwordError } from "./throttle";
 
-/** The password check before a sensitive change. `check()` trades the password
- *  for a reauth token, or shows why it can't (throttled, wrong password, or
- *  a failure of the check itself, in the corner) and returns null. The error line is the modal's to reuse. */
+/** `check()` returns null after showing why it failed. The error line is the modal's to reuse. */
 export function useReauthStep() {
   const { t } = useTranslation();
   const reauth = useReauth();
@@ -19,8 +17,7 @@ export function useReauthStep() {
     try {
       return (await reauth.mutateAsync(password)).reauth;
     } catch (err) {
-      // Throttled or a wrong password: the user's to fix, next to the field.
-      // Anything else failed on the server's side.
+      // Throttled or a wrong password is the user's to fix.
       const typed = passwordError(t, err);
       if (typed) setError(typed);
       else showError(t("auth.reauthFailed"));
@@ -28,7 +25,6 @@ export function useReauthStep() {
     }
   };
 
-  // A new attempt being typed: the last one's error no longer applies.
   const typePassword = (value: string) => {
     setPassword(value);
     setError(null);

@@ -75,7 +75,7 @@ describe("useCreateBudgetCategory", () => {
 });
 
 describe("useReorderBudgetCategories", () => {
-  it("refreshes the category list only — nothing else reads the order", async () => {
+  it("refreshes only the category list, since nothing else reads the order", async () => {
     stubFetch(async () => new Response(null, { status: 204 }));
     const { client, wrapper } = appWrapper();
     client.setQueryData(keys.budgetCategories(), [GROCERIES]);
@@ -113,7 +113,7 @@ describe("useDeleteBudgetCategory", () => {
 });
 
 describe("useCreateBudgetTag", () => {
-  it("POSTs the body and refreshes only the tag list — a new tag is on no row", async () => {
+  it("POSTs the body and refreshes only the tag list, since a new tag is on no row", async () => {
     stubFetch(async () => jsonResponse(HOLIDAY, 201));
     const { client, wrapper } = appWrapper();
     client.setQueryData(keys.budgetTags(), []);

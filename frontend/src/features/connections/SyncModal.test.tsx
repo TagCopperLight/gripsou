@@ -39,11 +39,9 @@ describe("SyncModal", () => {
     renderWithApp(<SyncModal onClose={() => {}} />);
     expect(await screen.findByText("My bank")).toBeInTheDocument();
     expect(screen.queryByText(/powens/i)).not.toBeInTheDocument();
-    // Accounts are collapsed until the row is expanded.
     expect(screen.queryByText("Checking")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("My bank"));
     expect(screen.getByText("Checking")).toBeInTheDocument();
-    // No account type: the Accounts page shows it.
     expect(screen.queryByText("Savings")).not.toBeInTheDocument();
   });
 

@@ -14,10 +14,7 @@ export function Sparkline({
   className = "",
 }: SparklineProps) {
   const gradientId = useId();
-  // The colour is the window's own direction and nothing else: green when this
-  // month ended above where it started, red otherwise. Deliberately NOT the
-  // holding's all-time gain — a position bought two years ago and still under
-  // water can have had a good month, and this chart is about the month.
+  // Colour is the month's own direction (green if it ended above where it started), not the holding's all-time gain.
   const last = data.at(-1) ?? 0;
   const stroke =
     last >= (data[0] ?? 0) ? "var(--color-green)" : "var(--color-red)";

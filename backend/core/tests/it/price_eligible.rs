@@ -71,10 +71,7 @@ async fn foreign_cash_is_price_eligible_but_pivot_cash_is_not(pool: PgPool) -> a
 async fn foreign_security_reaches_its_currencys_cash_instrument(
     pool: PgPool,
 ) -> anyhow::Result<()> {
-    // A USD equity held in an otherwise EUR account never has a USD *cash*
-    // position of its own. The eligibility query must still surface a USD
-    // cash instrument so the FX rate can be fetched -- otherwise fx_asof
-    // ('USD') is NULL forever and the holding's `invested` stays at zero.
+    // A foreign security never makes its own-currency cash instrument exist. The query must still surface it, or `fx_asof` stays NULL.
     let conn_id = seed_connection(&pool).await;
     let mut usd_equity = equity_holding(
         "acct-1",
@@ -89,17 +86,13 @@ async fn foreign_security_reaches_its_currencys_cash_instrument(
         conn_id,
         &SyncResult {
             accounts: vec![checking_account("acct-1")],
-            // No USD cash holding at all -- only the foreign security.
             holdings: vec![usd_equity],
             ..Default::default()
         },
     )
     .await?;
 
-    // fetch_prices_for_connection creates the missing USD cash instrument
-    // before running the eligibility query: a foreign security never makes a
-    // cash instrument in its own currency exist on its own. No providers are
-    // needed for that step.
+    // The fetch creates the missing USD cash instrument before the eligibility query; no providers needed.
     let providers: Vec<Box<dyn PriceProvider>> = vec![];
     fetch_prices_for_connection(&pool, conn_id, &providers).await?;
 
@@ -116,9 +109,7 @@ async fn foreign_security_reaches_its_currencys_cash_instrument(
     Ok(())
 }
 
-/// The reporting currency is a divisor and nothing else — no holding,
-/// price or account carries it — so it would never become rate-eligible on its
-/// own, and every figure would stay left out for want of a rate.
+/// The reporting currency is only a divisor, so it never becomes rate-eligible on its own.
 #[gripsou_core::testkit::db_test]
 async fn the_reporting_currency_is_price_eligible_even_when_nothing_is_held_in_it(
     pool: PgPool,
@@ -134,7 +125,6 @@ async fn the_reporting_currency_is_price_eligible_even_when_nothing_is_held_in_i
         },
     )
     .await?;
-    // An all-EUR install whose owner reads in dollars.
     sqlx::query(
         "update users set currency = 'USD'
          where id = (select user_id from connection where id = $1)",

@@ -5,13 +5,10 @@ import { Button } from "./Button";
 type ErrorStateProps = {
   title: string;
   detail: string;
-  /** The way out (Retry, Reload); none when there is nothing to do. */
   action?: { label: string; onClick: () => void };
   className?: string;
 };
 
-/** Something that couldn't be shown: a card that couldn't load, or a page
- *  that broke. A red icon, what went wrong, and the way out under it. */
 export function ErrorState({ title, detail, action, className = "" }: ErrorStateProps) {
   return (
     <div role="alert" className={`flex flex-col items-center justify-center gap-2.5 text-center ${className}`}>

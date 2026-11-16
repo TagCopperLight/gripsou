@@ -9,26 +9,19 @@ type ColorSwatchGridProps<C extends string | null> = {
   value: C;
   onChange: (color: C | string) => void;
   disabled?: boolean;
-  /** Accessible name of a preset swatch. */
   swatchLabel: (color: string) => string;
-  /** Accessible name of the free-pick swatch. */
   customLabel: string;
-  /** Given, a "no colour" swatch ends the row (`onChange(null)`). */
   clearLabel?: string;
 };
 
-/** One row of preset swatches, then a swatch that opens our colour picker
- *  for anything off the palette. The row fills a form's width. */
 export function ColorSwatchGrid<C extends string | null>({
   value, onChange, disabled = false, swatchLabel, customLabel, clearLabel,
 }: ColorSwatchGridProps<C>) {
   const picker = usePopover();
   const open = picker.key !== null;
-  // The picker swatch stands in for "a colour off the palette", so it only
-  // reads as selected when the current colour is not one of the presets.
+  // Selected only when the current colour is not a preset.
   const custom = value !== null && !BUDGET_PALETTE.includes(value);
   const swatch = "aspect-square w-full rounded-lg flex items-center justify-center cursor-pointer transition-transform duration-140";
-  // The palette, the free pick and, when offered, the "no colour" swatch.
   const count = BUDGET_PALETTE.length + 1 + (clearLabel === undefined ? 0 : 1);
 
   return (
@@ -59,8 +52,7 @@ export function ColorSwatchGrid<C extends string | null>({
         <Pencil className={`size-3.5 ${custom ? "text-black/80" : "text-fg-faint"}`} />
       </button>
       {clearLabel !== undefined && (
-        // "No colour" drawn as an empty square struck through, last, so the
-        // colours sit at the same place in every picker, with or without it.
+        // Last, so colours sit in the same place with or without it.
         <button
           type="button"
           disabled={disabled}

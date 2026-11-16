@@ -44,7 +44,6 @@ async fn add_dividend(pool: &PgPool, account_id: Uuid, on: &str, amount: &str) {
     .unwrap();
 }
 
-/// A user with one EUR account holding `qty` shares; returns (user, account, holding).
 async fn seed(pool: &PgPool, qty: &str) -> (Uuid, Uuid, Uuid) {
     let (user_id, conn_id) = seed_user_and_connection(pool).await;
     let mut conn = pool.acquire().await.unwrap();

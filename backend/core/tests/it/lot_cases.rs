@@ -1,5 +1,4 @@
-//! The server's lot rules against `shared/lot-cases.json`, which the
-//! frontend's copies (`frontend/src/lib/lotRules.ts`) run through too.
+//! The server's lot rules against `shared/lot-cases.json`, which the frontend also runs.
 
 use chrono::NaiveDate;
 use gripsou_core::repo::lot::{InvalidLot, LotSide, NewLot};
@@ -32,7 +31,6 @@ struct ValidationCase {
     quantity: String,
     unit_price: String,
     fee: Option<String>,
-    /// The frontend's reason code (`LotValidationError`).
     refused: Option<String>,
 }
 
@@ -41,7 +39,6 @@ fn cases() -> Cases {
         .expect("shared/lot-cases.json matches the cases' shape")
 }
 
-/// The frontend's reason code for a refusal.
 fn reason(err: InvalidLot) -> &'static str {
     match err {
         InvalidLot::NotADecimal(_) => "invalidNumber",

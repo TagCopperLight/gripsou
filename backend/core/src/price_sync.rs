@@ -1,7 +1,4 @@
-//! Per-connection price-fetch pass. Runs after `ingest()`. Reads the resolved
-//! symbol from `meta` (resolving + caching on first sight), re-fetches a
-//! trailing window ending at today, and upserts price rows. Every per-
-//! instrument error is non-fatal: it's logged and the pass continues.
+//! Per-connection price-fetch pass, after `ingest()`. A per-instrument error is logged and the pass continues.
 
 use chrono::Duration;
 use uuid::Uuid;
@@ -11,21 +8,11 @@ use crate::provider::PriceProvider;
 use crate::repo::instrument::{InstrumentRow, ensure_cash, mark_unresolved, set_symbol};
 use crate::repo::price::{has_fx_rate, insert_prices, latest_price_ts, market_today};
 
-/// How far back of already-stored history each pass re-requests.
+/// How far back of stored history each pass re-requests.
 ///
-/// Asking Yahoo only for bars newer than `max(ts)` loses days for good: the
-/// tail of Yahoo's daily series is its least stable part, and a bar absent
-/// from the one response whose window covered it would never be asked for
-/// again, since the next request begins after it. Two instances polling at the
-/// same instant get different responses and fork.
-///
-/// Re-asking for a trailing window makes a dropped bar self-heal on the next
-/// pass, and `insert_prices` is an upsert, so a bar we already have costs
-/// nothing to see again. It is also the same single HTTP request either way —
-/// the window only widens the response, not the round trips.
-///
-/// 30 days rather than a handful so a gap survives a week of failed syncs, a
-/// holiday, or a laptop that was closed.
+/// Asking only for bars newer than `max(ts)` loses days for good: the tail of Yahoo's daily series is its
+/// least stable part, and a bar missing from one response would never be asked for again. A trailing
+/// window self-heals, and `insert_prices` is an upsert. 30 days so a gap survives a week of failed syncs.
 const REFETCH_DAYS: i64 = 30;
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -34,17 +21,13 @@ pub struct PriceSyncSummary {
     pub prices_inserted: usize,
     pub skipped_fresh: usize,
     pub unresolved: usize,
-    /// Points dropped because Yahoo reported no currency for the listing at all,
-    /// so there is nothing to convert them from.
+    /// Dropped because Yahoo reported no currency for the listing.
     pub skipped_unlabelled: usize,
-    /// Listings whose fetch failed.
     pub failed: usize,
 }
 
-// An FX rate can only be stored against a cash instrument, and cash instruments
-// otherwise only appear when a user actually holds cash in that currency. So
-// every currency this connection converts through gets one (instrument rows are
-// global, shared across users).
+// An FX rate can only be stored against a cash instrument, which otherwise exists only when a user holds
+// that currency, so every currency this connection converts through gets one.
 async fn ensure_cash_instruments_for_held_currencies(
     conn: &mut sqlx::PgConnection,
     connection_id: Uuid,
@@ -80,12 +63,8 @@ pub async fn fetch_prices_for_connection(
     Ok(summary)
 }
 
-/// Distinct non-cash instruments held (nonzero quantity) under a connection,
-/// plus the cash instrument (the FX rate) for every currency this connection
-/// needs a rate for, excluding the pivot (`connection_fx_currencies`, which
-/// says why each one is needed).
-///
-/// Drives the per-connection price-fetch pass.
+/// Distinct non-cash instruments held under a connection, plus the cash instrument (the FX rate) for every
+/// currency it needs a rate for, excluding the pivot (`connection_fx_currencies`).
 pub async fn price_eligible_instruments_for_connection(
     pool: &sqlx::PgPool,
     connection_id: Uuid,
@@ -110,8 +89,7 @@ pub async fn price_eligible_instruments_for_connection(
 
         union
 
-        -- Foreign cash is eligible: its "price" is the FX rate. Cash in the
-        -- pivot is 1 by definition and has no Yahoo pair.
+        -- Foreign cash is eligible (its "price" is the FX rate); pivot cash is 1 and has no Yahoo pair.
         select fx.id       as "id!",
                fx.kind     as "kind!",
                fx.symbol,
@@ -131,12 +109,9 @@ pub async fn price_eligible_instruments_for_connection(
     Ok(rows)
 }
 
-/// Makes sure a rate into `currency` is stored, fetching it now rather than at
-/// the next sync. For a reader switching their currency: their figures are
-/// converted at read time, and with no rate they are left out. True when a
-/// rate is stored afterwards (`pivot`, the currency rates are stored in,
-/// needs none); a provider failure is logged and reads as false, so the
-/// caller decides.
+/// Fetches the rate now rather than at the next sync, for a reader switching currency: with no rate their
+/// figures are left out. True when a rate is stored afterwards (`pivot` needs none); a provider failure is
+/// logged and reads as false.
 pub async fn ensure_fx_rate(
     pool: &sqlx::PgPool,
     providers: &[Box<dyn PriceProvider>],
@@ -153,9 +128,7 @@ pub async fn ensure_fx_rate(
     has_fx_rate(&mut *conn, currency).await
 }
 
-/// One instrument's pass: resolve its symbol (cached), then fetch and upsert
-/// its trailing window. Provider failures are logged and counted, never
-/// returned; only database errors are.
+/// Provider failures are logged and counted, never returned; only database errors are.
 async fn fetch_instrument(
     conn: &mut sqlx::PgConnection,
     providers: &[Box<dyn PriceProvider>],
@@ -209,11 +182,8 @@ async fn fetch_instrument(
     let since = latest.map(|ts| ts - Duration::days(REFETCH_DAYS));
     match provider.fetch_prices(&symbol, since).await {
         Ok(points) => {
-            // Store points in whatever currency the listing is quoted in;
-            // unit_value_asof converts at read time from the price row's own
-            // currency. One Yahoo response is one listing, hence one
-            // currency. A point with no currency at all is unconvertible, so
-            // the batch is dropped rather than silently mislabelled.
+            // Points are stored in the listing's own currency (`unit_value_asof` converts at read time). A point with
+            // no currency at all is unconvertible, so the batch is dropped rather than mislabelled.
             let currency = points
                 .first()
                 .map(|p| p.currency.clone())

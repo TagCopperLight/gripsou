@@ -13,9 +13,7 @@ import { renderWithApp, stubFetch } from "../../../test/kit";
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 
-// The page mounts two ECharts widgets (Sankey + Trend). jsdom has no real
-// canvas 2D context, and tearing two charts down in one act() batch throws
-// from zrender's teardown (`TypeError: null.clearRect`).
+// jsdom has no canvas 2D context, and tearing two charts down in one act() batch throws from zrender (`null.clearRect`).
 vi.mock("../../../ui/EChart", () => ({
   default: () => <div data-testid="chart-stub" />,
 }));
@@ -51,16 +49,13 @@ const AI_STATUS = {
   lastRun: null,
 };
 
-/** A local-noon timestamp in `month`, as a transaction row's `t`. */
 const inMonth = (month: string) => {
   const [y, m] = month.split("-").map(Number);
   return new Date(y, m - 1, 15, 12).getTime();
 };
 
 type Data = {
-  /** The newest row's month, or null for no transactions at all. */
   latest?: string | null;
-  /** How many rows lie before the month asked about. */
   before?: number;
 };
 
@@ -150,7 +145,6 @@ describe("BudgetOverview", () => {
     stubApi({ ...SUMMARY, txnCount: 0, breakdown: [] });
     renderPage();
     await waitFor(() => expect(screen.getByTestId("empty-period")).toBeVisible());
-    // The figures stay — at zero, which is a true statement about the period.
     expect(screen.getByTestId("figure-income")).toBeVisible();
     expect(screen.queryByTestId("sankey-see-transactions")).toBeNull();
     expect(screen.queryByTestId("breakdown-row-cat:c1")).toBeNull();
@@ -165,7 +159,6 @@ describe("BudgetOverview", () => {
     );
     expect(requested(`month=${lastMonth}`)).toBe(true);
     expect(requested(`month=${currentMonth()}`)).toBe(false);
-    // The latest data is the forward edge.
     expect(screen.getByTestId("period-next")).toBeDisabled();
   });
 
@@ -210,11 +203,9 @@ describe("BudgetOverview", () => {
     expect(navigate).toHaveBeenCalledWith({ to: "/budget/transactions" });
     const filters = JSON.parse(screen.getByTestId("filters").textContent!);
     expect(filters.categoryIds).toEqual(["c1"]);
-    // The period itself, not a label: the chip is worded at render time, in
-    // whatever language is current then.
+    // The period itself, not a label: the chip is worded at render time.
     expect(filters.period).toEqual({ mode: "month", month: currentMonth() });
     expect(filters.from).toBe(`${currentMonth()}-01`);
-    // The select shows the dates that apply, not "All time".
     expect(filters.timeFrame).toBe("custom");
   });
 
@@ -226,14 +217,11 @@ describe("BudgetOverview", () => {
     const filters = JSON.parse(screen.getByTestId("filters").textContent!);
     expect(filters.needsReview).toBe(false);
     expect(filters.transfers).toBe(false);
-    // The reader's own narrowing stays.
     expect(filters.search).toBe("aldi");
   });
 
   it("writes the flag and the outflow bucket for the uncategorised row", async () => {
-    // It has no id to filter on. `bucket: "out"` is required as well as the
-    // flag: the breakdown counts only the outflow half, while the flag alone
-    // would also match uncategorised income.
+    // `bucket: "out"` is needed too: the flag alone would also match uncategorised income.
     stubApi({
       ...SUMMARY,
       breakdown: [{ slice: { kind: "uncategorised" }, amount: "180.00", txnCount: 9 }],
@@ -250,9 +238,7 @@ describe("BudgetOverview", () => {
   });
 
   it("does not let a stale slice filter from an earlier deep link survive a later one", async () => {
-    // Uncategorised first (sets uncategorized:true, bucket:"out"), then a
-    // category row: without a reset, patchFilters' merge would leave BOTH
-    // set, which the backend ANDs into an always-empty list.
+    // Without a reset, patchFilters' merge would leave both set, which the backend ANDs into an empty list.
     stubApi({
       ...SUMMARY,
       breakdown: [

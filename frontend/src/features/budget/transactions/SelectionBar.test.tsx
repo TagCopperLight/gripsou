@@ -96,7 +96,6 @@ describe("SelectionBar", () => {
       const handlers = renderBar();
       fireEvent.click(screen.getByText("pick-a"));
 
-      // First session: open, toggle both tags, save — a single flush with both ids.
       fireEvent.click(screen.getByLabelText("Add tags"));
       fireEvent.click(await screen.findByTestId("chooser-option-t1"));
       fireEvent.click(await screen.findByTestId("chooser-option-t2"));
@@ -105,8 +104,6 @@ describe("SelectionBar", () => {
       expect(handlers.onAddTags).toHaveBeenCalledTimes(1);
       expect(handlers.onAddTags).toHaveBeenCalledWith(["t1", "t2"]);
 
-      // Second session: reopen and save is unavailable with nothing pending,
-      // so the first session's set cannot be re-sent.
       fireEvent.click(screen.getByLabelText("Add tags"));
       await screen.findByTestId("chooser-option-t1");
       expect(screen.getByTestId("chooser-save")).toBeDisabled();

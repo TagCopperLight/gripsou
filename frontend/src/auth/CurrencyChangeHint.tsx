@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { CircleAlert } from "lucide-react";
 import type { CurrencyPick } from "./useCurrencyChange";
 
-/** What a currency pick is waiting for, or why it was refused; `idle` otherwise. */
 export function CurrencyChangeHint({ pick, idle = null }: { pick: CurrencyPick; idle?: ReactNode }) {
   const { t } = useTranslation();
   if (pick?.state === "fetching") return t("fx.fetching", { currency: pick.code });

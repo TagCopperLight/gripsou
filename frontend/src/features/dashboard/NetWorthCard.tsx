@@ -26,18 +26,14 @@ import { legendItems, numberOrNull, plotSeries, type ChartSeries, type ChartUnit
 export function NetWorthCard({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
   const readerCurrency = usePrefs().currency;
-  // One eye for the headline and the gain; the percentage is never masked.
   const privacy = usePrivacy();
   const [range, setRange] = useState<Range>(DEFAULT_RANGE);
   const [unit, setUnit] = useState<ChartUnit>("value");
   const { data, isPending, isPlaceholderData, refetch } = useNetWorth(range);
-  // Counts what the headline leaves out; shares the holdings card's query.
   const excluded = useFxExcludedCount();
   const ready = data !== undefined;
-  // No points means no accounts (the server sends none then): a 0 €
-  // headline, a gain pill and a flat line would only look like data.
+  // No points means no accounts: a 0 € headline, gain pill and flat line would only look like data.
   const empty = ready && data.points.length === 0;
-  // A new range keeps the last one's figures on screen, dimmed, until its own arrive.
   const stale = staleClass(isPlaceholderData);
 
   const UNIT_OPTIONS = [
@@ -51,8 +47,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
     { value: "percent", label: "%" },
   ];
 
-  // Net worth (green area) over capital invested (dashed). The legend is read
-  // off the plotted series, so it turns red with the line.
+  // The legend is read off the plotted series, so it turns red with the line.
   const points = data?.points ?? [];
   const series: ChartSeries[] = [
     { name: t("dashboard.netWorth.capitalInvested"), data: points.map((p) => [p.t, numberOrNull(p.invested)]), color: FG_FAINT, dashed: true },
@@ -113,7 +108,6 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
             className="mt-4 h-80"
           />
         )}
-        {/* Last, after the phone's range row too. */}
         {ready && !empty && data.summary.fxMissing && <ExcludedFootnote count={excluded} className="order-last mt-3" />}
       </LoadingFrame>
     </Surface>

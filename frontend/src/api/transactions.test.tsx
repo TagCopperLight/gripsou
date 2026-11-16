@@ -97,7 +97,7 @@ describe("transaction mutations", () => {
     expect(lastBody()).toEqual({ categoryId: null });
   });
 
-  it("sends the whole tag set on a tag write — the server has no add/remove split", async () => {
+  it("sends the whole tag set on a tag write, since the server has no add/remove split", async () => {
     const { result } = renderHook(() => usePatchTransaction(), appWrapper());
     await result.current.mutateAsync({ id: "tx-1", body: { tagIds: ["t1", "t2"] } });
     expect(lastBody()).toEqual({ tagIds: ["t1", "t2"] });
@@ -144,8 +144,7 @@ describe("transaction mutations", () => {
 });
 
 describe("the list, the counts and select-all-shown read one filter", () => {
-  // `Required` makes adding a filter field without setting it here a type
-  // error, so a new field cannot slip past this comparison.
+  // `Required` makes a new filter field a type error until it is set here.
   const EVERY_FIELD: Required<TransactionFilterQuery> = {
     search: "leclerc",
     accountId: "acc-1",

@@ -1,5 +1,4 @@
-/** A connection's problem, as a dot on its logo's top-right corner (the logo's
- *  wrapper must be `relative`). The ring matches the surface behind it. */
+/** A connection's problem as a dot on its logo's top-right corner (the wrapper must be `relative`). */
 export function AlertDot({ alert, className = "" }: { alert: "error" | "warning" | null; className?: string }) {
   if (!alert) return null;
   return (

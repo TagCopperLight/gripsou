@@ -26,8 +26,6 @@ fn pea_account(external_id: &str) -> CanonicalAccount {
     }
 }
 
-/// Seed one cash holding on `acct`, its snapshot on `snapshot_day`, and return
-/// (account_id, holding_id).
 async fn seed_cash(
     pool: &PgPool,
     conn_id: Uuid,
@@ -79,9 +77,6 @@ async fn backfill_rows_on(pool: &PgPool, holding_id: Uuid, day: NaiveDate) -> i6
         .unwrap()
 }
 
-/// A row of `(as_of, quantity, value)`, ordered by day. Comparing
-/// this vector between two runs (rather than just row counts) is what makes
-/// an idempotence test actually catch a value-shifting bug.
 async fn backfill_digest(pool: &PgPool, holding_id: Uuid) -> Vec<(NaiveDate, Decimal, Decimal)> {
     sqlx::query_as(
         "select as_of, quantity, value from holding_backfill \
@@ -97,8 +92,6 @@ async fn backfill_digest(pool: &PgPool, holding_id: Uuid) -> Vec<(NaiveDate, Dec
 async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
-    // Balance is 100 on the 10th, after a +30 deposit on the 5th and a -10 fee
-    // on the 8th. So it was 110 on the 5th..7th and 80 before the deposit.
     let (_account_id, holding_id) =
         seed_cash(&pool, conn_id, &acct, dec("100"), d(2026, 1, 10)).await;
 
@@ -114,8 +107,6 @@ async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Re
     let written = testkit::backfill(&pool, conn_id).await?;
     assert!(written > 0, "backfill wrote nothing");
 
-    // A movement dated `d` is already in the balance *on* `d`, so it is undone
-    // only when walking past it to `d-1`.
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 9)).await,
         Some(dec("100"))
@@ -132,12 +123,10 @@ async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Re
         quantity_on(&pool, holding_id, d(2026, 1, 5)).await,
         Some(dec("110"))
     );
-    // Flat before the earliest transaction.
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 4)).await,
         Some(dec("80"))
     );
-    // The snapshot day itself keeps its snapshot and gains no derived row.
     assert_eq!(
         backfill_rows_on(&pool, holding_id, d(2026, 1, 10)).await,
         0,
@@ -146,9 +135,7 @@ async fn walks_cash_backward_from_the_later_snapshot(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// A PEA counts every type like any other account. Within its own
-/// history each provider buy is funded by a transfer-in on record, so counting
-/// both walks back to the bank's real balances.
+/// A PEA counts every type like any other account: each provider buy is funded by a transfer-in on record.
 #[gripsou_core::testkit::db_test]
 async fn pea_cash_counts_transfer_buy_and_sell(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -167,7 +154,6 @@ async fn pea_cash_counts_transfer_buy_and_sell(pool: PgPool) -> anyhow::Result<(
     }
     testkit::backfill(&pool, conn_id).await?;
 
-    // Walking back from 150: -12 dividend, -100 sell, +480 buy, -500 transfer.
     for (day, want) in [(8, "150"), (7, "138"), (6, "38"), (5, "518"), (4, "18")] {
         assert_eq!(
             quantity_on(&pool, holding_id, d(2026, 1, day)).await,
@@ -178,7 +164,6 @@ async fn pea_cash_counts_transfer_buy_and_sell(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-/// Seed a EUR security holding on `account_id` and one lot on it.
 async fn seed_lot(
     pool: &PgPool,
     account_id: Uuid,
@@ -201,7 +186,6 @@ async fn seed_lot(
     .await;
 }
 
-/// A cash row entered by hand: no `external_id`.
 async fn manual_txn(pool: &PgPool, account_id: Uuid, kind: &str, amount: &str, day: NaiveDate) {
     sqlx::query(
         "insert into transaction (account_id, spent_on, booked_on, type, amount, description) \
@@ -216,10 +200,7 @@ async fn manual_txn(pool: &PgPool, account_id: Uuid, kind: &str, amount: &str, d
     .unwrap();
 }
 
-/// Before the provider's history starts, the user's own record is the only one
-/// there is: hand-entered deposits bring cash in and lots take it out. After
-/// it starts, the provider's buy row is the cash leg and the lot must not count
-/// a second time.
+/// Before the provider's history starts the user's own record explains the cash; after it, the provider's buy row is the cash leg and the lot must not count again.
 #[gripsou_core::testkit::db_test]
 async fn lots_move_cash_before_the_provider_history_when_deposits_were_entered(
     pool: PgPool,
@@ -235,7 +216,6 @@ async fn lots_move_cash_before_the_provider_history_when_deposits_were_entered(
     ] {
         upsert_transaction(&mut conn, account_id, &t).await?;
     }
-    // Covered by the provider's buy row above: must not move cash again.
     seed_lot(
         &pool,
         account_id,
@@ -244,7 +224,6 @@ async fn lots_move_cash_before_the_provider_history_when_deposits_were_entered(
         ("6", "17.95", "0.55"),
     )
     .await;
-    // Before the provider history: only the user's record explains the cash.
     manual_txn(&pool, account_id, "transfer", "55", d(2025, 12, 2)).await;
     seed_lot(
         &pool,
@@ -261,7 +240,6 @@ async fn lots_move_cash_before_the_provider_history_when_deposits_were_entered(
         (d(2026, 1, 15), "112.60"),
         (d(2026, 1, 13), "62.60"),
         (d(2025, 12, 2), "62.60"),
-        // +55 deposit, -(19 x 5.316 + 0.51) = -101.514 purchase.
         (d(2025, 12, 1), "109.114"),
     ] {
         assert_eq!(
@@ -273,8 +251,7 @@ async fn lots_move_cash_before_the_provider_history_when_deposits_were_entered(
     Ok(())
 }
 
-/// Lots alone, with no hand-entered deposits, leave the pre-history cash flat:
-/// counting only the purchases would inflate cash going back in time.
+/// Lots alone leave the pre-history cash flat: counting only the purchases would inflate it.
 #[gripsou_core::testkit::db_test]
 async fn lots_alone_do_not_move_cash_before_the_provider_history(
     pool: PgPool,
@@ -309,7 +286,6 @@ async fn lots_alone_do_not_move_cash_before_the_provider_history(
     Ok(())
 }
 
-/// A non-PEA account counts a transfer the same way.
 #[gripsou_core::testkit::db_test]
 async fn non_pea_accounts_count_every_type(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -333,8 +309,7 @@ async fn non_pea_accounts_count_every_type(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Gaps *between* sparse snapshots are filled too, each from its own later
-/// anchor — not from today, so drift stays inside one gap.
+/// Gaps between sparse snapshots are each filled from their own later anchor, not from today.
 #[gripsou_core::testkit::db_test]
 async fn fills_gaps_between_snapshots_from_the_nearest_later_anchor(
     pool: PgPool,
@@ -342,8 +317,6 @@ async fn fills_gaps_between_snapshots_from_the_nearest_later_anchor(
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
     let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("100"), d(2026, 1, 10)).await;
-    // A second, later snapshot with a different balance and no transaction to
-    // explain the difference: each gap must resolve against its own anchor.
     stamp_on(&pool, holding_id, d(2026, 1, 20), dec("300"), dec("300")).await;
 
     testkit::backfill(&pool, conn_id).await?;
@@ -356,8 +329,7 @@ async fn fills_gaps_between_snapshots_from_the_nearest_later_anchor(
         quantity_on(&pool, holding_id, d(2026, 1, 9)).await,
         Some(dec("100"))
     );
-    // Neither snapshot day may also carry a derived row (the holding_point
-    // invariant: summing it would double-count the holding that day).
+    // No derived row on a snapshot day.
     assert_eq!(backfill_rows_on(&pool, holding_id, d(2026, 1, 10)).await, 0);
     assert_eq!(backfill_rows_on(&pool, holding_id, d(2026, 1, 20)).await, 0);
     Ok(())
@@ -393,7 +365,6 @@ async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::
         Some(dec("70"))
     );
 
-    // Powens corrects the amount after the fact; history must move with it.
     upsert_transaction(
         &mut conn,
         account_id,
@@ -408,15 +379,11 @@ async fn is_idempotent_and_reflects_a_corrected_amount(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-/// `transaction` carries no currency, so the cash walk
-/// only applies to the cash holding whose instrument currency matches the
-/// account's own currency — the line the provider denominates `amount` in.
-/// A second cash holding on the same account, in another currency, has no
-/// evidence and must be held flat at its anchor.
+/// `transaction` carries no currency, so only the cash holding in the account's own currency is walked; another-currency cash holding is held flat.
 #[gripsou_core::testkit::db_test]
 async fn cash_walk_is_scoped_to_the_accounts_own_currency(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
-    let acct = checking_account("acct-1"); // currency EUR
+    let acct = checking_account("acct-1");
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &acct).await?;
 
@@ -494,11 +461,7 @@ async fn cash_walk_is_scoped_to_the_accounts_own_currency(pool: PgPool) -> anyho
     Ok(())
 }
 
-/// Two accounts on the same connection, each with its own cash holding and
-/// its own transactions: covers the scope × horizon cross join, the
-/// per-holding `moves` grouping, and the delete's connection scoping. Also
-/// checks that a pre-existing `holding_backfill` row of another user's
-/// connection survives this user's delete-and-refill.
+/// Two accounts on one connection keep separate derived series; another user's backfill rows survive this user's refill.
 #[gripsou_core::testkit::db_test]
 async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
     pool: PgPool,
@@ -524,8 +487,6 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
     )
     .await?;
 
-    // A pre-existing backfill row of another user's connection must survive
-    // this user's delete-and-refill.
     let other_conn = seed_connection(&pool).await;
     let other_acct = checking_account("other-acct");
     let (other_account, other_holding) =
@@ -545,7 +506,6 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
 
     testkit::backfill(&pool, conn_id).await?;
 
-    // Each holding's derived series reflects only its own account's txns.
     assert_eq!(
         quantity_on(&pool, holding1, d(2026, 1, 4)).await,
         Some(dec("70"))
@@ -555,7 +515,6 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
         Some(dec("240"))
     );
 
-    // Untouched by this user's delete-and-refill.
     assert_eq!(
         backfill_rows_on(&pool, other_holding, d(2026, 1, 4)).await,
         other_before
@@ -563,17 +522,12 @@ async fn multi_account_backfill_is_scoped_per_account_and_per_connection(
     Ok(())
 }
 
-/// The horizon is the whole user's, not one connection's. Powens connectors
-/// expose wildly different history depths (one can be a few months, another years), and the
-/// read-side lateral is an inner join, so a holding contributes nothing before
-/// its first derived row — a per-connection horizon draws each bank popping
-/// into existence on a different day and steps net worth up as it goes.
+/// The horizon is the whole user's, not one connection's: a per-connection horizon makes each bank pop into existence on a different day and steps net worth up.
 #[gripsou_core::testkit::db_test]
 async fn horizon_spans_every_connection_of_the_user(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, shallow_conn) = testkit::seed_user_and_connection(&pool).await;
     let deep_conn = testkit::seed_connection_for(&pool, user_id).await;
 
-    // Shallow connection: balance 100 on 2026-01-10, +30 deposit on 2026-01-05.
     let shallow_acct = checking_account("shallow-1");
     let (shallow_account_id, shallow_holding) = seed_cash(
         &pool,
@@ -584,7 +538,6 @@ async fn horizon_spans_every_connection_of_the_user(pool: PgPool) -> anyhow::Res
     )
     .await;
 
-    // Deep connection: same snapshot day, but its history reaches back to June.
     let deep_acct = checking_account("deep-1");
     let (deep_account_id, _deep_holding) =
         seed_cash(&pool, deep_conn, &deep_acct, dec("50"), d(2026, 1, 10)).await;
@@ -605,7 +558,6 @@ async fn horizon_spans_every_connection_of_the_user(pool: PgPool) -> anyhow::Res
 
     testkit::backfill(&pool, shallow_conn).await?;
 
-    // Held flat all the way back to the deep connection's horizon.
     assert_eq!(
         quantity_on(&pool, shallow_holding, d(2025, 5, 31)).await,
         Some(dec("70")),
@@ -619,8 +571,6 @@ async fn horizon_spans_every_connection_of_the_user(pool: PgPool) -> anyhow::Res
         quantity_on(&pool, shallow_holding, d(2026, 1, 4)).await,
         Some(dec("70"))
     );
-    // Nothing earlier than the user's own earliest evidence, minus the one
-    // leading day that makes the flat tail visible.
     assert_eq!(
         quantity_on(&pool, shallow_holding, d(2025, 5, 30)).await,
         None
@@ -668,11 +618,7 @@ async fn horizon_ignores_other_users(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The walk must follow the day the balance moved, not the day the card was
-/// tapped. Here a −30 card purchase is spent on the 5th but booked on the 8th,
-/// with a snapshot of 100 on the 10th. The balance only dropped on the 8th, so
-/// days 8 and 9 read 100 and days 5-7 read 130 — keying on `spent_on` instead would
-/// subtract it three days early and report 130 on the 8th and 9th.
+/// The walk follows the day the balance moved (booked), not the day the card was tapped (spent).
 #[gripsou_core::testkit::db_test]
 async fn walks_on_the_booking_date_not_the_spend_date(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -711,18 +657,13 @@ async fn walks_on_the_booking_date_not_the_spend_date(pool: PgPool) -> anyhow::R
     Ok(())
 }
 
-/// The reconciliation invariant: with a complete ledger, walking back from a
-/// later snapshot must land exactly on the earlier one. This is the property
-/// real data can violate by a few euros over a couple of weeks, and the reason
-/// derived cash goes negative.
+/// Reconciliation: with a complete ledger, walking back from a later snapshot lands exactly on the earlier one.
 #[gripsou_core::testkit::db_test]
 async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
-    // Balance 100 on the 1st, 85 on the 10th. Booked movements between them:
-    // −30 (booked 4th), +20 (booked 6th), −5 (booked 9th) = −15. 100 − 15 = 85.
     let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("85"), d(2026, 1, 10)).await;
     stamp_on(&pool, holding_id, d(2026, 1, 1), dec("100"), dec("100")).await;
 
@@ -744,8 +685,6 @@ async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
     }
     testkit::backfill(&pool, conn_id).await?;
 
-    // The derived day immediately after the earlier snapshot must agree with it:
-    // nothing was booked on the 2nd, so the balance is still 100.
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 2)).await,
         Some(dec("100")),
@@ -766,23 +705,13 @@ async fn walking_back_from_a_later_snapshot_reproduces_the_earlier_one(
     Ok(())
 }
 
-/// Some banks do not send a booking date at all: they send the *statement
-/// period* every row landed in. One savings account stamps a whole fortnight of movements
-/// on the 1st or the 16th, which collapses them onto one day and craters the
-/// days just before it (well below zero on the days before each statement date).
-///
-/// The tell is a row whose money supposedly moved *before* it was spent, which
-/// cannot happen — 123 of one account's 167 rows do it. When an account shows that
-/// signature, the whole account is walked on the spend date instead.
+/// Some banks stamp a whole statement period's rows on one day. The tell is a row booked before it was spent; such an account is walked on the spend date.
 #[gripsou_core::testkit::db_test]
 async fn a_bank_that_sends_statement_periods_is_walked_on_the_spend_date(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
-    // Opening 0, then +300 (spent the 4th), −240 (spent the 10th), −40 (spent
-    // the 19th) leaves 20 on the 20th. The bank stamps them onto two statement
-    // days: the 1st and the 16th.
     let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("20"), d(2026, 1, 20)).await;
 
     let mut conn = pool.acquire().await?;
@@ -790,7 +719,6 @@ async fn a_bank_that_sends_statement_periods_is_walked_on_the_spend_date(
     for (id, amount, spent, booked) in [
         ("t1", "300", d(2026, 1, 4), d(2026, 1, 16)),
         ("t2", "-240", d(2026, 1, 10), d(2026, 1, 1)),
-        // Booked before it was spent: the signature of a statement period.
         ("t3", "-40", d(2026, 1, 19), d(2026, 1, 16)),
     ] {
         upsert_transaction(
@@ -804,9 +732,6 @@ async fn a_bank_that_sends_statement_periods_is_walked_on_the_spend_date(
     }
     testkit::backfill(&pool, conn_id).await?;
 
-    // On the statement dates the batch nets +260, so keying on them puts the
-    // 15th at 20 − 260 = −240. Keyed on the spend date only the −40 of the 19th
-    // is still ahead, so the balance was 60.
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 1, 15)).await,
         Some(dec("60")),
@@ -825,23 +750,11 @@ async fn a_bank_that_sends_statement_periods_is_walked_on_the_spend_date(
     Ok(())
 }
 
-/// The earliest snapshot anchors every derived day before it, so a
-/// reconciliation gap on that one day becomes a constant bias over the whole
-/// history. One account's first snapshot sat 25.00 below its own ledger — one card
-/// payment the balance had already taken and the bank had not yet booked — and
-/// that 25.00 pushed 1,221 derived days below zero.
-///
-/// A balance cannot be negative, and the error is a constant, so each anchored
-/// stretch that dips below zero is lifted by its own shortfall: the shape of
-/// the line is untouched, it just sits at the right height.
+/// A reconciliation gap on the earliest snapshot is a constant bias over the history, so each anchored stretch that dips below zero is lifted by its shortfall.
 #[gripsou_core::testkit::db_test]
 async fn a_stretch_that_dips_below_zero_is_lifted_to_it(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
-    // The snapshot says 0 on the 10th, but the ledger says the +50 of the 5th
-    // should have left it at 50 — the balance had already taken a −50 the bank
-    // has not reported. Walking back naively puts everything before the 5th at
-    // −50.
     let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("0"), d(2026, 1, 10)).await;
 
     let mut conn = pool.acquire().await?;
@@ -874,16 +787,13 @@ async fn a_stretch_that_dips_below_zero_is_lifted_to_it(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-/// The lift is per anchored stretch, not per holding: a gap between two sound
-/// snapshots must not be dragged up by a shortfall on some older one.
+/// The lift is per anchored stretch, not per holding.
 #[gripsou_core::testkit::db_test]
 async fn a_sound_stretch_is_not_lifted_by_another_ones_shortfall(
     pool: PgPool,
 ) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
     let acct = checking_account("acct-1");
-    // Snapshot 0 on the 10th (short by 50, as above) and 80 on the 20th, with a
-    // +80 on the 15th that reconciles the later pair exactly.
     let (_a, holding_id) = seed_cash(&pool, conn_id, &acct, dec("80"), d(2026, 1, 20)).await;
     stamp_on(&pool, holding_id, d(2026, 1, 10), dec("0"), dec("0")).await;
 
@@ -912,12 +822,7 @@ async fn a_sound_stretch_is_not_lifted_by_another_ones_shortfall(
     Ok(())
 }
 
-/// A snapshot dated after today. `stamp_snapshot` puts no upper bound on
-/// `as_of`, but the derived day axis stops at today — so such a snapshot can be
-/// an `anchor_day` that lies outside the axis. The suffix-sum CTE joins on the
-/// anchor day, and an INNER join against an axis missing it would silently drop
-/// every row anchored on it. This is the hazard the `holding_snapshot` union in
-/// `axis` exists for.
+/// A snapshot dated after today must not be dropped by the inner join against the day axis.
 #[gripsou_core::testkit::db_test]
 async fn anchors_on_a_snapshot_dated_after_today(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -937,8 +842,6 @@ async fn anchors_on_a_snapshot_dated_after_today(pool: PgPool) -> anyhow::Result
     testkit::backfill(&pool, conn_id).await?;
     drop(conn);
 
-    // Anchor holds 1000 on `future`. Walking back past the +100 deposit gives
-    // 900 for any day before it.
     assert_eq!(
         quantity_on(&pool, holding_id, today - chrono::Duration::days(4)).await,
         Some(dec("900"))
@@ -946,13 +849,7 @@ async fn anchors_on_a_snapshot_dated_after_today(pool: PgPool) -> anyhow::Result
     Ok(())
 }
 
-/// The `axis` union with `moves` is load-bearing (not merely defensive) when
-/// `anchor_day > today`: a movement dated in `(today, anchor_day]` sits
-/// inside the walk's window but is neither a `days` entry (which stops at
-/// today) nor a snapshot day. Without that union it would have no row in
-/// `axis` at all, so the left join in `moves_after` would never see it and
-/// its delta would be silently missing from every suffix sum on the walk-back
-/// side of it — not merely cancelled out, but dropped.
+/// The `axis` union with `moves` is load-bearing when `anchor_day > today`: a movement in `(today, anchor_day]` would otherwise have no axis row and its delta would be dropped.
 #[gripsou_core::testkit::db_test]
 async fn a_movement_between_today_and_a_future_anchor_is_still_subtracted(
     pool: PgPool,
@@ -965,9 +862,6 @@ async fn a_movement_between_today_and_a_future_anchor_is_still_subtracted(
         seed_cash(&pool, conn_id, &acct, dec("1000"), future_anchor).await;
 
     let mut conn = pool.acquire().await?;
-    // An older transaction just to push the horizon back past today — without
-    // any evidence before the future anchor, `start_day` itself lands after
-    // today and the derived range would be empty.
     upsert_transaction(
         &mut conn,
         account_id,
@@ -984,8 +878,6 @@ async fn a_movement_between_today_and_a_future_anchor_is_still_subtracted(
     testkit::backfill(&pool, conn_id).await?;
     drop(conn);
 
-    // The deposit at today+2 sits inside (today, future_anchor], so walking
-    // back from the future anchor's 1000 to today must subtract it.
     assert_eq!(
         quantity_on(&pool, holding_id, today).await,
         Some(dec("800")),
@@ -994,16 +886,12 @@ async fn a_movement_between_today_and_a_future_anchor_is_still_subtracted(
     Ok(())
 }
 
-/// A transaction dated after today cancels out of
-/// `Σ(> as_of) − Σ(> anchor_day)`, because it is after both bounds. It must
-/// therefore leave every derived day exactly as it was — the differential is
-/// the assertion, so this holds without knowing the absolute values.
+/// A transaction dated after today must leave every derived day unchanged.
 #[gripsou_core::testkit::db_test]
 async fn a_future_dated_transaction_changes_nothing(pool: PgPool) -> anyhow::Result<()> {
     let today = chrono::Utc::now().date_naive();
     let anchor = today - chrono::Duration::days(2);
 
-    // Same scenario twice: once clean, once with a future-dated deposit added.
     let conn_a = seed_connection(&pool).await;
     let acct_a = checking_account("acct-a");
     let (account_a, holding_a) = seed_cash(&pool, conn_a, &acct_a, dec("1000"), anchor).await;
@@ -1027,7 +915,6 @@ async fn a_future_dated_transaction_changes_nothing(pool: PgPool) -> anyhow::Res
         )
         .await?;
     }
-    // Only B gets the future-dated one.
     upsert_transaction(
         &mut conn,
         account_b,
@@ -1054,9 +941,7 @@ async fn a_future_dated_transaction_changes_nothing(pool: PgPool) -> anyhow::Res
     Ok(())
 }
 
-/// A movement landing exactly on the anchor day is INSIDE the walk's window
-/// (`day > as_of and day <= anchor_day`), and one landing exactly on the day
-/// being computed is OUTSIDE it. Both boundaries must survive the rewrite.
+/// A movement on the anchor day is inside the walk's window; one on the day being computed is outside.
 #[gripsou_core::testkit::db_test]
 async fn movements_on_the_window_boundaries(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1065,14 +950,12 @@ async fn movements_on_the_window_boundaries(pool: PgPool) -> anyhow::Result<()> 
         seed_cash(&pool, conn_id, &acct, dec("1000"), d(2026, 8, 20)).await;
 
     let mut conn = pool.acquire().await?;
-    // On the anchor day itself: inside the window, so it is subtracted.
     upsert_transaction(
         &mut conn,
         account_id,
         &txn("acct-1", "on-anchor", "deposit", dec("100")).on(d(2026, 8, 20)),
     )
     .await?;
-    // On the day being asked about: outside the window, so it is not.
     upsert_transaction(
         &mut conn,
         account_id,
@@ -1082,8 +965,6 @@ async fn movements_on_the_window_boundaries(pool: PgPool) -> anyhow::Result<()> 
     testkit::backfill(&pool, conn_id).await?;
     drop(conn);
 
-    // 1000 (anchor) - 100 (the on-anchor deposit, inside the window) = 900.
-    // The on-day deposit is excluded, so it does not appear.
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 8, 15)).await,
         Some(dec("900"))
@@ -1091,19 +972,8 @@ async fn movements_on_the_window_boundaries(pool: PgPool) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// Pins the `uv` lateral's ordering: earliest NON-ZERO snapshot strictly
-/// AFTER the day, else latest non-zero AT OR BEFORE it
-/// (`coalesce(nxt.*, prv.*)`). Getting that backward still compiles and still
-/// returns a row, so it needs a case where the two orders disagree.
-///
-/// Uses a security holding (`is_cash` false), because for cash the final
-/// select never reads `uv` at all (`case when w.is_cash then w.quantity +
-/// w.lift`): a cash case would pass under either ordering.
-///
-/// Two non-zero snapshots at different per-unit values (10, then 15), plus
-/// the sale itself so the walk can reconstruct the pre-sale quantity: 40
-/// units bought and held from 07-20, revalued at the 08-10 snapshot, sold
-/// whole on 08-20.
+/// Pins the `uv` lateral's order: earliest non-zero snapshot strictly after the day, else latest at or before it.
+/// Uses a security holding: for cash the final select never reads `uv`, so a cash case passes under either order.
 #[gripsou_core::testkit::db_test]
 async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1114,15 +984,9 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
     let instrument_id = resolve_instrument(&mut conn, &h.instrument).await?;
     let holding_id = upsert_holding(&mut conn, account_id, instrument_id, &h).await?;
 
-    // 07-20: 40 units @ per-unit 10 (value 400).
     stamp_on(&pool, holding_id, d(2026, 7, 20), dec("40"), dec("400")).await;
-    // 08-10: still 40 units, revalued to per-unit 15 (value 600).
     stamp_on(&pool, holding_id, d(2026, 8, 10), dec("40"), dec("600")).await;
-    // 08-20: sold to zero.
     stamp_on(&pool, holding_id, d(2026, 8, 20), dec("0"), dec("0")).await;
-    // The sale itself, so the walk reconstructs the pre-sale quantity for the
-    // held window instead of anchoring on the zero snapshot. Securities move
-    // by `lot`, not by `transaction`.
     testkit::seed_lot(
         &pool,
         holding_id,
@@ -1141,10 +1005,7 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
 
     let rows = backfill_digest(&pool, holding_id).await;
 
-    // 08-01 sits before the 08-10 revaluation: the earliest non-zero snapshot
-    // strictly after it (`nxt`) is 08-10 (per-unit 15), so 40 * 600/40 = 600.
-    // Reversing the coalesce order to prefer `prv` (07-20, per-unit 10) would
-    // give 40 * 400/40 = 400 instead — this is the number that pins the order.
+    // 08-01: `nxt` is 08-10 (per-unit 15), so 600; preferring `prv` would give 400.
     let (_, qty, value) = rows
         .iter()
         .find(|(day, _, _)| *day == d(2026, 8, 1))
@@ -1156,8 +1017,6 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
         "must prefer the later (nxt) snapshot's per-unit value over the earlier (prv) one"
     );
 
-    // 08-15 sits after the last non-zero snapshot (08-10) and before the sale:
-    // `nxt` finds nothing, so `uv` must fall back to `prv` (08-10, per-unit 15).
     let (_, qty2, value2) = rows
         .iter()
         .find(|(day, _, _)| *day == d(2026, 8, 15))
@@ -1175,16 +1034,7 @@ async fn values_a_sold_position_from_before_the_sale(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// A holding with no transactions at all is held flat (spec rule 3). The
-/// suffix-sum join must not drop it for want of a `moves` row.
-///
-/// (Corrected from the brief's expectation: with no transactions anywhere for
-/// the user, `horizon` collapses to `min(now, snapshot_day) - 1`, i.e.
-/// 2026-08-19 here, not far enough back to reach 2026-08-10 — that day is
-/// outside the derived range entirely and `quantity_on` returns `None` for it,
-/// verified against unmodified `src/`. 2026-08-19 is the sole derived day, so
-/// it is checked twice: once via `quantity_on` and once via the digest, both
-/// of which must show the same flat 750.)
+/// A holding with no transactions is held flat; the suffix-sum join must not drop it for want of a `moves` row.
 #[gripsou_core::testkit::db_test]
 async fn a_holding_with_no_transactions_is_held_flat(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1194,9 +1044,7 @@ async fn a_holding_with_no_transactions_is_held_flat(pool: PgPool) -> anyhow::Re
 
     testkit::backfill(&pool, conn_id).await?;
 
-    // Outside the derived range: no row at all.
     assert_eq!(quantity_on(&pool, holding_id, d(2026, 8, 10)).await, None);
-    // The one derived day (start_day = anchor - 1), held flat at the anchor.
     assert_eq!(
         quantity_on(&pool, holding_id, d(2026, 8, 19)).await,
         Some(dec("750"))
@@ -1204,8 +1052,7 @@ async fn a_holding_with_no_transactions_is_held_flat(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// The first and last day of the derived range must both exist. An off-by-one
-/// in the day axis is the classic way a windowed rewrite goes wrong.
+/// The first and last day of the derived range both exist.
 #[gripsou_core::testkit::db_test]
 async fn covers_the_first_and_last_derived_day(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -1225,9 +1072,7 @@ async fn covers_the_first_and_last_derived_day(pool: PgPool) -> anyhow::Result<(
 
     let rows = backfill_digest(&pool, holding_id).await;
     assert!(!rows.is_empty(), "the derived range must not be empty");
-    // The horizon is the earliest evidence minus one day.
     assert_eq!(rows.first().unwrap().0, d(2026, 8, 9));
-    // The last derived day is the one before the anchoring snapshot.
     assert_eq!(rows.last().unwrap().0, d(2026, 8, 19));
     Ok(())
 }

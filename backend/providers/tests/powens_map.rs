@@ -63,7 +63,6 @@ fn maps_account_types_onto_seeded_keys() {
     for t in ["per", "perp", "pee", "perco", "madelin", "article83", "rsp"] {
         assert_eq!(map::map_type_key(t), Some("retirement"), "{t}");
     }
-    // Unknown values are assumed to be some new invest wrapper.
     for t in ["unknown", "totally_new"] {
         assert_eq!(map::map_type_key(t), Some("brokerage"), "{t}");
     }
@@ -112,9 +111,6 @@ fn maps_account_identity_and_meta() {
 #[test]
 fn maps_invest_account_meta() {
     let fx = load("accounts.json");
-    // Fixture account 1003 has powens type "per", which maps onto the seeded
-    // "retirement" key. The load-bearing assertion here is that its meta
-    // flags it as an invest account.
     let dto = map::map_account(account(&fx, 1003), "retirement");
     assert_eq!(dto.type_key, "retirement");
     assert_eq!(dto.meta["is_invest"], true);
@@ -134,22 +130,20 @@ fn maps_isin_investment_ignoring_symbol() {
     assert_eq!(h.account_external_id, "1003");
     assert_eq!(h.instrument.kind, "equity");
     assert_eq!(h.instrument.isin.as_deref(), Some("FR0000120073"));
-    assert_eq!(h.instrument.symbol, None); // ISIN path drops the ticker
+    assert_eq!(h.instrument.symbol, None);
     assert_eq!(h.instrument.name, "Air Liquide");
     assert_eq!(h.instrument.currency, "EUR");
     assert_eq!(h.quantity, dec("10"));
-    assert_eq!(h.cost_basis, dec("1500.00")); // 10 * 150.00
+    assert_eq!(h.cost_basis, dec("1500.00"));
     assert_eq!(h.valuation, Some(dec("1600.00")));
 }
 
 #[test]
 fn maps_amf_investment_to_symbol_path() {
     let fx = load("investments.json");
-    // Has a stock_symbol -> symbol comes from stock_symbol.
     let h = map::map_investment(investment(&fx, 2002), "EUR").expect("holding");
     assert_eq!(h.instrument.isin, None);
     assert_eq!(h.instrument.symbol.as_deref(), Some("FEUR"));
-    // No stock_symbol -> symbol falls back to the code.
     let h2 = map::map_investment(investment(&fx, 2006), "EUR").expect("holding");
     assert_eq!(h2.instrument.symbol.as_deref(), Some("990000999999"));
 }
@@ -164,15 +158,12 @@ fn investment_currency_follows_original_currency() {
 #[test]
 fn skips_deleted_and_unidentifiable_investments() {
     let fx = load("investments.json");
-    assert!(map::map_investment(investment(&fx, 2004), "EUR").is_none()); // deleted
-    assert!(map::map_investment(investment(&fx, 2005), "EUR").is_none()); // no identity
+    assert!(map::map_investment(investment(&fx, 2004), "EUR").is_none());
+    assert!(map::map_investment(investment(&fx, 2005), "EUR").is_none());
 }
 
 #[test]
 fn skips_powens_liquidity_pseudo_instrument() {
-    // Powens reports an investment account's un-invested cash sleeve as an
-    // investment with code "XX-liquidity". It is cash, not a security, so it is
-    // dropped here and folds into the account's cash residual instead.
     let fx = load("sync_liquidity.json");
     assert!(map::map_investment(investment(&fx, 6102), "EUR").is_none());
 }
@@ -186,7 +177,6 @@ fn liquidity_line_is_the_invest_account_cash() {
         &fx.transactions,
         &fx.connections,
     );
-    // One real security + one cash holding; no separate "Liquidités" line.
     assert_eq!(result.holdings.len(), 2);
     assert!(
         !result
@@ -195,8 +185,6 @@ fn liquidity_line_is_the_invest_account_cash() {
             .any(|h| h.instrument.name == "Liquidités"),
         "the liquidity pseudo-instrument must not appear as a holding"
     );
-    // The liquidity sleeve (50) is the cash; the account's `balance` (1000) is
-    // ignored for invest accounts because it lags the live valuations.
     let cash = cash_for(&result.holdings, "6001").expect("cash sleeve");
     assert_eq!(cash.quantity, dec("50"));
 }
@@ -235,7 +223,7 @@ fn non_invest_account_yields_full_balance_cash() {
     assert_eq!(cash.quantity, dec("1234.56"));
     assert_eq!(cash.instrument.currency, "EUR");
     assert_eq!(cash.instrument.name, "Euro");
-    assert_eq!(cash.cost_basis, dec("1234.56")); // cash carried at par
+    assert_eq!(cash.cost_basis, dec("1234.56"));
 }
 
 #[test]
@@ -247,10 +235,9 @@ fn invest_account_emits_positive_residual_cash() {
         &fx.transactions,
         &fx.connections,
     );
-    // 2 securities + 1 residual cash holding.
     assert_eq!(result.holdings.len(), 3);
     let cash = cash_for(&result.holdings, "3001").expect("residual cash");
-    assert_eq!(cash.quantity, dec("1000.00")); // 10000 - (4000 + 5000)
+    assert_eq!(cash.quantity, dec("1000.00"));
 }
 
 #[test]
@@ -262,7 +249,7 @@ fn fully_invested_account_has_no_cash() {
         &fx.transactions,
         &fx.connections,
     );
-    assert_eq!(result.holdings.len(), 2); // securities only
+    assert_eq!(result.holdings.len(), 2);
     assert!(cash_for(&result.holdings, "3002").is_none());
 }
 
@@ -275,7 +262,6 @@ fn zero_and_overdraft_balances_still_emit_cash() {
         &fx.transactions,
         &fx.connections,
     );
-    // Deleted account 4003 is skipped entirely.
     assert_eq!(result.accounts.len(), 2);
     assert!(!result.accounts.iter().any(|a| a.external_id == "4003"));
     assert_eq!(
@@ -298,9 +284,7 @@ fn map_sync_links_holdings_to_their_accounts() {
         &fx.connections,
     );
     assert_eq!(result.accounts.len(), 2);
-    // checking cash (2000) + security (5000) + residual cash (1000) = 3 holdings.
     assert_eq!(result.holdings.len(), 3);
-    // The security belongs to the brokerage account.
     let security = result
         .holdings
         .iter()
@@ -315,7 +299,6 @@ fn map_sync_links_holdings_to_their_accounts() {
         cash_for(&result.holdings, "5002").unwrap().quantity,
         dec("1000.00")
     );
-    // Every holding references a real mapped account.
     let ids: Vec<&str> = result
         .accounts
         .iter()
@@ -327,7 +310,6 @@ fn map_sync_links_holdings_to_their_accounts() {
             .iter()
             .all(|h| ids.contains(&h.account_external_id.as_str()))
     );
-    // market -> brokerage.
     let brokerage = result
         .accounts
         .iter()
@@ -338,9 +320,6 @@ fn map_sync_links_holdings_to_their_accounts() {
 
 #[test]
 fn map_sync_skips_liability_account_and_its_holdings() {
-    // Fixture account 5003 is a "loan" (liability); it has one investment
-    // (id 5102, id_account 5003) attached. Skipping the account must also
-    // skip that holding, not just omit the account row.
     let fx = load("sync_multi.json");
     let result = map::map_sync(
         &fx.accounts,
@@ -359,7 +338,6 @@ fn map_sync_skips_liability_account_and_its_holdings() {
             .any(|h| h.account_external_id == "5003"),
         "holdings of a skipped liability account must not be mapped"
     );
-    // The loan's own investment (5102) specifically must not appear.
     assert!(
         !result
             .holdings
@@ -387,7 +365,6 @@ fn by_id(
 fn strips_the_trailing_card_mask_from_the_description() {
     let t = by_id(&mapped_txns(), "1001");
     assert_eq!(t.description.as_deref(), Some("LECLERC"));
-    // A wording that is *only* a mask leaves an empty description, not "CB*1234".
     let bare = by_id(&mapped_txns(), "1012");
     assert_eq!(bare.description.as_deref(), Some(""));
 }
@@ -406,10 +383,9 @@ fn maps_types_by_sign_not_by_label() {
     assert_eq!(by_id(&txns, "1003").kind, "dividend", "profit -> dividend");
     assert_eq!(by_id(&txns, "1004").kind, "buy", "negative market_order");
     assert_eq!(by_id(&txns, "1005").kind, "sell", "positive market_order");
-    // The label lies: a positive market_fee is interest, not a fee.
+    // A positive market_fee is interest, not a fee.
     assert_eq!(by_id(&txns, "1006").kind, "interest");
     assert_eq!(by_id(&txns, "1007").kind, "fee");
-    // Unknown/novel types fall back to the sign of `value`.
     assert_eq!(by_id(&txns, "1008").kind, "deposit");
     assert_eq!(by_id(&txns, "1009").kind, "withdrawal");
 }
@@ -436,9 +412,6 @@ fn carries_amount_and_account_link_verbatim() {
 
 #[test]
 fn carries_the_raw_payload_in_provider_meta() {
-    // A future refactor that stops threading the raw row through must fail
-    // here: `id_account` has its own canonical column, but the raw copy in
-    // `provider_meta` must still be present verbatim.
     let t = by_id(&mapped_txns(), "1004");
     assert!(
         !t.provider_meta.as_object().unwrap().is_empty(),
@@ -450,7 +423,6 @@ fn carries_the_raw_payload_in_provider_meta() {
 
 #[test]
 fn maps_the_remaining_powens_type_labels() {
-    // The type-mapping table, the rows the other tests don't cover.
     let txns = mapped_txns();
     assert_eq!(by_id(&txns, "1013").kind, "transfer", "order -> transfer");
     assert_eq!(by_id(&txns, "1014").kind, "fee", "bank -> fee");
@@ -459,8 +431,6 @@ fn maps_the_remaining_powens_type_labels() {
 
 #[test]
 fn a_zero_value_is_not_negative() {
-    // The mapping splits on `< 0` / `>= 0`: zero belongs to the non-negative side of
-    // every sign-dependent arm. Locked so a refactor to `<=` fails here.
     let txns = mapped_txns();
     assert_eq!(by_id(&txns, "1016").kind, "deposit", "unknown type, 0");
     assert_eq!(by_id(&txns, "1017").kind, "sell", "market_order, 0");
@@ -469,10 +439,8 @@ fn a_zero_value_is_not_negative() {
 
 #[test]
 fn map_sync_drops_transactions_of_accounts_it_did_not_emit() {
-    // `GET /users/me/transactions` is user-scoped, so it returns rows for
-    // accounts `map_sync` deliberately skips (liability, deleted). Emitting
-    // them would hand the core a dangling account reference and abort the
-    // whole ingest transaction.
+    // `/users/me/transactions` is user-scoped, so it returns rows of accounts `map_sync` skips
+    // (liability, deleted); emitting them would hand the core a dangling account reference.
     let fx = load("sync_multi.json");
     let result = map::map_sync(
         &fx.accounts,
@@ -493,7 +461,6 @@ fn map_sync_drops_transactions_of_accounts_it_did_not_emit() {
             .all(|t| emitted.contains(&t.account_external_id.as_str())),
         "every emitted transaction must reference an emitted account"
     );
-    // The kept one, on the checking account, is still there.
     assert!(
         result.transactions.iter().any(|t| t.external_id == "9001"),
         "a transaction on a mapped account must survive"
@@ -510,11 +477,8 @@ fn map_sync_drops_transactions_of_accounts_it_did_not_emit() {
     }
 }
 
-/// `spent_on` is `rdate`, 100% filled — but the *balance* follows the booking
-/// date, and the two disagree on 70% of real rows by up to five days.
-/// `spent_on` stays the day the card was tapped (what the user recognises on
-/// the list); `booked_on` carries the day the money actually moved, which is
-/// the only date the backward walk can honestly use.
+/// `spent_on` is the day the card was tapped; `booked_on` is the day the money moved. They disagree
+/// on 70% of real rows by up to five days, and the backward walk can only use `booked_on`.
 #[test]
 fn carries_both_the_spend_date_and_the_booking_date() {
     let txns = mapped_txns();
@@ -556,8 +520,6 @@ fn txn(id: i64, id_account: i64, coming: bool, deleted: Option<&str>) -> PowensT
 
 #[test]
 fn map_sync_counts_what_it_skips() {
-    // One live checking account, one deleted account, one loan (no type mapping);
-    // one coming and one deleted transaction on the live account, one on the loan.
     let accounts = vec![
         acct(1, "checking", None),
         acct(2, "checking", Some("2024-01-01 00:00:00")),

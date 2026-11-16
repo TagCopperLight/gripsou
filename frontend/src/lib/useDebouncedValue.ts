@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/** Delays the query-facing value by `delay`ms, without ever delaying `value`
- *  itself — callers keep the raw value for a fully responsive input and use
- *  the debounced one only for the expensive operation (here, a fetch).
- *  The second return value flushes the current input on explicit submission. */
+/** Delays the returned value, never `value` itself. The second return flushes on submit. */
 export function useDebouncedValue<T>(value: T, delay: number) {
   const [debounced, setDebounced] = useState(value);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

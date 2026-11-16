@@ -33,8 +33,7 @@ mod tests {
         json!({ "access_token": "secret-token", "id_user": 42, "nested": { "a": [1, 2] } })
     }
 
-    /// What `complete_connection` stores, every sync must read back unchanged,
-    /// or the connection silently stops syncing.
+    /// Must read back what `complete_connection` stores, or the connection silently stops syncing.
     #[test]
     fn credentials_round_trip() {
         let blob = seal(&key(), &creds()).unwrap();
@@ -49,9 +48,7 @@ mod tests {
         assert!(!blob.to_string().contains("secret-token"));
     }
 
-    /// A blob without a usable `ct` (plaintext credentials, a missing or
-    /// non-string `ct`, non-base64, null) is an error, never passed through
-    /// to the provider as if it were credentials.
+    /// Plaintext, a missing or non-string `ct`, non-base64 and null are errors, never passed to the provider as credentials.
     #[test]
     fn a_malformed_blob_is_an_error() {
         for blob in [

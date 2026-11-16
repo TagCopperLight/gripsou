@@ -1,5 +1,5 @@
-//! Drains the layer's channel into the `log` table. Never logs through
-//! tracing (that would feed its own queue); its own trouble goes to stderr.
+//! Drains the layer's channel into the `log` table. Never logs through tracing (it would feed its own
+//! queue); its own trouble goes to stderr.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -23,9 +23,8 @@ pub struct WriterHandle {
 }
 
 impl LogWriter {
-    /// Write everything queued right now, in batches. A batch that fails to
-    /// insert is dropped and counted; the next written batch reports the
-    /// count as a `log lines dropped` warn line. Returns rows written.
+    /// A batch that fails to insert is dropped and counted; the next written batch reports it as a
+    /// `log lines dropped` warn. Returns rows written.
     pub async fn flush(&mut self, db: &sqlx::PgPool) -> u64 {
         let mut written = 0;
         loop {
@@ -63,7 +62,6 @@ impl LogWriter {
         }
     }
 
-    /// Run the writer in the background: flush every second until shut down.
     pub fn spawn(mut self, db: sqlx::PgPool) -> WriterHandle {
         let (stop, mut stopped) = oneshot::channel();
         let task = tokio::spawn(async move {
@@ -85,7 +83,6 @@ impl LogWriter {
 }
 
 impl WriterHandle {
-    /// Stop the loop after one last flush (best effort, on graceful shutdown).
     pub async fn shutdown(self) {
         let _ = self.stop.send(());
         let _ = self.task.await;

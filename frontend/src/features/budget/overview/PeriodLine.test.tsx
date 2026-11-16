@@ -11,7 +11,6 @@ function Probe() {
   return <span data-testid="period">{JSON.stringify(period)}</span>;
 }
 
-/** The line shows the context's period once one is picked, like the page. */
 function Line(props: Partial<Parameters<typeof PeriodLine>[0]>) {
   const { period } = useBudget();
   const shown: Period = period ?? { mode: "month", month: "2026-08" };
@@ -59,7 +58,6 @@ describe("PeriodLine", () => {
     fireEvent.click(screen.getByTestId("period-range"));
     fireEvent.click(screen.getByText("Last 3 months"));
     fireEvent.click(screen.getByTestId("period-clear"));
-    // No pick left: the page falls back to the latest month with data.
     expect(screen.getByTestId("period")).toHaveTextContent("null");
     expect(screen.getByTestId("period-prev")).toBeVisible();
   });

@@ -1,6 +1,5 @@
-//! The budget AI run: send what pairing left
-//! uncategorised to the configured model, validate every answer, and write it
-//! back without ever overwriting something a person set.
+//! The budget AI run: sends what pairing left uncategorised to the model, validates every answer and
+//! never overwrites something a person set.
 
 use std::collections::HashMap;
 
@@ -14,9 +13,7 @@ use crate::error::CoreError;
 use crate::repo::budget::ai as repo;
 use crate::repo::budget::ai::Decision;
 
-/// The ids an item may be given, by the sign of its amount: money out may
-/// be an expense, money in an income, and either may be neutral.
-/// `categories` is already the non-archived list. A zero amount gets none.
+/// A zero amount gets no candidates.
 pub fn candidates_for(amount: Decimal, categories: &[CategoryOption]) -> Vec<Uuid> {
     let side = if amount < Decimal::ZERO {
         CategoryKind::Expense
@@ -32,11 +29,8 @@ pub fn candidates_for(amount: Decimal, categories: &[CategoryOption]) -> Vec<Uui
         .collect()
 }
 
-/// One decision per answered item, in item order: exactly one guess whose id
-/// is among the item's candidates is kept; a guess saying nothing fits, two
-/// guesses, or an id it was not offered is an abstention. An item with no
-/// guess at all gets no decision — it was not answered, so it stays in the
-/// work set. Guesses for keys that are not items are dropped.
+/// A guess saying nothing fits, two guesses, or an id that was not offered is an abstention. An item with
+/// no guess at all gets no decision and stays in the work set.
 pub fn decide(items: &[CategorizeItem], guesses: Vec<Guess>) -> Vec<Decision> {
     let mut by_key: HashMap<Uuid, Vec<Guess>> = HashMap::new();
     for g in guesses {
@@ -72,14 +66,11 @@ fn clamp_unit(d: Decimal) -> Decimal {
     d.max(Decimal::ZERO).min(Decimal::ONE)
 }
 
-/// The most recent corrections every request carries.
 const SHARED_EXAMPLES: i64 = 10;
 
 #[derive(Debug)]
 pub enum RunOutcome {
-    /// Nothing was uncategorised; no run row written.
     Nothing,
-    /// Never [`AiRunOutcome::Running`].
     Finished {
         outcome: AiRunOutcome,
         items: i32,
@@ -87,7 +78,6 @@ pub enum RunOutcome {
     },
 }
 
-/// The `ai_run` span a run's lines are logged in.
 pub fn run_span(user_id: Uuid) -> tracing::Span {
     tracing::info_span!(
         "ai_run",
@@ -97,25 +87,15 @@ pub fn run_span(user_id: Uuid) -> tracing::Span {
     )
 }
 
-/// What the run has done so far.
 struct Tally {
     run_id: Uuid,
     batches: i32,
     items: i32,
 }
 
-/// Categorise everything the user still has uncategorised, chunk by chunk,
-/// until the work set is empty or the model stops answering. Resumable by
-/// construction: the work set is re-read every chunk, so a quota or a crash
-/// only leaves rows for the next run.
-///
-/// The run row is written before the first call and updated after each one,
-/// so the spend survives a run that fails half-way; a database error closes
-/// it as `error` with the message before being returned. A row left
-/// `running` (the task panicked or the process stopped) is the caller's to
-/// close, with [`repo::close_abandoned_runs`].
-///
-/// Run it inside [`run_span`]: it records the run's id and model there.
+/// Resumable: the work set is re-read every chunk, so a quota or a crash only leaves rows for the next run.
+/// The run row is written before the first call, so spend survives a failed run. A row left `running`
+/// is closed by the caller with [`repo::close_abandoned_runs`]. Run it inside [`run_span`].
 pub async fn run_for_user(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -165,8 +145,7 @@ pub async fn run_for_user(
     }
 }
 
-/// Sends chunks until the work set is empty. `Ok(Some(e))` is the model
-/// stopping the run; `Err` is a database failure.
+/// `Ok(Some(e))` is the model stopping the run; `Err` is a database failure.
 async fn run_chunks(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -175,8 +154,7 @@ async fn run_chunks(
     batch: i64,
     tally: &mut Tally,
 ) -> Result<Option<CategorizeError>, CoreError> {
-    // Rows already sent in this run. An unanswered one stays uncategorised
-    // for the next run, but must not be picked again by this one.
+    // An unanswered row must not be picked again by this run.
     let mut attempted: Vec<Uuid> = vec![];
     let categories = repo::active_categories(pool, user_id).await?;
     let shared = repo::recent_corrections(pool, user_id, SHARED_EXAMPLES).await?;
@@ -208,7 +186,7 @@ async fn run_chunks(
             Err(e) => return Ok(Some(e)),
         };
         tally.batches += 1;
-        // The spend first: whatever fails next, the call was paid for.
+        // Record spend first: the call was paid for whatever fails next.
         repo::record_usage(pool, tally.run_id, out.usage).await?;
         let decisions = decide(&req.items, out.guesses);
         let written = repo::write_decisions(pool, user_id, &decisions).await?;

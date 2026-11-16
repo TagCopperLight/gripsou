@@ -1,26 +1,17 @@
-//! Derive past holding values from transactions.
+//! Derives past holding values from transactions. Every (holding, day) without a snapshot is filled by
+//! walking quantity backward from the nearest later snapshot, so drift stays inside one gap. Days after
+//! the last snapshot get nothing: there is no anchor.
 //!
-//! Fills every (holding, day) that has no snapshot, walking quantity backward
-//! from the nearest *later* snapshot — never from today, so drift stays inside
-//! one gap. Days after the last snapshot get nothing: there is no later anchor
-//! to walk from, and the sync stamps today anyway.
+//! quantity(d) is the anchor's quantity minus every movement after d up to the anchor day.
 //!
-//! quantity(d) is the anchor's quantity minus every movement strictly after d
-//! up to and including the anchor day, which is one suffix sum per day.
-//!
-//! The whole connection is deleted and refilled on every run: simpler than an
-//! incremental refill and cheap at this size.
-//!
-//! Every connection of a user starts on the same day (the day before the
-//! user's earliest evidence), so new evidence on one connection can move the
-//! start of all of them: writers rebuild with [`backfill_user`].
+//! Every connection of a user starts on the same day, so new evidence on one can move the start of all:
+//! writers rebuild with [`backfill_user`].
 
 use uuid::Uuid;
 
 use crate::db::UserWriteTx;
 use crate::error::CoreError;
 
-/// Rewrites the derived history of every connection of the locked user.
 /// Returns the number of derived rows written.
 pub async fn backfill_user(tx: &mut UserWriteTx<'_>) -> Result<u64, CoreError> {
     let connections = sqlx::query_scalar!(
@@ -36,7 +27,6 @@ pub async fn backfill_user(tx: &mut UserWriteTx<'_>) -> Result<u64, CoreError> {
     Ok(written)
 }
 
-/// Rewrites the derived history for every holding on `connection_id`.
 /// Returns the number of derived rows written.
 async fn backfill_connection(
     conn: &mut sqlx::PgConnection,
@@ -60,9 +50,7 @@ async fn backfill_connection(
         with scope as (
             select h.id as holding_id, h.account_id, h.instrument_id,
                    i.kind = 'cash' as is_cash,
-                   -- Last-resort value for a holding no snapshot ever valued,
-                   -- in the account's currency. A cash line's cost basis is
-                   -- in its own currency, so it has none.
+                   -- Last-resort value, in the account's currency. A cash line's cost basis is in its own currency, so it has none.
                    case when i.kind = 'cash' then 0 else h.cost_basis end as book_value,
                    i.currency = a.currency as is_account_currency,
                    account_trusts_booked_on(a.id) as trust_booked_on
@@ -71,9 +59,7 @@ async fn backfill_connection(
             join instrument i on i.id = h.instrument_id
             where a.connection_id = $1
         ),
-        -- One start day for all of the user's holdings, the day before their
-        -- earliest evidence, so every account appears on the chart at the same
-        -- date instead of each stepping net worth up when its history starts.
+        -- One start day for all of the user's holdings, so every account appears on the chart at the same date.
         owner as (
             select c.user_id from connection c where c.id = $1
         ),
@@ -98,8 +84,7 @@ async fn backfill_connection(
                          user_today((select user_id from owner)))
             ) - 1 as start_day
         ),
-        -- Cash lines whose account has hand-entered rows before the provider's
-        -- history starts, with that start day (see the lot branch of `moves`).
+        -- Cash lines whose account has hand-entered rows before the provider's history starts.
         prehistory as materialized (
             select s.holding_id, s.account_id, ps.day as provider_start
             from scope s
@@ -117,14 +102,11 @@ async fn backfill_connection(
                     and txn_day(s.trust_booked_on, t.booked_on, t.spent_on) < ps.day
               )
         ),
-        -- Signed movement per (holding, day). `materialized` matters: inlined,
-        -- this aggregate runs once per derived row.
+        -- `materialized`: inlined, this aggregate runs once per derived row.
         moves as materialized (
           select holding_id, day, sum(delta) as delta from (
-            -- Cash moves by amount, on the day the balance moved (`booked_on`),
-            -- since the walk anchors on balances. `transaction` has no
-            -- currency: `amount` is in the account's currency, so a cash line
-            -- in another currency is held flat.
+            -- Cash moves by amount on the day the balance moved (`booked_on`), since the walk anchors on balances.
+            -- `amount` is in the account's currency, so a cash line in another currency is held flat.
             select s.holding_id, txn_day(s.trust_booked_on, t.booked_on, t.spent_on) as day,
                    sum(t.amount) as delta
             from scope s
@@ -135,11 +117,8 @@ async fn backfill_connection(
 
             union all
 
-            -- Before the provider's history, a lot has no provider row as its
-            -- cash leg, so the lot moves the cash line itself. Only where the
-            -- user also entered cash rows for that period: lots entered for
-            -- cost basis alone would otherwise drain cash with no deposits to
-            -- fund them.
+            -- Before the provider's history, a lot has no provider row as its cash leg, so it moves the cash line.
+            -- Only where the user also entered cash rows then: lots entered for cost basis alone would drain cash.
             select p.holding_id, l.acquired_on as day,
                    sum(lot_cash_amount(l.side, l.quantity, l.unit_price, l.fee)) as delta
             from prehistory p
@@ -154,7 +133,6 @@ async fn backfill_connection(
 
             union all
 
-            -- Securities move by share count, from lots.
             select l.holding_id, l.acquired_on as day,
                    sum(case when l.side = 'buy' then l.quantity else -l.quantity end) as delta
             from scope s
@@ -171,8 +149,7 @@ async fn backfill_connection(
             cross join lateral generate_series(
                 hz.start_day, user_today((select user_id from owner)), '1 day') gs
         ),
-        -- Every day a suffix sum is read at or summed over: snapshot days and
-        -- movement days can lie after today, past the end of `days`.
+        -- Snapshot and movement days can lie after today, past the end of `days`.
         axis as materialized (
             select holding_id, as_of as day from days
             union
@@ -182,7 +159,6 @@ async fn backfill_connection(
             from holding_snapshot hs
             join scope s on s.holding_id = hs.holding_id
         ),
-        -- Σ delta over the days strictly after each day.
         moves_after as materialized (
             select a.holding_id, a.day,
                    coalesce(sum(m.delta) over (
@@ -193,8 +169,7 @@ async fn backfill_connection(
             from axis a
             left join moves m on m.holding_id = a.holding_id and m.day = a.day
         ),
-        -- Read off `moves_after` rather than joined to it: a CTE has no
-        -- statistics, and the planner nested-looped that join.
+        -- Read off `moves_after` rather than joined: a CTE has no statistics and the planner nested-looped the join.
         days_t as materialized (
             select ma.holding_id, ma.day as as_of, ma.total
             from moves_after ma
@@ -208,7 +183,6 @@ async fn backfill_connection(
             join holding_snapshot hs
               on hs.holding_id = ma.holding_id and hs.as_of = ma.day
         ),
-        -- Days with no snapshot, each with the first snapshot after it.
         gaps as (
             select d.holding_id, d.as_of, d.total, nx.as_of as anchor_day,
                    nx.quantity as anchor_qty,
@@ -221,10 +195,8 @@ async fn backfill_connection(
                 order by hs.as_of
                 limit 1
             ) nx on true
-            -- The per-unit value comes from the nearest snapshot that holds
-            -- something, later first, then earlier: after a full sale every
-            -- later snapshot is zero. Two seeks, because one ordering by
-            -- distance can't use the index.
+            -- Per-unit value from the nearest snapshot that holds something, later first (after a full sale every
+            -- later snapshot is zero). Two seeks: one ordering by distance can't use the index.
             left join lateral (
                 select coalesce(nxt.quantity, prv.quantity) as quantity,
                        coalesce(nxt.value,    prv.value)    as value
@@ -263,9 +235,8 @@ async fn backfill_connection(
             join anchor_after aa
               on aa.holding_id = g.holding_id and aa.day = g.anchor_day
         ),
-        -- A row missing from the ledger shifts a whole stretch by a constant,
-        -- which can push it below zero. Each stretch (days sharing an anchor)
-        -- is raised by its own shortfall, keeping its shape.
+        -- A row missing from the ledger shifts a stretch by a constant, possibly below zero. Each stretch (days
+        -- sharing an anchor) is raised by its own shortfall.
         lifted as (
             select w.*,
                    greatest(0, -min(w.quantity) over (
@@ -274,13 +245,10 @@ async fn backfill_connection(
             from walked w
         )
         select w.holding_id, w.as_of, w.quantity + w.lift,
-               -- `value`, in the account's currency, is only read for an
-               -- instrument with no price or rate. Cash in the account's
-               -- currency is worth its quantity. Anything else carries the
-               -- nearest valued snapshot's per-unit value (multiplied first, so
-               -- an unchanged quantity gives the snapshot's value exactly),
-               -- else its book value: zero would dip the chart and raise
-               -- fx_missing.
+               -- `value` is only read for an instrument with no price or rate. Cash in the account's currency is worth
+               -- its quantity; anything else carries the nearest valued snapshot's per-unit value (multiplied first, so
+               -- an unchanged quantity gives the snapshot's value exactly), else its book value: zero would dip the
+               -- chart and raise fx_missing.
                case
                    when w.is_cash and w.is_account_currency then w.quantity + w.lift
                    else coalesce(

@@ -1,6 +1,3 @@
-//! The transactions list, its filters and its counts. Writes to a
-//! transaction are the budget's (`crate::budget`).
-
 pub mod dto;
 
 use axum::extract::{Query, State};
@@ -14,41 +11,32 @@ use crate::error::{ApiError, Json};
 use crate::routes::Routes;
 use gripsou_core::repo::budget::transactions::{self as repo, TransactionFilters, TypeBucket};
 
-/// The list's query parameters; `BulkBody.filter` sends the same fields as JSON.
 #[derive(Deserialize, Clone, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(optional_fields)]
 pub struct TransactionParams {
     pub search: Option<String>,
     pub account_id: Option<Uuid>,
-    /// A blank one means the default.
     #[ts(as = "Option<TypeBucket>")]
     pub bucket: Option<String>,
     pub from: Option<NaiveDate>,
     pub to: Option<NaiveDate>,
-    /// Comma-separated uuids. Several categories mean *either*.
+    /// Comma-separated uuids; several categories mean either.
     pub category_ids: Option<String>,
-    /// Comma-separated uuids. Several tags mean *all*.
+    /// Comma-separated uuids; several tags mean all.
     pub tag_ids: Option<String>,
     pub uncategorized: Option<bool>,
     pub needs_review: Option<bool>,
-    /// Absent means hide internal transfers — the list's default.
     pub include_transfers: Option<bool>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
 
-/// A page of the list when the query names no `limit`.
 pub const LIMIT_DEFAULT: i64 = 200;
-/// The largest page, so a crafted `limit` cannot ask for the whole ledger at once.
 pub const LIMIT_MAX: i64 = 500;
 
 impl TransactionParams {
-    /// The filters these parameters mean for `user_id`, under their own
-    /// review threshold. A filter the server cannot fully honour must never be
-    /// silently narrowed to a wider one, so an unparseable `categoryIds`/`tagIds`
-    /// component or an unrecognised `bucket` is a 400, not a dropped id or a
-    /// fall-through to `all`.
+    /// A filter the server can't fully honour is a 400, never silently widened: an unparseable id or an unknown `bucket` is refused.
     pub async fn filters(
         self,
         pool: &PgPool,
@@ -65,8 +53,7 @@ impl TransactionParams {
             tag_ids: parse_ids(self.tag_ids.as_deref())?,
             uncategorized: self.uncategorized.unwrap_or(false),
             needs_review: self.needs_review.unwrap_or(false),
-            // Hidden unless asked for: unlike every other filter here, the
-            // default is *not* "everything".
+            // Hidden unless asked for, unlike every other filter.
             include_transfers: self.include_transfers.unwrap_or(false),
             review_threshold,
             limit: self.limit.unwrap_or(LIMIT_DEFAULT).clamp(1, LIMIT_MAX),
@@ -75,13 +62,10 @@ impl TransactionParams {
     }
 }
 
-/// Parses the comma-separated id parameters the filter panel sends; any
-/// component that fails to parse is a 400.
 fn parse_ids(raw: Option<&str>) -> Result<Vec<Uuid>, ApiError> {
     match raw {
         None => Ok(vec![]),
-        // A present-but-blank filter means the same thing as an absent one —
-        // the obvious way a frontend clears a filter — so it must not 400.
+        // A blank filter is how a frontend clears one: it must not 400.
         Some(s) if s.trim().is_empty() => Ok(vec![]),
         Some(s) => s
             .split(',')
@@ -93,7 +77,6 @@ fn parse_ids(raw: Option<&str>) -> Result<Vec<Uuid>, ApiError> {
     }
 }
 
-/// A blank or absent bucket is the default one.
 fn parse_bucket(raw: Option<&str>) -> Result<TypeBucket, ApiError> {
     match raw.unwrap_or_default() {
         s if s.trim().is_empty() => Ok(TypeBucket::default()),
@@ -150,8 +133,6 @@ mod tests {
     use super::*;
     use axum::http::StatusCode;
 
-    /// A present-but-blank filter is the frontend's obvious way to clear one,
-    /// and means the same thing as the parameter being absent.
     #[test]
     fn empty_ids_param_is_not_an_error() {
         assert_eq!(parse_ids(Some("")).unwrap(), Vec::<Uuid>::new());
@@ -159,8 +140,6 @@ mod tests {
         assert_eq!(parse_ids(None).unwrap(), Vec::<Uuid>::new());
     }
 
-    /// A non-empty, malformed component is still a 400, never a silently
-    /// dropped id.
     #[test]
     fn malformed_id_is_still_a_400() {
         let err = parse_ids(Some("not-a-uuid")).unwrap_err();
@@ -178,8 +157,6 @@ mod tests {
         assert_eq!(parse_ids(Some(&format!("{a},{b}"))).unwrap(), vec![a, b]);
     }
 
-    /// The same for the single `bucket` param: `bucket=` falls back to the
-    /// default.
     #[test]
     fn empty_bucket_param_is_not_an_error() {
         assert_eq!(parse_bucket(Some("")).unwrap(), TypeBucket::default());
@@ -199,7 +176,6 @@ mod tests {
         serde_json::from_value(serde_json::json!({})).unwrap()
     }
 
-    /// The transactions list shows only the caller's transactions.
     #[gripsou_core::testkit::db_test]
     async fn transactions_lists_only_own(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
@@ -218,8 +194,6 @@ mod tests {
         assert_eq!(descriptions, vec![Some("alice-txn".to_string())]);
     }
 
-    /// Filtering on another user's account id returns nothing rather than
-    /// that account's rows.
     #[gripsou_core::testkit::db_test]
     async fn transactions_account_filter_cannot_reach_another_user(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;

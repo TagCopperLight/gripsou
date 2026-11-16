@@ -1,8 +1,6 @@
-// Money/quantities arrive from the API as decimal strings (never floats — see
-// CLAUDE.md). We use Intl.NumberFormat (en-US, predictable part types) only for
-// digit grouping + rounding structure, then substitute the user's independent
-// separators / currency symbol from prefs. This supports free-form combinations
-// (e.g. US dates + French separators + symbol-after) that a single locale can't.
+// Intl.NumberFormat (en-US) gives digit grouping and rounding structure, then the
+// user's separators and symbol from prefs are swapped in: free-form combinations
+// a single locale can't express.
 
 import type { UserPrefs } from "../api/wire";
 import { getPrefs } from "./prefs";
@@ -53,9 +51,7 @@ type RenderOptions = {
   signed: boolean;
 };
 
-// Constructing Intl formatters is expensive across a ledger's cells. Only
-// number structure belongs in the key: separators and currency still come
-// from the current prefs on every call. Bound the cache for option overrides.
+// Intl formatters are expensive across a ledger. Only number structure is in the key: separators and currency come from prefs on every call.
 const numberFormats = new Map<string, Intl.NumberFormat>();
 
 function numberFormat(o: RenderOptions): Intl.NumberFormat {
@@ -77,8 +73,7 @@ function numberFormat(o: RenderOptions): Intl.NumberFormat {
   return formatter;
 }
 
-// Format with Intl for structure, swap separators, and return the sign apart
-// from the body so callers can place a currency symbol between them.
+// The sign is returned apart so callers can place a currency symbol between sign and body.
 function renderParts(
   value: string | number,
   o: RenderOptions,
@@ -96,8 +91,6 @@ function renderParts(
   return { sign, body };
 }
 
-/** A formatted amount, or in private mode one asterisk per character of it:
- *  a mask exactly as wide as the figure it hides. */
 export function formatMaskedMoney(
   value: string | number,
   masked: boolean,
@@ -139,8 +132,7 @@ export function formatQuantity(
     groupSep: options.groupSep ?? p.numberGroupSep,
     decimalSep: options.decimalSep ?? p.numberDecimalSep,
     minFrac: 0,
-    // 8 covers fractional shares and satoshis in full, and still hides the
-    // float noise of a quantity summed locally (0.1 + 0.2).
+    // 8 covers fractional shares and satoshis, and hides float noise of a locally summed quantity.
     maxFrac: options.fractionDigits ?? 8,
     signed: false,
   });
@@ -152,8 +144,7 @@ export function formatPercent(
   options: PercentFormatOptions = {},
 ): string {
   const p = options.prefs ?? getPrefs();
-  // Value is a ratio (0.1234 = 12.34%); Intl percent style multiplies by 100
-  // and appends the % sign (captured in body via the percentSign part).
+  // Intl percent multiplies by 100 and appends the sign.
   const { sign, body } = renderParts(value, {
     style: "percent",
     groupSep: options.groupSep ?? p.numberGroupSep,

@@ -16,9 +16,8 @@ import { afterPrefsSaved } from "../api/invalidate";
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<SessionUser | null>(null);
-  // Without a stored token there is no session to check.
   const [isBootstrapping, setIsBootstrapping] = useState(() => getAuthToken() !== null);
-  // The user as shown, readable by two saves made in the same tick.
+  // Readable by two saves made in the same tick.
   const shown = useRef<SessionUser | null>(null);
   const prefsSaves = useRef<Promise<unknown>>(Promise.resolve());
 
@@ -27,7 +26,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
   }, [queryClient]);
 
-  // Apply a user's prefs everywhere: the formatters' default + i18n language.
   const applyUser = useCallback((u: SessionUser) => {
     shown.current = u;
     setUser(u);
@@ -36,7 +34,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (i18n.language !== u.prefs.uiLanguage) void i18n.changeLanguage(u.prefs.uiLanguage);
   }, []);
 
-  // On load, a persisted token means "stay logged in": validate it via /auth/me.
   useEffect(() => {
     let active = true;
 
@@ -106,15 +103,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const adoptSession = useCallback(
     (token: string, user: SessionUser) => {
       resetSession();
-      setAuthToken(token, true); // redemption keeps you signed in (persisted).
+      setAuthToken(token, true);
       applyUser(user);
     },
     [applyUser, resetSession],
   );
 
   const logout = useCallback(async () => {
-    // Capture the old token in the logout request, then clear locally at once:
-    // a slow or failed request must not keep another user's cache alive.
+    // Clear locally at once: a slow or failed request must not keep another user's cache alive.
     const request = authApi.logout();
     setAuthToken(null);
     resetSession();
@@ -123,12 +119,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await request;
     } catch {
-      // Token may already be invalid/expired; clear locally regardless.
+      // The token may already be invalid; sign out locally anyway.
     }
   }, [resetSession]);
 
-  // A profile response carries the prefs as they were stored; keep the shown
-  // ones, which may include a save still on its way.
+  // The profile response carries stored prefs; keep the shown ones, which may include a save on its way.
   const updateUser = useCallback(
     (next: SessionUser) => {
       if (shown.current) applyUser({ ...next, prefs: shown.current.prefs });
@@ -149,25 +144,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (patch: PrefsPatch) => {
       const u = shown.current;
       if (!u) return;
-      // A new currency waits for the server, which first fetches its rate and
-      // may refuse it: shown early, it would put its symbol on figures still
-      // in the old one.
+      // A new currency waits for the server, which may refuse it: shown early, its symbol would sit on figures still in the old one.
       const waits = "currency" in patch;
       if (!waits) applyUser({ ...u, prefs: withPatch(u.prefs, patch) });
-      // One save at a time, so two changes of one setting are stored in order.
       const save = prefsSaves.current.then(() => authApi.savePrefs(patch));
       prefsSaves.current = save.catch(() => {});
       try {
         await save;
       } catch (err) {
-        // Show what is stored, once the saves queued behind this one are in;
-        // then say so in the corner, in the language shown again. A refused
-        // currency (no rate to be had) is explained next to its field instead.
+        // A refused currency is explained next to its field instead.
         const refused = waits && isCurrencyRefused(err);
         prefsSaves.current = prefsSaves.current.then(showStoredPrefs).then(() => {
           if (!refused) showError(i18n.t("settings.prefSaveFailed"));
         });
-        // Only a currency's caller waits on the answer; the others are told above.
         if (waits) throw err;
         return;
       }

@@ -54,8 +54,7 @@ async fn purge_deletes_only_rows_older_than_the_retention(pool: PgPool) {
     assert_eq!(left, vec!["recent".to_string()]);
 }
 
-/// Install a subscriber that only has the saving layer, for the current
-/// thread (`db_test` runs a current-thread runtime, so spawned tasks too).
+/// `db_test` runs a current-thread runtime, so spawned tasks are covered too.
 fn install(
     capacity: usize,
 ) -> (

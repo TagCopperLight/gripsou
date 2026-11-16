@@ -15,7 +15,6 @@ vi.mock("@simplewebauthn/browser", () => ({
 const navigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => navigate }));
 
-/** The server, with an account already made: the page asks it first. */
 function stubFetch(handler: FetchHandler = () => new Response(null, { status: 204 })) {
   return stubAll((url, init) => (url === "/api/setup" ? jsonResponse({ needed: false }) : handler(url, init)));
 }
@@ -25,9 +24,7 @@ beforeEach(() => {
   stubFetch();
 });
 
-// Login navigates only to set up a fresh server; signing in, the /login route guard redirects once auth
-// flips (see router.test.tsx for that end-to-end flow). Here we only assert it
-// calls `login` correctly and surfaces credential errors.
+// Login navigates only to set up a fresh server; otherwise the /login route guard redirects (see router.test.tsx).
 describe("Login", () => {
   it("sends to the setup page while the server has no account", async () => {
     stubAll(() => jsonResponse({ needed: true }));
@@ -94,7 +91,6 @@ describe("Login", () => {
   describe("second step", () => {
     const mfa = { mfaRequired: true as const, challenge: "ch1" };
 
-    /** Sign in with a password the server accepts for a two-factor account. */
     async function toCodeStep(verifyLogin: AuthValue["verifyLogin"], { remember = false } = {}) {
       const login = vi.fn<AuthValue["login"]>().mockResolvedValue(mfa);
       renderWithApp(<Login />, { auth: signedOut({ login, verifyLogin }) });
@@ -249,7 +245,6 @@ describe("Login", () => {
     });
 
     describe("on the code page", () => {
-      /** Sign in with a password the server accepts for a two-factor account. */
       async function toCodeStep(loginWithPasskey: AuthValue["loginWithPasskey"]) {
         const login = vi.fn<AuthValue["login"]>().mockResolvedValue({ mfaRequired: true, challenge: "ch1" });
         renderWithApp(<Login />, { auth: signedOut({ login, loginWithPasskey }) });

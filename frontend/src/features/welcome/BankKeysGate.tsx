@@ -5,8 +5,6 @@ import { KeyRound } from "lucide-react";
 import { Button } from "../../ui/Button";
 import { WelcomeFooter } from "./WelcomeFooter";
 
-/** The bank step's buttons for an admin whose server has no working bank
- *  keys: it says so and offers the bank keys' screen instead. */
 export function BankKeysGate({ skip, onBack, onSetUp }: { skip: ReactNode; onBack: () => void; onSetUp: () => void }) {
   const { t } = useTranslation();
   return (

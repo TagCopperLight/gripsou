@@ -1,18 +1,14 @@
 type LegendItem = {
   label: string;
-  /** Any CSS color, e.g. "var(--color-green)". None: no marker (a "+3 others"). */
+  /** Any CSS color. None: no marker (a "+3 others"). */
   color?: string;
-  /** Render the marker as a dotted line instead of a solid one. */
   dashed?: boolean;
-  /** What `onHover` reports; defaults to the label. */
   key?: string;
-  /** Shown on hover (the names a "+3 others" stands for). */
   title?: string;
 };
 
 type ChartLegendProps = {
   items: LegendItem[];
-  /** The hovered item's key, then null when the pointer leaves it. */
   onHover?: (key: string | null) => void;
   className?: string;
 };
@@ -38,7 +34,6 @@ export function ChartLegend({ items, onHover, className = "" }: ChartLegendProps
               }
             />
           )}
-          {/* A long account name is cut: the legend stays a line or two. */}
           <span className="max-w-48 truncate whitespace-nowrap text-fg-faint text-xs font-mono">{item.label}</span>
         </div>
       ))}

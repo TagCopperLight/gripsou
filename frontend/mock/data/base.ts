@@ -1,7 +1,4 @@
-// The base dataset: one healthy household. A checking account and a Livret A
-// at a bank, a PEA at a broker holding two ETFs bought monthly, a year of
-// everyday spending with transfer pairs, the seeded categories, three tags.
-// Everything is generated from a fixed seed, anchored on today.
+// The base dataset: one healthy household, generated from a fixed seed and anchored on today.
 
 import type { Composition, Lot, MfaStatus, Provider, Session, SessionUser, User } from "../../src/api/wire.ts";
 import { DEFAULT_PREFS } from "../../src/api/wire.ts";
@@ -23,7 +20,6 @@ import {
 import { DAY_MS, TODAY, daysAgo, money, rng } from "./util.ts";
 
 export type BaseData = {
-  /** Hands out the id of every row added after the named ones. */
   ids: Ids;
   user: SessionUser;
   users: User[];
@@ -32,22 +28,15 @@ export type BaseData = {
   providers: Provider[];
   connections: ConnectionRow[];
   accounts: AccountRow[];
-  /** Balance of each cash account (checking, savings, the PEA's liquidity)
-   *  the day before `HISTORY_DAYS`; transactions move it from there. */
   openingCash: Record<string, number>;
   securities: SecurityRow[];
   manualLots: Record<string, Lot[]>;
   txns: TxnRow[];
   categories: CategoryRow[];
   tags: TagRow[];
-  /** `missing`: securities quoted in dollars with no dollar rate. `budget`:
-   *  some transaction has no rate. `rateDown`: a currency change can't get
-   *  its rate, so the server refuses it. `reportingFrom`: the first history
-   *  day the reader's currency has a rate (0: every day). */
   fx: { missing: string[]; budget: boolean; rateDown: boolean; reportingFrom: number };
 };
 
-/** Days of price and balance history, today included. */
 export const HISTORY_DAYS = 800;
 
 export const USER_ID = named("user", 1);
@@ -79,14 +68,12 @@ function categories(ids: Ids): CategoryRow[] {
   });
 }
 
-/** The category id of a seed key. */
 export function cat(rows: CategoryRow[], key: string): string {
   const row = rows.find((c) => c.seedKey === key);
   if (!row) throw new Error(`no seeded category ${key}`);
   return row.id;
 }
 
-/** Daily closes ending at `last`, as a seeded random walk with a drift. */
 export function closes(seed: number, last: number, drift: number, vol: number): number[] {
   const r = rng(seed);
   const out = new Array<number>(HISTORY_DAYS);
@@ -98,8 +85,7 @@ export function closes(seed: number, last: number, drift: number, vol: number): 
   return out.map((p) => Math.round(p * 100) / 100);
 }
 
-// Named as Boursorama names them (French, its October 2026 labels), as
-// production stores them: the app translates them for display.
+// Named as Boursorama names them (French), as production stores them: the app translates for display.
 export const WORLD: Composition = {
   countries: [
     { name: "Etats-Unis", weight: 0.71 },
@@ -132,7 +118,6 @@ export const SP500: Composition = {
   ],
 };
 
-/** Day index (0 = oldest history day) of a timestamp. */
 export function dayIndex(t: number): number {
   return HISTORY_DAYS - 1 - Math.round((TODAY - t) / DAY_MS);
 }
@@ -146,8 +131,7 @@ function transactions(ids: Ids, cats: CategoryRow[], tags: BaseTags, securities:
   const amt = (lo: number, hi: number) => Math.round((lo + r() * (hi - lo)) * 100) / 100;
 
   function add(t: number, accountId: string, amount: number, description: string, type: string, categoryKey: string | null, extra: Partial<TxnRow> = {}): TxnRow {
-    // The last month is still being worked through: some rows wait for a
-    // category. Nothing waits for review here: the "To review" state adds it.
+    // Some rows of the last month still wait for a category; "To review" is a state.
     const recent = TODAY - t < 30 * DAY_MS;
     const roll = r();
     let categoryId = categoryKey ? cat(cats, categoryKey) : null;
@@ -199,7 +183,6 @@ function transactions(ids: Ids, cats: CategoryRow[], tags: BaseTags, securities:
     at(15, (t) => {
       transfer(t, CHECKING, PEA, 600, "VIR VERS PEA BOURSORAMA", "VIREMENT RECU M CAMILLE MARTIN");
       peaCash.value += 600;
-      // Two days later the PEA buys one ETF, each in turn, for up to 600 €.
       const buyT = t + 2 * DAY_MS;
       if (!inPast(buyT)) return;
       const sec = securities[m % 2];

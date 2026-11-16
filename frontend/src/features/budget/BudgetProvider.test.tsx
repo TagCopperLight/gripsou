@@ -110,10 +110,7 @@ describe("BudgetProvider", () => {
     expect(screen.getByTestId("accountId")).toHaveTextContent("acc-1");
   });
 
-  // Against the plain-object form, both calls would read the same pre-batch
-  // `filters.categoryIds` (empty) and the second call would discard the
-  // first's write, leaving only "cat-2". The updater form derives from the
-  // in-flight `prev` state instead, so both ids survive.
+  // With the plain-object form both calls read the same pre-batch `filters.categoryIds`, so the second discards the first.
   it("two updater-form patchFilters calls in the same tick both survive", () => {
     renderProbe();
     fireEvent.click(screen.getByText("double-updater-patch"));
@@ -146,9 +143,8 @@ describe("period", () => {
     expect(screen.getByTestId("period")).toHaveTextContent("null");
   });
 
-  it("leaves the selection alone — a period is not a transactions filter", () => {
-    // Filters clear the selection because "all shown" would silently retarget.
-    // The period does not touch the transactions query at all, so it must not.
+  it("leaves the selection alone, since a period is not a transactions filter", () => {
+    // The period does not touch the transactions query, so it must not clear the selection.
     function Probe() {
       const { setPeriod, toggleRow, anySelected } = useBudget();
       return (

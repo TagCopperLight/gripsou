@@ -12,7 +12,6 @@ export const sync: MockState[] = [
     group: "Connections",
     option: "Every status",
     apply(store) {
-      // Each one holds one account (none: null), with some cash.
       const more: [string, Partial<ConnectionRow>, string | null][] = [
         ["Société Générale", { status: "syncing" }, "Compte courant"],
         ["Fortuneo", { status: "awaiting" }, "Compte courant"],
@@ -28,7 +27,6 @@ export const sync: MockState[] = [
         store.connections.push(connectionRow(id, displayName, c));
         if (account !== null) addAccount(store, id, 600 + 100 * i, { name: account, color: ACCOUNT_PALETTE[3], typeKey: "checking" });
       });
-      // A partial update: the bank's checking account is fresh, the Livret A is not.
       store.accountHealth[SAVINGS] = healthy({ lastUpdatedOn: staleDay(9) });
     },
   },

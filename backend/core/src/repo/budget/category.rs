@@ -1,7 +1,5 @@
-//! Category CRUD. The system row (`system_key = 'internal_transfer'`) is
-//! deliberately protected here rather than by a delete trigger: `user_id`
-//! cascades from `users`, and a raising trigger would make deleting a user
-//! impossible.
+//! Category CRUD. The system row is protected here, not by a delete trigger: `user_id` cascades from
+//! `users`, and a raising trigger would make deleting a user impossible.
 
 use uuid::Uuid;
 
@@ -12,7 +10,7 @@ use crate::error::CoreError;
 pub struct BudgetCategoryRow {
     pub id: Uuid,
     pub name: String,
-    /// Set only on seeded rows, cleared on rename — the frontend translates it.
+    /// Set only on seeded rows, cleared on rename; the frontend translates it.
     pub default_key: Option<String>,
     pub color: String,
     pub icon: Option<String>,
@@ -20,7 +18,6 @@ pub struct BudgetCategoryRow {
     pub kind: CategoryKind,
     pub system_key: Option<String>,
     pub archived: bool,
-    /// How many of this user's transactions carry the category, all-time.
     pub tx_count: i64,
 }
 
@@ -75,8 +72,7 @@ pub async fn list_categories(
     Ok(rows)
 }
 
-/// What a category chip needs, without the per-category transaction count
-/// `list_categories` pays for.
+/// Without the transaction count `list_categories` pays for.
 #[derive(Debug, Clone)]
 pub struct CategoryRef {
     pub id: Uuid,
@@ -104,8 +100,7 @@ pub async fn category_refs(
     Ok(rows)
 }
 
-/// The user's catch-all expense category (seeded as "Other"), whatever it is
-/// called now.
+/// The user's catch-all expense category (seeded as "Other"), whatever they renamed it to.
 pub async fn catch_all_expense(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -119,8 +114,7 @@ pub async fn catch_all_expense(
     .await?)
 }
 
-/// The next position within the kind is read and written under a lock on
-/// the user's row, so two categories created at once never share a number.
+/// Read and written under a lock on the user's row, so two categories created at once never share a number.
 pub async fn create_category(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -220,21 +214,17 @@ pub async fn update_category(
 #[derive(Debug, PartialEq, Eq)]
 pub enum DeleteCategory {
     Deleted,
-    /// Not this user's row, or already gone.
     NotFound,
-    /// The protected system row.
     System,
 }
 
-/// Deletes one category. Its transactions survive, uncategorised and back in
-/// the AI's, review's and pairing's hands.
+/// Its transactions survive uncategorised, back with the AI, review and pairing.
 pub async fn delete_category(
     pool: &sqlx::PgPool,
     user_id: Uuid,
     id: Uuid,
 ) -> Result<DeleteCategory, CoreError> {
-    // One transaction: the delete and the renumbering that closes the hole it
-    // leaves have to be one step, or a concurrent reorder could interleave.
+    // The delete and the renumbering must be one step, or a concurrent reorder could interleave.
     let mut tx = crate::db::begin_user_writes(pool, user_id).await?;
     let system = sqlx::query_scalar!(
         r#"
@@ -265,8 +255,7 @@ pub async fn delete_category(
     Ok(DeleteCategory::Deleted)
 }
 
-/// Renumbers every kind back to `1..n`, keeping the order the rows are already
-/// in. Called after a delete so the numbers never grow holes.
+/// Called after a delete so the numbers never grow holes.
 async fn compact_sort_order(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<(), CoreError> {
     sqlx::query!(
         r#"
@@ -287,14 +276,9 @@ async fn compact_sort_order(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Res
     Ok(())
 }
 
-/// Rewrites the order of the ids given, numbering each kind `1, 2, 3…` in the
-/// order supplied. The caller sends the whole list, kinds interleaved or not;
-/// the numbering is re-derived per kind here, so two adjacent rows changing
-/// places is exactly their two numbers swapping.
-///
-/// Writes nothing and returns `false` unless every id is a distinct row of
-/// this user's: a partial write would leave the list in an order nobody
-/// asked for.
+/// Numbers each kind `1, 2, 3…` in the order supplied; the caller sends the whole list, kinds interleaved
+/// or not. Writes nothing and returns `false` unless every id is a distinct row of this user's: a partial
+/// write would leave an order nobody asked for.
 pub async fn reorder_categories(
     pool: &sqlx::PgPool,
     user_id: Uuid,

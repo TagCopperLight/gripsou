@@ -1,11 +1,8 @@
-//! The instance's settings, set by the admin: the one `app_settings` row.
-//! Provider keys live in the same row but are encrypted, so they have their
-//! own module (`repo::provider_config`).
+//! Provider keys live in the same row but are encrypted, in `repo::provider_config`.
 
 use crate::error::CoreError;
 
-/// The pivot currency FX rates are stored against. Never displayed; the Yahoo
-/// provider needs it to build `{currency}{pivot}=X` symbols.
+/// Never displayed; the Yahoo provider builds `{currency}{pivot}=X` symbols from it.
 pub async fn base_currency(pool: &sqlx::PgPool) -> Result<String, CoreError> {
     let row = sqlx::query!(
         r#"
@@ -19,8 +16,7 @@ pub async fn base_currency(pool: &sqlx::PgPool) -> Result<String, CoreError> {
     Ok(row.base_currency)
 }
 
-/// The server-wide AI choice. `provider: None` means the AI is off for the
-/// instance. The API key is saved in `provider_config`, never here.
+/// `provider: None` means the AI is off. The API key is in `provider_config`, never here.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct BudgetAiSettings {
     pub provider: Option<String>,
@@ -53,8 +49,7 @@ pub async fn set_budget_ai(
     Ok(())
 }
 
-/// An admin-entered AI price, USD per million tokens. Stored in
-/// `app_settings.budget_ai_prices` as decimal strings under `in` / `out`.
+/// USD per million tokens.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ModelPrice {
     #[serde(rename = "in", with = "rust_decimal::serde::str")]
@@ -63,7 +58,6 @@ pub struct ModelPrice {
     pub output: rust_decimal::Decimal,
 }
 
-/// Prices keyed by the run log's model key (`<provider>:<model>`).
 pub type ModelPrices = std::collections::BTreeMap<String, ModelPrice>;
 
 pub async fn budget_ai_prices(pool: &sqlx::PgPool) -> Result<ModelPrices, CoreError> {
@@ -75,7 +69,6 @@ pub async fn budget_ai_prices(pool: &sqlx::PgPool) -> Result<ModelPrices, CoreEr
     Ok(row.prices.0)
 }
 
-/// Replaces the whole price map.
 pub async fn set_budget_ai_prices(
     pool: &sqlx::PgPool,
     prices: &ModelPrices,
@@ -89,8 +82,7 @@ pub async fn set_budget_ai_prices(
     Ok(())
 }
 
-/// The account providers the admin turned on. The catalog itself (names,
-/// adapters) is in code (`gripsou_providers::registry::ACCOUNTS`).
+/// The catalog itself is in code (`gripsou_providers::registry::ACCOUNTS`).
 pub async fn enabled_providers(pool: &sqlx::PgPool) -> Result<Vec<String>, CoreError> {
     let keys = sqlx::query_scalar!(
         r#"select enabled_providers as "enabled_providers!" from app_settings where id = 1"#
@@ -100,7 +92,6 @@ pub async fn enabled_providers(pool: &sqlx::PgPool) -> Result<Vec<String>, CoreE
     Ok(keys)
 }
 
-/// Turns an account provider on or off. Idempotent.
 pub async fn set_provider_enabled(
     pool: &sqlx::PgPool,
     key: &str,

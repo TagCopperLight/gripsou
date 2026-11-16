@@ -1,16 +1,11 @@
-//! Session persistence for opaque bearer-token auth. The raw token never hits
-//! the DB — only its SHA-256 hash. Authenticated requests look a session up by
-//! hash; revoking is deleting the row.
+//! The raw token never hits the DB, only its SHA-256 hash.
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::error::CoreError;
 
-/// A remembered session lasts this long after its last use: each touch
-/// pushes the expiry out again.
 pub const REMEMBERED_DAYS: i32 = 30;
-/// Any other session ends this long after sign-in, used or not.
 pub const UNREMEMBERED_DAYS: i32 = 1;
 
 pub struct Session {
@@ -56,8 +51,6 @@ pub async fn create(
     Ok(row)
 }
 
-/// A session is valid only while unexpired. Looked up by the SHA-256 hash of
-/// the bearer token on every authenticated request.
 pub async fn find_valid_by_hash(
     pool: &sqlx::PgPool,
     token_hash: &[u8],
@@ -75,7 +68,6 @@ pub async fn find_valid_by_hash(
     Ok(row)
 }
 
-/// Mark the session used; a remembered one gets [`REMEMBERED_DAYS`] more.
 pub async fn touch(
     pool: &sqlx::PgPool,
     session_id: Uuid,
@@ -102,8 +94,7 @@ pub async fn touch(
     Ok(())
 }
 
-/// Revoke a session, scoped to its owner so a user can never delete another
-/// user's session. Returns whether a row was removed.
+/// Scoped to its owner, so a user can never delete another user's session.
 pub async fn delete(pool: &sqlx::PgPool, user_id: Uuid, id: Uuid) -> Result<bool, CoreError> {
     let res = sqlx::query!(
         r#"delete from session where id = $1 and user_id = $2"#,
@@ -130,9 +121,6 @@ pub async fn list_for_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<Ses
     Ok(rows)
 }
 
-/// Sign the user out everywhere, except on `keep` (the session asking, when
-/// it stays signed in). Runs on a pool or in a caller's transaction. Returns
-/// the number removed.
 pub async fn delete_all(
     db: impl sqlx::PgExecutor<'_>,
     user_id: Uuid,
@@ -148,8 +136,6 @@ pub async fn delete_all(
     Ok(res.rows_affected())
 }
 
-/// Housekeeping: drop sessions past their expiry. Lookups already ignore them;
-/// this just reclaims rows.
 pub async fn delete_expired(pool: &sqlx::PgPool) -> Result<u64, CoreError> {
     let res = sqlx::query!(r#"delete from session where expires_at <= now()"#)
         .execute(pool)
@@ -216,7 +202,6 @@ mod tests {
             .execute(&pool)
         };
 
-        // remembered → expiry slides out to ~30d
         let h1 = vec![1u8];
         let s1 = create(&pool, user_id, &h1, None, None, true).await.unwrap();
         soon(s1.id).await.unwrap();
@@ -224,7 +209,6 @@ mod tests {
         let after = find_valid_by_hash(&pool, &h1).await.unwrap().unwrap();
         assert!(after.expires_at > Utc::now() + Duration::days(29));
 
-        // not remembered → expiry unchanged
         let h2 = vec![2u8];
         let s2 = create(&pool, user_id, &h2, None, None, false)
             .await
@@ -244,10 +228,8 @@ mod tests {
             .await
             .unwrap();
 
-        // wrong owner can't delete
         assert!(!delete(&pool, other, s.id).await.unwrap());
         assert!(find_valid_by_hash(&pool, &[1u8]).await.unwrap().is_some());
-        // owner can
         assert!(delete(&pool, user_id, s.id).await.unwrap());
         assert!(find_valid_by_hash(&pool, &[1u8]).await.unwrap().is_none());
     }

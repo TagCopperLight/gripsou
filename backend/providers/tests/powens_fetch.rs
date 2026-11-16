@@ -2,16 +2,12 @@ use gripsou_providers::powens::PowensProvider;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-/// Powens caps `limit` at 1000 and paginates via `_links.next`; a 3.5-year
-/// history is several pages, so a fetch that stops at page one silently loses
-/// most of the ledger.
 #[tokio::test]
 async fn follows_the_next_link_to_exhaustion() {
     let server = MockServer::start().await;
 
-    // Account 501 must exist: map_sync only emits transactions whose account it
-    // also emitted, so an empty account list would filter both pages away and
-    // this test would pass vacuously while proving nothing about pagination.
+    // Account 501 must exist: map_sync drops transactions of accounts it did not emit, so without it
+    // this test would pass vacuously.
     Mock::given(method("GET"))
         .and(path("/2.0/users/me/accounts"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -83,8 +79,6 @@ async fn follows_the_next_link_to_exhaustion() {
     assert_eq!(ids, vec!["1", "2"], "both pages are ingested");
 }
 
-/// Mounts the two list endpoints `sync` needs besides the one under test, plus
-/// an empty connections response, so a test can speak about one endpoint only.
 async fn mount_empty_except(server: &MockServer, skip: &[&str]) {
     for (p, body) in [
         (
@@ -125,10 +119,9 @@ fn checking_account(id: i64) -> serde_json::Value {
     })
 }
 
-/// `/accounts` and `/investments` document `limit`/`offset` and no cursor, so a
-/// full page with no `_links.next` means "there is probably more" — not "that
-/// is all there is". Stopping there would hand the ingest a short holding list,
-/// which it reads as "those positions were sold" and zeroes.
+/// A full page with no `_links.next` on `/accounts` and `/investments` (which document only
+/// `limit`/`offset`) means "probably more". Stopping would hand the ingest a short holding list,
+/// which it reads as "sold" and zeroes.
 #[tokio::test]
 async fn a_full_account_page_without_a_cursor_is_followed_by_offset() {
     let server = MockServer::start().await;
@@ -162,8 +155,6 @@ async fn a_full_account_page_without_a_cursor_is_followed_by_offset() {
     assert_eq!(result.accounts.len(), 1001, "both pages are ingested");
 }
 
-/// The investments endpoint gets the same treatment, and honours a cursor when
-/// the response does carry one.
 #[tokio::test]
 async fn investments_follow_the_next_link() {
     let server = MockServer::start().await;
@@ -173,8 +164,7 @@ async fn investments_follow_the_next_link() {
     )
     .await;
 
-    // The holdings need an account to hang off, or map_sync drops them and the
-    // assertion below would pass without proving anything.
+    // The holdings need an account, or map_sync drops them and the assertion proves nothing.
     Mock::given(method("GET"))
         .and(path("/2.0/users/me/accounts"))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -230,10 +220,8 @@ async fn investments_follow_the_next_link() {
     assert_eq!(isins, vec!["FR0000000001", "FR0000000002"]);
 }
 
-/// A cursor that never advances must fail the sync, not hand the ingest the
-/// rows gathered so far: a partial holding list is worse than no sync at all,
-/// because the ingest zeroes every holding it does not see and writes that
-/// zero into the snapshot history.
+/// A cursor that never advances must fail the sync: a partial holding list would be zeroed into
+/// the snapshot history.
 #[tokio::test]
 async fn a_cursor_that_never_ends_fails_the_sync() {
     let server = MockServer::start().await;

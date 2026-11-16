@@ -15,8 +15,7 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
   const { data, isPending, refetch } = useAccounts();
   const excluded = useFxExcludedCount();
   const accounts = data ?? [];
-  // The middle shows the net worth, overdrafts included; the ring shows how
-  // what is owned is spread (`distribution`).
+  // The middle shows net worth with overdrafts; the ring shows how what is owned is spread.
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
   const items = distribution(accounts).map(({ account: a, share }) => ({
     key: a.id,

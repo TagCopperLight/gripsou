@@ -3,9 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 
 import { Popover } from "./Popover";
 
-/** jsdom gives every element a zero rect, so the assertions here are about
- *  *which* anchor drives the position and about the close behaviour — not
- *  about pixel values, which only a real layout could produce. */
+/** jsdom gives every rect zero size: assert which anchor drives the position and the close behaviour, not pixels. */
 function renderAt(rect: Partial<DOMRect>, onClose = vi.fn()) {
   const anchor = document.createElement("button");
   document.body.appendChild(anchor);
@@ -39,7 +37,7 @@ describe("Popover", () => {
     expect(onClose).toHaveBeenCalledTimes(2);
   });
 
-  it("does not count a click on the anchor as a click outside — the trigger owns its own toggle", () => {
+  it("does not count a click on the anchor as a click outside, since the trigger owns its own toggle", () => {
     const { anchor, onClose } = renderAt({ top: 10, bottom: 40, left: 10 });
     fireEvent.pointerDown(anchor);
     expect(onClose).not.toHaveBeenCalled();

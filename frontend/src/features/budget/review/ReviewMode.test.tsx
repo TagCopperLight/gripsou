@@ -25,15 +25,11 @@ const TWIN = { ...GUESS, id: "t3", description: "LECLERC 1234", categoryConfiden
 type Server = {
   pending: unknown[];
   calls: { url: string; body: unknown }[];
-  /** What accept reports as other rows sharing the description. */
   same?: number;
   /** Rows apply-to-description writes; `breaks` makes the first call refuse. */
   applied?: string[];
   breaks?: number;
-  /** A single-row correction the server refuses until the pair break is
-   *  confirmed, as it does for a paired transfer. */
   paired?: boolean;
-  /** Any write whose url contains this fails with a 500. */
   fail?: string;
 };
 
@@ -240,7 +236,6 @@ describe("Review mode", () => {
     fireEvent.click(within(await screen.findByTestId("review-line-t2")).getByRole("button", { name: "Correct" }));
     fireEvent.click(await screen.findByTestId("chooser-option-c2"));
 
-    // Refused, nothing written: the line is pending again while we ask.
     expect(await screen.findByRole("dialog", { name: "Break the transfer pairing?" })).toBeVisible();
     expect(screen.getByTestId("review-line-t2")).toBeVisible();
 
