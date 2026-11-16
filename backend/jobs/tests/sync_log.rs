@@ -137,6 +137,15 @@ async fn a_successful_sync_logs_one_sync_finished_with_its_counts(pool: PgPool) 
     .await
     .unwrap();
     assert_eq!(started, 1);
+
+    // The fake bank has no website on record, so its logo is missing.
+    let no_logo: i64 = sqlx::query_scalar(
+        "select count(*) from log where level = 'warn' and message = 'institution has no logo'",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(no_logo, 1);
 }
 
 #[gripsou_core::testkit::db_test]
