@@ -24,7 +24,7 @@ start_test_db() {
   image=$(sed -n 's/^ *image: *\(postgres:.*\)$/\1/p' docker/docker-compose.yml)
   docker run -d --rm --name "$db" --tmpfs /var/lib/postgresql/data \
     -e POSTGRES_USER=gripsou -e POSTGRES_PASSWORD=gripsou -e POSTGRES_DB=gripsou \
-    -e POSTGRES_HOST_AUTH_METHOD=trust \
+    -e POSTGRES_HOST_AUTH_METHOD=trust -p 127.0.0.1::5432 \
     "$image" -c fsync=off -c synchronous_commit=off -c full_page_writes=off \
     -c max_connections=200 >/dev/null
 }
@@ -36,8 +36,8 @@ test_db() {
     docker exec "$db" pg_isready -h 127.0.0.1 -U gripsou -d gripsou -q && break
     sleep 0.5
   done
-  ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$db")
-  export DATABASE_URL=postgres://gripsou:gripsou@$ip:5432/gripsou
+  # Through a published port: rootless Docker's container addresses are unreachable from the host.
+  export DATABASE_URL=postgres://gripsou:gripsou@$(docker port "$db" 5432/tcp)/gripsou
   DATABASE_URL=${DATABASE_URL%/*}/template1 "$examples/migrate"
 }
 
