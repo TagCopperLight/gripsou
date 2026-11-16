@@ -51,7 +51,12 @@ export function ResetLinkModal({ user, onClose }: { user: User; onClose: () => v
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
-          <Button onClick={() => void submit()} disabled={!password || busy}>
+          <Button
+            onClick={() => void submit()}
+            disabled={!password}
+            busy={busy}
+            busyLabel={t(checking ? "common.busy.verifying" : "common.busy.creating")}
+          >
             {t("settings.users.reset.create")}
           </Button>
         </>

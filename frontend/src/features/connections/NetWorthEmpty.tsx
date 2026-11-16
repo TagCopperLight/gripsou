@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { ChartLine, Loader2 } from "lucide-react";
 
 import { Button } from "../../ui/Button";
-import { CardState } from "../../ui/CardState";
+import { Bone, Skeleton, TextBone } from "../../ui/Skeleton";
 import { useConnections } from "../../api/connections";
 import { netWorthEmptyKind } from "../../lib/connectionState";
 
@@ -13,7 +13,17 @@ export function NetWorthEmpty({ className = "" }: { className?: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { data, isError } = useConnections();
-  if (data === undefined && !isError) return <CardState variant="loading" className={className} />;
+  if (data === undefined && !isError) {
+    // The message's shape: in nearly every case it offers a button.
+    return (
+      <Skeleton className={`flex flex-col items-center justify-center gap-2 ${className}`}>
+        <Bone className="size-6" />
+        <TextBone text="text-sm" className="w-40" />
+        <TextBone text="text-sm" className="w-72 max-w-full" />
+        <Bone className="mt-2 h-9.5 w-36 rounded-xl" />
+      </Skeleton>
+    );
+  }
 
   // Unreachable connections: the points already say there are no accounts,
   // and Settings · Connections is where to look either way.

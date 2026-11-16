@@ -9,7 +9,10 @@ import { ExcludedFootnote } from "../../ui/FxNote";
 import { NetWorthHeadline } from "../dashboard/NetWorthHeadline";
 import { StackedAreaChart, type StackedSeries } from "./StackedAreaChart";
 import { ChartLegend } from "../../ui/ChartLegend";
-import { CardState } from "../../ui/CardState";
+import { CardError } from "../../ui/CardError";
+import { LoadingFrame } from "../../ui/LoadingFrame";
+import { Bone, ChartBone, Skeleton, TextBone } from "../../ui/Skeleton";
+import { staleClass } from "../../ui/stale";
 import { NetWorthEmpty } from "../connections/NetWorthEmpty";
 import { useNetWorth, useAccountSeries } from "../../api/accounts";
 import { useFxExcludedCount } from "../../api/holdings";
@@ -33,7 +36,10 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
   const series = useAccountSeries(range);
   const excluded = useFxExcludedCount();
   const ready = nw.data !== undefined && series.data !== undefined;
-  const isError = nw.isError || series.isError;
+  const loading = nw.isPending || series.isPending;
+  const isError = !ready && !loading;
+  // A new range keeps the last one's figures on screen, dimmed, until its own arrive.
+  const stale = staleClass(nw.isPlaceholderData || series.isPlaceholderData);
   // No accounts: the same stand-in as the dashboard's chart, rather than a
   // 0 € headline and a gain pill that would only look like data.
   const empty = ready && nw.data.points.length === 0;
@@ -59,13 +65,17 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
 
   return (
     <Surface className={`w-full ${className}`}>
-      <div className="flex flex-col p-4 md:p-5">
+      <LoadingFrame loading={loading} className="flex flex-col p-4 md:p-5">
         <div className="flex flex-col gap-3 md:flex-row md:justify-between md:gap-4">
           <div className="flex flex-col gap-1 md:shrink-0">
             <CardTitle privacy={ready && !empty && privacy}>
               {t("dashboard.netWorth.title")}
             </CardTitle>
-            {ready && !empty && <NetWorthHeadline summary={nw.data.summary} range={range} masked={privacy.masked} />}
+            {!empty && !isError && (
+              <div className={`flex flex-col gap-1 ${stale}`}>
+                <NetWorthHeadline summary={ready ? nw.data.summary : undefined} range={range} masked={privacy.masked} />
+              </div>
+            )}
           </div>
           {!empty && (
             <div className="flex min-w-0 flex-col md:items-end">
@@ -73,7 +83,19 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
                 <RangeSelector value={range} onChange={setRange} />
               </div>
               {/* Phone: one swipeable row instead of three wrapped ones. */}
-              <ChartLegend className="-mx-1 overflow-x-auto px-1 md:mt-3 md:flex-wrap md:justify-end md:overflow-visible" items={legendItems} onHover={onHover} />
+              {series.data === undefined ? (
+                // The accounts' names: three of them, as many as most legends show.
+                <Skeleton className="flex items-center gap-4 md:mt-3">
+                  {[80, 64, 96].map((w) => (
+                    <span key={w} className="flex items-center gap-2">
+                      <Bone className="h-0.5 w-4" />
+                      <TextBone text="text-xs" style={{ width: w }} />
+                    </span>
+                  ))}
+                </Skeleton>
+              ) : (
+                <ChartLegend className={`-mx-1 overflow-x-auto px-1 md:mt-3 md:flex-wrap md:justify-end md:overflow-visible ${stale}`} items={legendItems} onHover={onHover} />
+              )}
             </div>
           )}
         </div>
@@ -81,10 +103,11 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
         {empty ? (
           <NetWorthEmpty className="mt-4 h-80" />
         ) : ready ? (
-          <StackedAreaChart className="mt-4" series={stacked} highlight={highlight} />
+          <StackedAreaChart className={`mt-4 ${stale}`} series={stacked} highlight={highlight} />
+        ) : loading ? (
+          <ChartBone className="mt-4 h-80" />
         ) : (
-          <CardState
-            variant={isError ? "error" : "loading"}
+          <CardError
             onRetry={() => {
               nw.refetch();
               series.refetch();
@@ -93,7 +116,7 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
           />
         )}
         {ready && !empty && nw.data.summary.fxMissing && <ExcludedFootnote count={excluded} className="order-last mt-3" />}
-      </div>
+      </LoadingFrame>
     </Surface>
   );
 }

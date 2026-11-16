@@ -30,7 +30,7 @@ export function LinkModal({ title, subtitle, body, link, error = false, onClose 
         <ErrorState title={t("settings.users.linkError")} detail={t("common.tryAgain")} className="mt-4 py-4" />
       ) : (
         <div className="mt-4">
-          <CopyField value={link} label={t("settings.users.copyLink")} pending={t("common.loading")} />
+          <CopyField value={link} label={t("settings.users.copyLink")} />
         </div>
       )}
     </Dialog>

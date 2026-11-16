@@ -4,6 +4,7 @@ import { Check, LoaderCircle, TriangleAlert } from "lucide-react";
 
 import { Button } from "../../ui/Button";
 import { Dialog } from "../../ui/Dialog";
+import { LoadingFrame } from "../../ui/LoadingFrame";
 import { showError } from "../../lib/errorToasts";
 import { useMfaStatus } from "../../api/auth";
 import { PasskeyRow, TotpRow } from "../settings/security/SecurityRow";
@@ -77,7 +78,7 @@ export function SecurityScreen({
     : <span className="text-red">{t(`passkeys.${passkey}`)}</span>;
 
   return (
-    <>
+    <LoadingFrame loading={mfa.isPending}>
       <div className="flex flex-col gap-2">
         <TotpRow
           action={
@@ -87,7 +88,7 @@ export function SecurityScreen({
                 {t("welcome.twoFactor.on")}
               </span>
             ) : (
-              <Button variant="ghostStrong" onClick={() => void enrolment.begin()} disabled={enrolment.busy}>
+              <Button variant="ghostStrong" onClick={() => void enrolment.begin()} busy={enrolment.busy} busyLabel={t("common.busy.opening")}>
                 {t("welcome.twoFactor.setUp")}
               </Button>
             )
@@ -137,6 +138,6 @@ export function SecurityScreen({
           <p className="text-sm text-fg-dim">{t("welcome.twoFactor.skipBody")}</p>
         </Dialog>
       )}
-    </>
+    </LoadingFrame>
   );
 }

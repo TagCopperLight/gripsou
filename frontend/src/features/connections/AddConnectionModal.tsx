@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../ui/Button";
-import { CardState } from "../../ui/CardState";
+import { CardError } from "../../ui/CardError";
 import { Dialog } from "../../ui/Dialog";
+import { Skeleton, TextBone } from "../../ui/Skeleton";
 import { useStartConnection } from "./useStartConnection";
 import type { EnabledProvider } from "../../api/wire";
 
@@ -15,7 +16,7 @@ type AddConnectionModalProps = {
 export function AddConnectionModal({ onClose, returnTo = "/settings/connections" }: AddConnectionModalProps) {
   const { t } = useTranslation();
   const flow = useStartConnection({ returnTo, errorMessage: t("settings.connections.connectError") });
-  const { data: providers, isLoading, isError } = flow.providers;
+  const { data: providers, isPending, isError } = flow.providers;
   const [selected, setSelected] = useState<string | null>(null);
 
   const connect = () => {
@@ -26,6 +27,7 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
     <Dialog
       title={t("settings.connections.pickProvider")}
       onClose={onClose}
+      busy={flow.pending}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -34,8 +36,9 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
           <Button
             variant="primary"
             onClick={connect}
-            disabled={!selected || flow.pending}
-            aria-label={t("settings.connections.connect")}
+            disabled={!selected}
+            busy={flow.pending}
+            busyLabel={t("common.busy.connecting")}
           >
             {t("settings.connections.connect")}
           </Button>
@@ -43,9 +46,9 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
       }
     >
       <div className="flex flex-col gap-3">
-        {isLoading && <CardState variant="loading" className="h-32" />}
-        {isError && <CardState variant="error" className="h-32" />}
-        {!isLoading && !isError && providers?.length === 0 && (
+        {isPending && <ProviderCardsSkeleton />}
+        {isError && <CardError className="h-32" />}
+        {providers?.length === 0 && (
           <p className="text-sm text-fg-faint py-6 text-center">
             {t("settings.connections.noProviders")}
           </p>
@@ -60,6 +63,19 @@ export function AddConnectionModal({ onClose, returnTo = "/settings/connections"
         ))}
       </div>
     </Dialog>
+  );
+}
+
+function ProviderCardsSkeleton() {
+  return (
+    <Skeleton className="flex flex-col gap-3">
+      {Array.from({ length: 2 }, (_, card) => (
+        <div key={card} className="rounded-2xl border border-surface-2 bg-surface-2 px-4 py-3">
+          <TextBone text="text-sm" className="w-28" />
+          <TextBone text="mt-0.5 text-xs" className="w-56" />
+        </div>
+      ))}
+    </Skeleton>
   );
 }
 

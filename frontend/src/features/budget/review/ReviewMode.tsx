@@ -12,7 +12,7 @@ import { ReviewProgress } from "./ReviewProgress";
 import { ReviewSkeleton } from "./ReviewSkeleton";
 import { usePopover } from "../../../ui/usePopover";
 import { useLoadOnScroll } from "../../../lib/useLoadOnScroll";
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
 import { BreakPairModal } from "../BreakPairModal";
 import { useTransactions } from "../../../api/transactions";
 import { useAcceptReview, useAiStatus, useApplyToDescription, useBudgetCategories, usePatchTransaction, useUndoReview } from "../../../api/budget";
@@ -153,13 +153,13 @@ export function ReviewMode() {
     );
   };
 
-  if (list.isPending) return <ReviewSkeleton title={t("budget.review.title")} />;
+  if (list.isPending) return <ReviewSkeleton queued={status?.reviewCount} />;
 
   if (list.isError && lines.length === 0) {
     return (
       <Surface className="p-6">
         <h2 className="text-lg font-semibold text-fg">{t("budget.review.title")}</h2>
-        <CardState variant="error" onRetry={() => void list.refetch()} className="mt-4 h-40" />
+        <CardError onRetry={() => void list.refetch()} className="mt-4 h-40" />
       </Surface>
     );
   }

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsMutating, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
 import type { CompleteConnectionReq, ProviderGroup } from "./wire";
 import { keys } from "./keys";
@@ -44,12 +44,21 @@ export function useManageConnection() {
   });
 }
 
+const SYNC_ALL = ["syncAll"];
+
 export function useSyncAll() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: SYNC_ALL,
     mutationFn: () => api("POST /sync"),
     onSuccess: () => afterSyncRequested(qc),
   });
+}
+
+/** A "Sync all" request is on its way, from wherever it was started: it syncs
+ *  every connection, so each one shows it from the click on. */
+export function useSyncAllPending() {
+  return useIsMutating({ mutationKey: SYNC_ALL }) > 0;
 }
 
 export function useEnabledProviders() {

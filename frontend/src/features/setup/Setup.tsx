@@ -5,7 +5,8 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { AuthPage } from "../../ui/AuthPage";
 import { Button } from "../../ui/Button";
-import { CardState } from "../../ui/CardState";
+import { CardError } from "../../ui/CardError";
+import { LoadingFrame } from "../../ui/LoadingFrame";
 import { Field } from "../../ui/Field";
 import { TextInput } from "../../ui/TextInput";
 import { showError } from "../../lib/errorToasts";
@@ -43,11 +44,12 @@ export function Setup() {
   if (status.isError) {
     return (
       <AuthPage>
-        <CardState variant="error" onRetry={() => void status.refetch()} className="rounded-3xl bg-surface p-6" />
+        <CardError onRetry={() => void status.refetch()} className="rounded-3xl bg-surface p-6" />
       </AuthPage>
     );
   }
-  if (!status.data?.needed) return null;
+  // Set up already: on the way to the sign-in page.
+  if (closed) return null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,29 +93,31 @@ export function Setup() {
           <div className="text-lg font-semibold text-fg">{t("setup.title")}</div>
           <p className="text-sm text-fg-dim">{t("setup.adminNote")}</p>
         </div>
-        <Field
-          label={t("setup.code")}
-          labelClassName="text-fg-dim"
-          error={error?.field === "code" && error.text}
-          htmlFor={`${id}-code`}
-        >
-          <TextInput
-            id={`${id}-code`}
-            autoComplete="off"
-            spellCheck={false}
-            autoCapitalize="characters"
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            invalid={error?.field === "code"}
-            placeholder="XXXX-XXXX-XXXX"
-            className="font-mono uppercase placeholder:text-fg-faint/50"
-          />
-          {error?.field !== "code" && <span className="text-xs text-fg-faint">{t("setup.codeHint")}</span>}
-        </Field>
-        <NewAccountFields account={account} onChange={setAccount} error={error} />
-        <Button type="submit" disabled={pending} className="mt-1">
-          {t("auth.createAccountButton")}
-        </Button>
+        <LoadingFrame loading={status.isPending}>
+          <Field
+            label={t("setup.code")}
+            labelClassName="text-fg-dim"
+            error={error?.field === "code" && error.text}
+            htmlFor={`${id}-code`}
+          >
+            <TextInput
+              id={`${id}-code`}
+              autoComplete="off"
+              spellCheck={false}
+              autoCapitalize="characters"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              invalid={error?.field === "code"}
+              placeholder="XXXX-XXXX-XXXX"
+              className="font-mono uppercase placeholder:text-fg-faint/50"
+            />
+            {error?.field !== "code" && <span className="text-xs text-fg-faint">{t("setup.codeHint")}</span>}
+          </Field>
+          <NewAccountFields account={account} onChange={setAccount} error={error} />
+          <Button type="submit" busy={pending} busyLabel={t("common.busy.creating")} className="mt-1">
+            {t("auth.createAccountButton")}
+          </Button>
+        </LoadingFrame>
       </form>
     </AuthPage>
   );

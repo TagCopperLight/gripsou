@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
 
 import { SettingsSurface } from "../../../ui/SettingsSurface";
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
+import { Bone, Skeleton, TextBone } from "../../../ui/Skeleton";
 import { useBudgetAiUsage, useSetBudgetAiPrices, type BudgetAiPrices } from "../../../api/budget";
 import type { BudgetAiModelUsage } from "../../../api/wire";
 import { formatMoney } from "../../../lib/money";
@@ -13,6 +14,8 @@ import { TextInput } from "../../../ui/TextInput";
 type Side = "in" | "out";
 
 const current = (m: BudgetAiModelUsage, side: Side) => (side === "in" ? m.priceIn : m.priceOut);
+
+const TOTAL = "mt-4 flex items-baseline justify-between border-t border-surface-2 pt-4";
 
 /** Settings → Server: what AI categorisation has cost so far, per model. The
  *  admin types each model's price (per million tokens) from the provider's
@@ -25,14 +28,62 @@ export function AiCostSurface() {
   // Uncommitted edits, keyed "<model>\u0000<side>"; absent = show the server value.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   useErrorToast(save.isError && t("settings.server.budgetAiPriceSaveError"));
+  const th = "pb-2 font-medium text-fg-faint";
+  const head = (
+    <thead>
+      <tr className="text-left text-xs">
+        <th className={th}>{t("settings.server.budgetAiCostModel")}</th>
+        <th className={`${th} text-right`}>{t("settings.server.budgetAiCostRuns")}</th>
+        <th className={`${th} text-right`}>{t("settings.server.budgetAiCostTokensIn")}</th>
+        <th className={`${th} text-right`}>{t("settings.server.budgetAiCostTokensOut")}</th>
+        <th className={`${th} text-right`}>{t("settings.server.budgetAiCostPriceIn")}</th>
+        <th className={`${th} text-right`}>{t("settings.server.budgetAiCostPriceOut")}</th>
+        <th className={`${th} text-right`}>{t("settings.server.budgetAiCostCost")}</th>
+      </tr>
+    </thead>
+  );
+  const totalLabel = <span className="text-sm font-medium text-fg">{t("settings.server.budgetAiCostTotal")}</span>;
+
   if (!usage) {
     return (
       <SettingsSurface title={t("settings.server.budgetAiCost")} hint={t("settings.server.budgetAiCostHint")}>
-        <CardState
-          variant={query.isError ? "error" : "loading"}
-          onRetry={() => void query.refetch()}
-          className="h-24"
-        />
+        {query.isError ? (
+          <CardError onRetry={() => void query.refetch()} className="h-24" />
+        ) : (
+          <Skeleton>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-fg">
+                {head}
+                <tbody className="divide-y divide-surface-2">
+                  {["w-24", "w-32"].map((width) => (
+                    <tr key={width}>
+                      <td className="py-2.5 pr-4">
+                        <TextBone text="text-sm" className={width} />
+                      </td>
+                      {["w-6", "w-10", "w-10"].map((width, i) => (
+                        <td key={i} className="py-2.5 pl-3">
+                          <TextBone text="text-sm" className={`ml-auto ${width}`} />
+                        </td>
+                      ))}
+                      {[0, 1].map((i) => (
+                        <td key={i} className="py-1.5 pl-3">
+                          <Bone className="ml-auto h-9.5 w-24 rounded-xl" />
+                        </td>
+                      ))}
+                      <td className="py-2.5 pl-3">
+                        <TextBone text="text-sm" className="ml-auto w-12" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className={TOTAL}>
+              {totalLabel}
+              <TextBone text="text-xl" className="w-20" />
+            </div>
+          </Skeleton>
+        )}
       </SettingsSurface>
     );
   }
@@ -92,8 +143,6 @@ export function AiCostSurface() {
     );
   };
 
-  const th = "pb-2 font-medium text-fg-faint";
-
   return (
     <SettingsSurface title={t("settings.server.budgetAiCost")} hint={t("settings.server.budgetAiCostHint")}>
       {usage.models.length === 0 ? (
@@ -102,17 +151,7 @@ export function AiCostSurface() {
         <>
           <div className="overflow-x-auto">
             <table className="w-full text-sm text-fg">
-              <thead>
-                <tr className="text-left text-xs">
-                  <th className={th}>{t("settings.server.budgetAiCostModel")}</th>
-                  <th className={`${th} text-right`}>{t("settings.server.budgetAiCostRuns")}</th>
-                  <th className={`${th} text-right`}>{t("settings.server.budgetAiCostTokensIn")}</th>
-                  <th className={`${th} text-right`}>{t("settings.server.budgetAiCostTokensOut")}</th>
-                  <th className={`${th} text-right`}>{t("settings.server.budgetAiCostPriceIn")}</th>
-                  <th className={`${th} text-right`}>{t("settings.server.budgetAiCostPriceOut")}</th>
-                  <th className={`${th} text-right`}>{t("settings.server.budgetAiCostCost")}</th>
-                </tr>
-              </thead>
+              {head}
               <tbody className="divide-y divide-surface-2">
                 {usage.models.map((m) => (
                   <tr key={m.model}>
@@ -141,8 +180,8 @@ export function AiCostSurface() {
               </tbody>
             </table>
           </div>
-          <div className="mt-4 flex items-baseline justify-between border-t border-surface-2 pt-4">
-            <span className="text-sm font-medium text-fg">{t("settings.server.budgetAiCostTotal")}</span>
+          <div className={TOTAL}>
+            {totalLabel}
             <span data-testid="ai-cost-total" className="text-xl font-semibold tabular-nums text-fg">
               {money(usage.totalCost)}
             </span>

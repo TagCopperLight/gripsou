@@ -4,7 +4,7 @@ import { Fingerprint, LoaderCircle } from "lucide-react";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { useNavigate } from "@tanstack/react-router";
 import { AuthPage } from "../../ui/AuthPage";
-import { CardState } from "../../ui/CardState";
+import { CardError } from "../../ui/CardError";
 import { Button } from "../../ui/Button";
 import { CodeInput } from "../../ui/CodeInput";
 import { FieldError } from "../../ui/FieldError";
@@ -152,7 +152,7 @@ export function Login() {
         type="button"
         onClick={() => backToPassword()}
         disabled={pending}
-        className="cursor-pointer text-sm font-medium text-fg transition-opacity duration-140 hover:opacity-70 disabled:cursor-not-allowed disabled:opacity-40"
+        className="cursor-pointer text-sm font-medium text-fg transition-opacity duration-140 hover:opacity-70"
       >
         {t("auth.mfa.change")}
       </button>
@@ -163,7 +163,7 @@ export function Login() {
       type="button"
       onClick={() => switchTo(next)}
       disabled={pending}
-      className="cursor-pointer self-center pt-1 text-sm font-medium text-fg-dim transition-colors duration-140 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+      className="cursor-pointer self-center pt-1 text-sm font-medium text-fg-dim transition-colors duration-140 hover:text-fg"
     >
       {label}
     </button>
@@ -181,7 +181,7 @@ export function Login() {
       type="button"
       onClick={() => void signInWithPasskey()}
       disabled={pending}
-      className="flex h-10.25 cursor-pointer items-center justify-center gap-2 rounded-xl bg-surface-2 text-sm font-medium text-fg transition-colors duration-140 hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex h-10.25 cursor-pointer items-center justify-center gap-2 rounded-xl bg-surface-2 text-sm font-medium text-fg transition-colors duration-140 hover:bg-surface-3"
     >
       <Fingerprint className="size-4.5" strokeWidth={2} />
       {t("auth.signInWithPasskey")}
@@ -190,7 +190,7 @@ export function Login() {
 
   let card;
   if (setup.isError) {
-    card = <CardState variant="error" onRetry={() => void setup.refetch()} className="rounded-3xl bg-surface p-6" />;
+    card = <CardError onRetry={() => void setup.refetch()} className="rounded-3xl bg-surface p-6" />;
   } else if (step === "code") {
     card = (
       <div className="flex flex-col gap-4 rounded-3xl bg-surface p-6">
@@ -258,7 +258,7 @@ export function Login() {
           </label>
           {errorLine}
         </div>
-        <Button type="submit" disabled={pending || !backupCode.trim()} className="mt-1">
+        <Button type="submit" disabled={!backupCode.trim()} busy={pending} busyLabel={t("common.busy.signingIn")} className="mt-1">
           {t("auth.signIn")}
         </Button>
         {switchLink(t("auth.mfa.useApp"), "code")}
@@ -291,7 +291,7 @@ export function Login() {
           </span>
           {t("auth.rememberMe")}
         </label>
-        <Button type="submit" disabled={pending} className="mt-1">
+        <Button type="submit" busy={pending} busyLabel={t("common.busy.signingIn")} className="mt-1">
           {t("auth.signIn")}
         </Button>
         {orDivider}

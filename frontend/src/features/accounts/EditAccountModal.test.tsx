@@ -19,8 +19,10 @@ const ACCOUNT: Account = {
   fxMissing: false,
 };
 
-function renderModal(onClose = () => {}) {
-  return renderWithApp(<EditAccountModal account={ACCOUNT} onClose={onClose} />);
+/** The modal once its account types have loaded and its form is on. */
+async function renderModal(onClose = () => {}) {
+  renderWithApp(<EditAccountModal account={ACCOUNT} onClose={onClose} />);
+  await screen.findByRole("button", { name: "Type" });
 }
 
 describe("EditAccountModal", () => {
@@ -38,7 +40,7 @@ describe("EditAccountModal", () => {
   });
 
   it("does nothing when a field's name is clicked", async () => {
-    renderModal();
+    await renderModal();
     (document.activeElement as HTMLElement | null)?.blur();
     fireEvent.click(screen.getByText("Type"));
     fireEvent.click(screen.getByText("Account name"));
@@ -46,13 +48,22 @@ describe("EditAccountModal", () => {
     expect(screen.getByLabelText("Account name")).not.toHaveFocus();
   });
 
-  it("disables Save until something changes", () => {
-    renderModal();
+  it("lets the name be edited but keeps Save off until the account types load", async () => {
+    renderWithApp(<EditAccountModal account={ACCOUNT} onClose={() => {}} />);
+    fireEvent.change(screen.getByDisplayValue("Compte Courant"), { target: { value: "Compte joint" } });
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeEnabled();
+    await screen.findByRole("button", { name: "Type" });
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+  });
+
+  it("disables Save until something changes", async () => {
+    await renderModal();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
 
-  it("disables Save when the name is emptied", () => {
-    renderModal();
+  it("disables Save when the name is emptied", async () => {
+    await renderModal();
     fireEvent.change(screen.getByDisplayValue("Compte Courant"), {
       target: { value: "" },
     });
@@ -61,7 +72,7 @@ describe("EditAccountModal", () => {
 
   it("saves the edited name with the right payload and closes", async () => {
     const onClose = vi.fn();
-    renderModal(onClose);
+    await renderModal(onClose);
     fireEvent.change(screen.getByDisplayValue("Compte Courant"), {
       target: { value: "Renamed" },
     });

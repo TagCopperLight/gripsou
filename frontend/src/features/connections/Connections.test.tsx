@@ -55,6 +55,20 @@ describe("SettingsConnections", () => {
     });
   });
 
+  it("keeps adding a connection off until the list is known", async () => {
+    let answer!: (r: Response) => void;
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/providers/enabled") return jsonResponse(providers);
+      return new Promise<Response>((resolve) => (answer = resolve));
+    });
+    renderWithApp(<SettingsConnections />);
+
+    expect(screen.getByTestId("skeleton")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Add connection/ })).toBeDisabled();
+    answer(jsonResponse(GROUPS));
+    await waitFor(() => expect(screen.getByRole("button", { name: /Add connection/ })).toBeEnabled());
+  });
+
   it("shows an error state with retry when the fetch fails", async () => {
     // isLoading is false once a query errors, so the error branch must not be
     // nested under isLoading — otherwise an API failure shows the empty state.

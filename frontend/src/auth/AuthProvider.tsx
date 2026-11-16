@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ApiError, getAuthToken, setAuthToken } from "../api/client";
+import { ApiError, getAuthToken, sessionCheckDone, setAuthToken } from "../api/client";
 import { authApi, type SecondFactor } from "../api/auth";
 import type { SessionUser } from "../api/wire";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { AuthContext, isCurrencyRefused, type AuthValue } from "./context";
 import i18n from "../i18n";
+import { saveLanguage } from "../i18n/savedLanguage";
 import { showError } from "../lib/errorToasts";
 import { setPrefs } from "../lib/prefs";
 import { withPatch, type PrefsPatch } from "../lib/prefsPatch";
@@ -15,7 +16,8 @@ import { afterPrefsSaved } from "../api/invalidate";
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  // Without a stored token there is no session to check.
+  const [isBootstrapping, setIsBootstrapping] = useState(() => getAuthToken() !== null);
   // The user as shown, readable by two saves made in the same tick.
   const shown = useRef<SessionUser | null>(null);
   const prefsSaves = useRef<Promise<unknown>>(Promise.resolve());
@@ -30,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     shown.current = u;
     setUser(u);
     setPrefs(u.prefs);
+    saveLanguage(u.prefs.uiLanguage);
     if (i18n.language !== u.prefs.uiLanguage) void i18n.changeLanguage(u.prefs.uiLanguage);
   }, []);
 
@@ -38,11 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let active = true;
 
     async function bootstrap() {
-      const token = getAuthToken();
-      if (!token) {
-        if (active) setIsBootstrapping(false);
-        return;
-      }
+      if (!getAuthToken()) return;
       try {
         const u = await authApi.me();
         if (active) applyUser(u);
@@ -52,7 +51,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthToken(null);
         }
       } finally {
-        if (active) setIsBootstrapping(false);
+        if (active) {
+          setIsBootstrapping(false);
+          sessionCheckDone();
+        }
       }
     }
 

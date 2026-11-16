@@ -2,11 +2,13 @@ import { useTranslation } from "react-i18next";
 import { Eye, type LucideIcon } from "lucide-react";
 import type { EnabledProvider } from "../../api/wire";
 import { PROVIDER_GUIDE } from "./connectionGuide";
+import { Bone, Skeleton, TextBone } from "../../ui/Skeleton";
 
 /** How a bank connection works, before the user is sent to the provider: what
  *  gripsou can do with the data, then each enabled provider's own points. */
-export function ConnectionGuide({ providers }: { providers: EnabledProvider[] }) {
+export function ConnectionGuide({ providers, loading = false }: { providers: EnabledProvider[]; loading?: boolean }) {
   const { t } = useTranslation();
+  if (loading) return <GuideSkeleton />;
   const readOnlyBody =
     providers.length === 1
       ? t("connectionGuide.readOnly.bodyOne", { provider: providers[0].displayName })
@@ -20,6 +22,25 @@ export function ConnectionGuide({ providers }: { providers: EnabledProvider[] })
         )),
       )}
     </div>
+  );
+}
+
+/** The guide while the enabled providers load: the general point and the
+ *  two of the one provider most servers have. */
+function GuideSkeleton() {
+  return (
+    <Skeleton className="flex flex-col gap-5">
+      {[0, 1, 2].map((row) => (
+        <div key={row} className="flex gap-3.5">
+          <Bone className="size-9 shrink-0 rounded-lg" />
+          <div className="flex flex-1 flex-col gap-0.75 pt-px">
+            <TextBone text="text-sm" className="w-40" />
+            <TextBone text="text-[13px] leading-relaxed" className="w-full" />
+            <TextBone text="text-[13px] leading-relaxed" className="w-2/3" />
+          </div>
+        </div>
+      ))}
+    </Skeleton>
   );
 }
 

@@ -63,6 +63,8 @@ export function mockApi(): Plugin {
     const url = new URL(req.url ?? "/", "http://mock");
     const method = req.method ?? "GET";
     const body = await readBody(req);
+    const delay = control.delay();
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
     const answer = () => {
       const out = control.handle(method, url.pathname, url.searchParams, body);
       if (out === "hold") held.push({ request: requestKey(method, url.pathname), release: answer });
@@ -92,6 +94,9 @@ export function mockApi(): Plugin {
         release.forEach((h) => h.release());
         break;
       }
+      case "/slow":
+        control.setSlow(Boolean(body?.on));
+        break;
       case "/role":
         control.setRole(body?.role === "user" ? "user" : "admin");
         break;

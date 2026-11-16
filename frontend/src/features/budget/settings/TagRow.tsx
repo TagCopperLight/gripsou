@@ -6,6 +6,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import { TagChip } from "../TagChip";
 import { ColorSwatchGrid } from "../../../ui/ColorSwatchGrid";
 import { TextInput } from "../../../ui/TextInput";
+import { Button } from "../../../ui/Button";
 import { useUpdateBudgetTag } from "../../../api/budget";
 import type { BudgetTag, TagBody } from "../../../api/wire";
 import { budgetErrorKey, useBudgetErrorToast } from "../budgetErrors";
@@ -18,10 +19,10 @@ type TagRowProps = {
 /** Sized and padded like the category table's action buttons, so the bin at
  *  the end of the row lands on the same column as the table's. */
 const ACTION_BTN =
-  "p-1.5 rounded-lg text-fg hover:bg-surface-2 transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
+  "p-1.5 rounded-lg text-fg hover:bg-surface-2 transition-colors duration-140 cursor-pointer";
 
 const DELETE_BTN =
-  "p-1.5 rounded-lg text-red hover:bg-surface-2 transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
+  "p-1.5 rounded-lg text-red hover:bg-surface-2 transition-colors duration-140 cursor-pointer";
 
 export function TagRow({ tag, onDelete }: TagRowProps) {
   const { t } = useTranslation();
@@ -107,19 +108,21 @@ export function TagRow({ tag, onDelete }: TagRowProps) {
           <div className="flex items-center gap-1">
             {editing ? (
               <>
-                <button
-                  type="button"
-                  disabled={pending}
+                <Button
+                  variant="ghostStrong"
+                  padded={false}
+                  busy={pending}
+                  busyLabel={t("common.busy.saving")}
                   onClick={submitRename}
-                  className="rounded-lg bg-surface-2 px-2.5 py-1 text-xs font-medium text-fg hover:bg-surface-2/70 transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="rounded-lg! bg-surface-2 px-2.5 py-1 text-xs"
                 >
                   {t("settings.budget.tags.save")}
-                </button>
+                </Button>
                 <button
                   type="button"
                   disabled={pending}
                   onClick={cancelEdit}
-                  className="rounded-lg px-2.5 py-1 text-xs font-medium text-fg-faint hover:text-fg transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="rounded-lg px-2.5 py-1 text-xs font-medium text-fg-faint hover:text-fg transition-colors duration-140 cursor-pointer"
                 >
                   {t("common.cancel")}
                 </button>

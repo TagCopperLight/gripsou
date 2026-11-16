@@ -1,6 +1,7 @@
 import { AccountsSummaryCard } from "./AccountsSummaryCard";
 import { ConnectionAccountsCard } from "./ConnectionAccountsCard";
-import { CardState } from "../../ui/CardState";
+import { CardError } from "../../ui/CardError";
+import { AccountsListSkeleton } from "./AccountsListSkeleton";
 import { useTranslation } from "react-i18next";
 
 import { useAccounts } from "../../api/accounts";
@@ -17,14 +18,14 @@ type AccountsListProps = {
 /** The all-accounts summary, then one card per connection. */
 export function AccountsList({ onHover, className = "" }: AccountsListProps) {
   const { t } = useTranslation();
-  const { data, isError, refetch } = useAccounts();
+  const { data, isPending, refetch } = useAccounts();
   // One eye, on the summary card, for every amount of the list.
   const privacy = usePrivacy();
 
+  if (isPending) return <AccountsListSkeleton className={className} />;
   if (data === undefined) {
     return (
-      <CardState
-        variant={isError ? "error" : "loading"}
+      <CardError
         onRetry={() => refetch()}
         className={`h-40 ${className}`}
       />

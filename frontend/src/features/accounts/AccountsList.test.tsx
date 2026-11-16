@@ -33,7 +33,7 @@ describe("AccountsList", () => {
 
   it("in private mode, masks every amount, and the summary's one eye reveals them all", async () => {
     renderList([account("a", "c1", "1200"), account("b", "c2", "300")], true);
-    await screen.findByText("All accounts");
+    await screen.findByText("Account a");
     expect(screen.queryByText(/\d[\s\u202f]?\d{3}[,.]00/)).not.toBeInTheDocument();
     expect(screen.queryByText(/300[,.]00/)).not.toBeInTheDocument();
     // Shares stay: they say nothing about the amounts.

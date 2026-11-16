@@ -4,8 +4,9 @@ import { useNavigate } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
 
 import { Button } from "../../../ui/Button";
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
 import { SettingsSurface } from "../../../ui/SettingsSurface";
+import { LoadingFrame } from "../../../ui/LoadingFrame";
 import { Toggle } from "../../../ui/Toggle";
 import { useAuth } from "../../../auth/context";
 import { useAiStatus } from "../../../api/budget";
@@ -16,15 +17,19 @@ import { BUDGET_AI_THRESHOLD_MAX, BUDGET_AI_THRESHOLD_MIN } from "../../../api/w
 export function AiSurface() {
   const { t } = useTranslation();
   const status = useAiStatus();
-  // Until the server answers, whether a provider is set up is unknown: no warning yet.
+  // Until the server answers, whether a provider is set up is unknown: the
+  // controls show, off, rather than a warning that may not apply. Their values
+  // are the user's own prefs, already known.
   return (
     <SettingsSurface title={t("settings.budget.ai.title")}>
-      {status.data === undefined ? (
-        <CardState variant={status.isError ? "error" : "loading"} onRetry={() => void status.refetch()} className="h-28" />
-      ) : status.data.configured ? (
-        <AiControls />
-      ) : (
+      {status.isError && status.data === undefined ? (
+        <CardError onRetry={() => void status.refetch()} className="h-28" />
+      ) : status.data?.configured === false ? (
         <NoProvider />
+      ) : (
+        <LoadingFrame loading={status.data === undefined}>
+          <AiControls />
+        </LoadingFrame>
       )}
     </SettingsSurface>
   );

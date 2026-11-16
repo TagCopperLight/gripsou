@@ -13,7 +13,9 @@ import { Percent } from "../../../ui/Percent";
 import { Sparkline } from "./Sparkline";
 import { AssetModal } from "./AssetModal";
 import { RecordLotsModal } from "./RecordLotsModal";
-import { CardState } from "../../../ui/CardState";
+import { CardError } from "../../../ui/CardError";
+import { LoadingFrame } from "../../../ui/LoadingFrame";
+import { Bone, Skeleton, TextBone } from "../../../ui/Skeleton";
 import { HoldingBadge } from "../../../ui/HoldingBadge";
 import { formatQuantity } from "../../../lib/money";
 import { sumDecimals } from "../../../lib/decimal";
@@ -57,7 +59,7 @@ type HoldingsCardProps = {
 
 export function HoldingsCard({ className = "" }: HoldingsCardProps) {
   const { t } = useTranslation();
-  const { data, isError, refetch } = useHoldings();
+  const { data, isPending, refetch } = useHoldings();
   const ready = data !== undefined;
   const privacy = usePrivacy();
   const [sort, setSort] = useState<HoldingSort | null>({ key: "value", dir: "desc" });
@@ -76,25 +78,26 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
 
   return (
     <Surface className={`w-full ${className}`}>
-      <div className="flex flex-col p-4 md:p-5">
+      <LoadingFrame loading={isPending} className="flex flex-col p-4 md:p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <CardTitle privacy={ready && privacy}>
             {t("dashboard.holdings.title")}
           </CardTitle>
-          <label className="flex w-full items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 md:w-64">
+          <label className="flex w-full items-center gap-2 rounded-lg bg-surface-2 px-3 py-1.5 has-disabled:opacity-40 md:w-64">
             <Search className="size-4 text-fg-faint shrink-0" />
+            {/* The label dims as a whole, box and icon included: the input
+                mustn't dim a second time inside it. */}
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("dashboard.holdings.searchPlaceholder")}
-              className="bg-transparent text-sm text-fg placeholder:text-fg-faint outline-none w-full"
+              className="bg-transparent text-sm text-fg placeholder:text-fg-faint outline-none w-full disabled:opacity-100"
             />
           </label>
         </div>
 
-        {!ready ? (
-          <CardState
-            variant={isError ? "error" : "loading"}
+        {!ready && !isPending ? (
+          <CardError
             onRetry={() => refetch()}
             className="mt-4 h-64"
           />
@@ -111,7 +114,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                 className={`rounded-lg px-3 py-1 text-xs font-medium cursor-pointer transition-colors duration-140 ${
                   selected
                     ? "bg-fg text-bg"
-                    : "bg-surface-2 text-fg-dim hover:text-fg"
+                    : "bg-surface-2 text-fg-dim enabled:hover:text-fg"
                 }`}
               >
                 {c === null
@@ -120,9 +123,16 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
               </button>
             );
           })}
+          {/* The account types come with the holdings. */}
+          {!ready && (
+            <Skeleton className="flex gap-1.5">
+              <Bone className="h-6 w-20 rounded-lg" />
+              <Bone className="h-6 w-24 rounded-lg" />
+            </Skeleton>
+          )}
         </div>
 
-        {rows.length === 0 ? (
+        {ready && rows.length === 0 ? (
           <TableEmpty
             icon={<Search />}
             message={t("dashboard.holdings.noMatch", { query: query.trim() })}
@@ -159,6 +169,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
             );
           })}
         >
+            {!ready && <HoldingRowsSkeleton />}
             {rows.map((line) => {
               const h = line.holdings[0];
               const up = Number(h.gl) >= 0;
@@ -294,7 +305,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
         {(data ?? []).some((h) => h.fxMissing) && <FxFootnote className="mt-4">{t("fx.holdings")}</FxFootnote>}
         </>
         )}
-      </div>
+      </LoadingFrame>
 
       {selected && (
         <AssetModal
@@ -313,4 +324,36 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
       {lotFor && <RecordLotsModal holding={lotFor} onClose={() => setLotFor(null)} />}
     </Surface>
   );
+}
+
+/** Four rows in the table's columns while the holdings load: a badge and two
+ *  lines for the asset, a bone per figure, a block for the sparkline. The
+ *  table's body can't hold a `Skeleton`, so each row pulses on its own and is
+ *  hidden from screen readers; the account-type chips' skeleton says the card
+ *  is loading. */
+function HoldingRowsSkeleton() {
+  return [56, 40, 48, 32].map((w) => (
+    <tr key={w} role="row" aria-hidden className={`${ROW_CELLS} motion-safe:animate-pulse`}>
+      <td role="cell" className={`py-2.25 ${PAD[0]}`}>
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <Bone className="size-8 shrink-0 rounded-lg" />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <TextBone text="text-sm leading-tight" style={{ width: `${w}%` }} />
+            <TextBone text="text-xs" className="w-20" />
+          </div>
+        </div>
+      </td>
+      <td role="cell" className={`justify-end ${PAD[1]}`}><TextBone text="text-sm" className="w-10" /></td>
+      <td role="cell" className={PAD[2]}><Bone className="h-3 w-24" /></td>
+      <td role="cell" className={PAD[3]}><Bone className="h-4.5 w-16 rounded" /></td>
+      <td role="cell" className={`justify-end ${PAD[4]}`}><Bone className="h-3 w-20" /></td>
+      <td role="cell" className={`justify-end ${PAD[5]}`}>
+        <div className="flex flex-col items-end">
+          <TextBone text="text-sm" className="w-16" />
+          <TextBone text="text-xs" className="w-10" />
+        </div>
+      </td>
+      <td role="cell" className={`justify-end ${PAD[6]}`}><Bone className="h-8 w-24" /></td>
+    </tr>
+  ));
 }

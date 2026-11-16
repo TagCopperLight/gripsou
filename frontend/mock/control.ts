@@ -14,12 +14,18 @@ export type AppSettings = { role: Role; uiLanguage: UserPrefs["uiLanguage"]; cur
 /** What survives a dev-server restart. */
 export type Saved = { active: string[]; app: AppSettings | null };
 
+/** How long every API answer waits while the panel's delay is on: a real
+ *  server's round trip, to see how a screen loads when the data isn't instant. */
+const SLOW_MS = 900;
+
 export type ControlInfo = {
   /** The piece under review (`FOCUS` in states/index.ts). */
   focus: Piece | null;
   states: { id: string; label: string; pieces: Piece[]; group?: string; option?: string; active: boolean }[];
   /** By request (`GET /accounts`). */
   overrides: Record<string, OverrideMode>;
+  /** Whether every answer waits, and how long. */
+  slow: { on: boolean; ms: number };
   /** Requests the app made, for the override list. */
   seen: string[];
   unhandled: string[];
@@ -34,6 +40,7 @@ export function createControl(
   const active = new Set(saved.active.filter((id) => states.some((s) => s.id === id)));
   let app = saved.app;
   const overrides = new Map<string, OverrideMode>();
+  let slow = false;
   const seen = new Set<string>();
   const unhandled = new Set<string>();
   let store = createStore();
@@ -79,6 +86,15 @@ export function createControl(
     else overrides.delete(request);
   }
 
+  function setSlow(on: boolean): void {
+    slow = on;
+  }
+
+  /** How long to wait before answering. */
+  function delay(): number {
+    return slow ? SLOW_MS : 0;
+  }
+
   /** The answer, or "hold" while the request is kept loading. */
   function handle(method: string, path: string, query: URLSearchParams, body: unknown): Sent | "hold" {
     seen.add(requestKey(method, path));
@@ -98,6 +114,7 @@ export function createControl(
       focus,
       states: states.map(({ id, label, pieces, group, option }) => ({ id, label, pieces, group, option, active: active.has(id) })),
       overrides: Object.fromEntries(overrides),
+      slow: { on: slow, ms: SLOW_MS },
       seen: [...seen].sort(),
       unhandled: [...unhandled],
       user: { role: store.user.role, uiLanguage: store.user.prefs.uiLanguage, currency: store.user.prefs.currency },
@@ -106,7 +123,7 @@ export function createControl(
 
   reset();
 
-  return { reset, setState, setRole, setOverride, handle, info, store: () => store };
+  return { reset, setState, setRole, setOverride, setSlow, delay, handle, info, store: () => store };
 }
 
 export type Control = ReturnType<typeof createControl>;

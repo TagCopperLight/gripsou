@@ -2,6 +2,7 @@ import { useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 
+import { LoadingFrame } from "./LoadingFrame";
 import { Modal } from "./Modal";
 
 type DialogProps = {
@@ -25,7 +26,9 @@ type DialogProps = {
 
 /** The app's standard modal: a header with the title and a close button, a
  *  body that scrolls, and a footer of actions that stays in view. The
- *  behaviour (focus trap, Escape, `busy`) is [`Modal`](./Modal.tsx)'s. */
+ *  behaviour (focus trap, Escape, `busy`) is [`Modal`](./Modal.tsx)'s.
+ *  While `busy`, every control in the body and footer is off as well, so the
+ *  write in flight is the only thing happening. */
 export function Dialog({
   title, heading, subtitle, onClose, children, footer, icon, busy = false, large = false, wide = false, aside,
 }: DialogProps) {
@@ -58,16 +61,18 @@ export function Dialog({
             onClick={onClose}
             disabled={busy}
             aria-label={t("common.close")}
-            className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
           >
             <X className="size-5" />
           </button>
         </div>
       </div>
-      <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{children}</div>
+      <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        <LoadingFrame loading={busy}>{children}</LoadingFrame>
+      </div>
       {footer && (
         <div ref={actions} className="flex shrink-0 items-center justify-end gap-2 px-6 pb-6 pt-2">
-          {footer}
+          <LoadingFrame loading={busy}>{footer}</LoadingFrame>
         </div>
       )}
     </Modal>

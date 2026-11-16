@@ -28,6 +28,7 @@ describe("AiSurface", () => {
   it("moves the threshold in steps of five", async () => {
     const { updatePrefs } = renderWith({ ...DEFAULT_PREFS, budgetAiEnabled: true }, true);
     const slider = await screen.findByRole("slider");
+    await waitFor(() => expect(slider).toBeEnabled());
     fireEvent.change(slider, { target: { value: "65" } });
     fireEvent.pointerUp(slider);
     expect(updatePrefs).toHaveBeenCalledWith({ budgetAiThreshold: 65 });
@@ -47,10 +48,11 @@ describe("AiSurface", () => {
     expect(screen.queryByRole("button", { name: "Set up" })).toBeNull();
   });
 
-  it("doesn't claim there is no provider before the server has answered", async () => {
+  it("doesn't claim there is no provider before the server has answered, and keeps its controls off", async () => {
     stubFetch(() => new Promise<Response>(() => {}));
     renderWithApp(<AiSurface />, { auth: authValue({ prefs: DEFAULT_PREFS }) });
-    expect(await screen.findByText("Loading…")).toBeVisible();
+    expect(await screen.findByRole("switch")).toBeDisabled();
+    expect(screen.getByRole("slider")).toBeDisabled();
     expect(screen.queryByText("No AI provider set up")).toBeNull();
   });
 

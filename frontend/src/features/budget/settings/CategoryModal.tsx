@@ -110,10 +110,15 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
       }
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
+          <Button variant="ghost" onClick={onClose}>
             {t("common.cancel")}
           </Button>
-          <Button onClick={submit} disabled={!trimmed || !dirty || busy}>
+          <Button
+            onClick={submit}
+            disabled={!trimmed || !dirty}
+            busy={busy}
+            busyLabel={t(category ? "common.busy.saving" : "common.busy.creating")}
+          >
             {t(category ? "settings.budget.categories.save" : "settings.budget.categories.create")}
           </Button>
         </>
@@ -129,7 +134,6 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
             id="category-name"
             type="text"
             value={name}
-            disabled={busy}
             invalid={failure === "duplicate"}
             onChange={(e) => {
               setName(e.target.value);
@@ -145,7 +149,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
           <Select
             id="category-kind"
             value={kind}
-            disabled={busy || locked}
+            disabled={locked}
             onChange={(v) => setKind(v as CategoryKind)}
             options={BUDGET_KINDS.map((k) => ({ value: k, label: t(`budget.kinds.${k}`) }))}
           />
@@ -158,7 +162,6 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
           <ColorSwatchGrid
             value={color}
             onChange={setColor}
-            disabled={busy}
             swatchLabel={(c) => t("settings.budget.categories.colorLabel", { color: c })}
             customLabel={t("settings.budget.categories.customColor")}
           />
@@ -168,11 +171,10 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled={busy}
               aria-label={t("budget.icons.none")}
               aria-pressed={icon === null}
               onClick={() => setIcon(null)}
-              className={`size-8 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 disabled:opacity-40 bg-surface-2 ${
+              className={`size-8 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 bg-surface-2 ${
                 icon === null ? "ring-2 ring-fg" : "hover:scale-105"
               }`}
             >
@@ -184,11 +186,10 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
                 <button
                   key={n}
                   type="button"
-                  disabled={busy}
                   aria-label={t(`budget.icons.${n}`)}
                   aria-pressed={icon === n}
                   onClick={() => setIcon(n)}
-                  className={`size-8 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 disabled:opacity-40 bg-surface-2 ${
+                  className={`size-8 rounded-xl flex items-center justify-center cursor-pointer transition-transform duration-140 bg-surface-2 ${
                     icon === n ? "ring-2 ring-fg" : "hover:scale-105"
                   }`}
                 >
@@ -203,7 +204,7 @@ export function CategoryModal({ category, onClose }: CategoryModalProps) {
           <textarea
             id="category-hint"
             value={hint}
-            disabled={busy || locked}
+            disabled={locked}
             onChange={(e) => setHint(e.target.value)}
             rows={3}
             className="w-full bg-surface-2 rounded-xl px-4 py-3 text-fg text-[15px] outline-none ring-inset focus:ring-1 focus:ring-green disabled:opacity-60"

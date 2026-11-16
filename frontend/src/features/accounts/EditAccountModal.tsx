@@ -8,6 +8,7 @@ import { Select } from "../../ui/Select";
 import { Button } from "../../ui/Button";
 import { Field } from "../../ui/Field";
 import { TextInput } from "../../ui/TextInput";
+import { Bone, Skeleton } from "../../ui/Skeleton";
 import { withAlpha } from "../../lib/color";
 import { safeBudgetColor } from "../../lib/budget";
 import { useAccountTypes, useUpdateAccount } from "../../api/accounts";
@@ -25,7 +26,7 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
   const [typeKey, setTypeKey] = useState(account.typeKey);
   const [color, setColor] = useState(account.color);
 
-  const { data: types } = useAccountTypes();
+  const { data: types, isPending: typesLoading } = useAccountTypes();
   const update = useUpdateAccount();
 
   const typeOptions = (types ?? [])
@@ -36,7 +37,8 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
   const dirty =
     trimmed !== account.name || typeKey !== account.typeKey || color !== account.color;
   const busy = update.isPending;
-  const canSave = dirty && trimmed !== "" && !busy;
+  // Saving waits for the types: the current one may not be among them yet.
+  const canSave = dirty && trimmed !== "" && !typesLoading;
   const previewColor = safeBudgetColor(color);
 
   const save = () => {
@@ -76,11 +78,11 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
       }
       footer={
         <>
-          <Button variant="ghost" onClick={onClose} disabled={busy}>
+          <Button variant="ghost" onClick={onClose}>
             {t("common.cancel")}
           </Button>
-          <Button onClick={save} disabled={!canSave}>
-            {busy ? t("account.edit.saving") : t("account.edit.save")}
+          <Button onClick={save} disabled={!canSave} busy={busy} busyLabel={t("common.busy.saving")}>
+            {t("account.edit.save")}
           </Button>
         </>
       }
@@ -91,7 +93,6 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
             id="account-name"
             type="text"
             value={name}
-            disabled={busy}
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") save();
@@ -100,20 +101,25 @@ export function EditAccountModal({ account, onClose }: EditAccountModalProps) {
         </Field>
 
         <Field label={t("account.edit.type")} htmlFor="account-type">
-          <Select
-            id="account-type"
-            value={typeKey}
-            disabled={busy}
-            onChange={setTypeKey}
-            options={typeOptions}
-          />
+          {/* The current type's label is among the options still on their way. */}
+          {typesLoading ? (
+            <Skeleton>
+              <Bone className="h-9.5 rounded-xl" />
+            </Skeleton>
+          ) : (
+            <Select
+              id="account-type"
+              value={typeKey}
+              onChange={setTypeKey}
+              options={typeOptions}
+            />
+          )}
         </Field>
 
         <Field label={t("account.edit.color")}>
           <ColorSwatchGrid
             value={color}
             onChange={setColor}
-            disabled={busy}
             swatchLabel={(c) => t("account.edit.colorLabel", { color: c })}
             customLabel={t("account.edit.customColor")}
           />

@@ -21,6 +21,7 @@ export function DeleteTagModal({ tag, onClose }: DeleteTagModalProps) {
       title={t("settings.budget.tags.deleteTitle")}
       body={t("settings.budget.tags.deleteBody", { name: tag.name, count: tag.txCount })}
       confirmLabel={t("settings.budget.tags.deleteConfirm")}
+      busyLabel={t("common.busy.deleting")}
       busy={remove.isPending}
       onConfirm={() => remove.mutate(tag.id, { onSuccess: onClose })}
       onClose={onClose}

@@ -3,6 +3,7 @@ import ReactECharts from "../../../ui/EChart";
 import type { EChartsOption } from "echarts";
 import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
+import { ChartBone } from "../../../ui/Skeleton";
 
 import { Surface } from "../../../ui/Surface";
 import { formatMaskedMoney } from "../../../lib/money";
@@ -11,15 +12,54 @@ import { sankeyGraph, HUB } from "../../../lib/sankeyGraph";
 import { FONT_MONO } from "../../../lib/theme";
 import { CHART_BASE, chartTooltip, tooltipRow } from "../../../lib/chartTheme";
 import type { Sankey } from "../../../api/wire";
+import { LoadingFrame } from "../../../ui/LoadingFrame";
+import { staleClass } from "../../../ui/stale";
 
-export function SankeySurface({
-  sankey, onSeeTransactions, masked = false,
-}: {
-  sankey: Sankey;
-  onSeeTransactions: () => void;
-  /** Private mode: the tooltip's amounts hidden. */
-  masked?: boolean;
-}) {
+const HEIGHT = 380;
+
+type SankeySurfaceProps =
+  | {
+    sankey: Sankey;
+    onSeeTransactions: () => void;
+    /** Private mode: the tooltip's amounts hidden. */
+    masked?: boolean;
+    /** The diagram is a previous period's, while this one's loads. */
+    stale?: boolean;
+  }
+  /** Still loading: the frame, and a bone where the diagram goes. */
+  | { sankey?: undefined; onSeeTransactions?: undefined; masked?: undefined; stale?: undefined };
+
+export function SankeySurface({ sankey, onSeeTransactions, masked = false, stale = false }: SankeySurfaceProps) {
+  const { t } = useTranslation();
+  return (
+    <Surface className="w-full">
+      <LoadingFrame loading={sankey === undefined} className="flex flex-col p-5">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-fg font-semibold text-sm">{t("budget.overview.sankey.title")}</h2>
+          <button
+            type="button"
+            data-testid="sankey-see-transactions"
+            onClick={onSeeTransactions}
+            className="flex cursor-pointer items-center gap-0.5 text-sm text-fg-dim transition-colors duration-140 enabled:hover:text-fg"
+          >
+            {t("budget.overview.sankey.seeTransactions")}
+            <ChevronRight className="size-4" />
+          </button>
+        </div>
+        {/* The project's idiom for wide content (holdings, transactions): the
+            same diagram, scrolled sideways. Never a distorted phone variant and
+            never a coarser truth on a small screen. */}
+        <div className={`mt-2 overflow-x-auto ${staleClass(stale)}`}>
+          <div className="min-w-[560px]">
+            {sankey === undefined ? <ChartBone style={{ height: HEIGHT }} /> : <SankeyChart sankey={sankey} masked={masked} />}
+          </div>
+        </div>
+      </LoadingFrame>
+    </Surface>
+  );
+}
+
+function SankeyChart({ sankey, masked }: { sankey: Sankey; masked: boolean }) {
   const { t } = useTranslation();
 
   // Memoised on the data and the translations: the option holds closures, so
@@ -105,30 +145,5 @@ export function SankeySurface({
     };
   }, [sankey, t, masked]);
 
-  return (
-    <Surface className="w-full">
-      <div className="flex flex-col p-5">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-fg font-semibold text-sm">{t("budget.overview.sankey.title")}</h2>
-          <button
-            type="button"
-            data-testid="sankey-see-transactions"
-            onClick={onSeeTransactions}
-            className="flex cursor-pointer items-center gap-0.5 text-sm text-fg-dim transition-colors duration-140 hover:text-fg"
-          >
-            {t("budget.overview.sankey.seeTransactions")}
-            <ChevronRight className="size-4" />
-          </button>
-        </div>
-        {/* The project's idiom for wide content (holdings, transactions): the
-            same diagram, scrolled sideways. Never a distorted phone variant and
-            never a coarser truth on a small screen. */}
-        <div className="mt-2 overflow-x-auto">
-          <div className="min-w-[560px]">
-            <ReactECharts option={option} notMerge style={{ height: 380, width: "100%" }} />
-          </div>
-        </div>
-      </div>
-    </Surface>
-  );
+  return <ReactECharts option={option} notMerge style={{ height: HEIGHT, width: "100%" }} />;
 }

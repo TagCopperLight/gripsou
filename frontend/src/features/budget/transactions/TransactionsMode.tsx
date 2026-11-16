@@ -4,6 +4,7 @@ import { showDone } from "../../../lib/errorToasts";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Surface } from "../../../ui/Surface";
+import { LoadingFrame } from "../../../ui/LoadingFrame";
 import { Button } from "../../../ui/Button";
 import { CardTitle } from "../../../ui/CardTitle";
 import { usePrivacy } from "../../../auth/usePrivacy";
@@ -167,59 +168,61 @@ export function TransactionsMode() {
 
   return (
     <div className="flex min-h-full flex-col gap-4">
-      <Surface className="flex flex-col gap-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle size="lg" privacy={privacy}>
-            {t("budget.transactions.title")}
-          </CardTitle>
-          <Button
-            variant="ghostStrong"
-            data-testid="select-all-shown"
-            disabled={!anySelected && lotsBucketSelected}
-            title={!anySelected && lotsBucketSelected
-              ? t("budget.transactions.selectAllShownDisabledLots")
-              : undefined}
-            onClick={() => (anySelected ? clearSelection() : selectAllShown())}
-          >
-            {anySelected
-              ? t("budget.transactions.deselectAll")
-              : t("budget.transactions.selectAllShown")}
-          </Button>
-        </div>
+      <Surface>
+        <LoadingFrame loading={list.isPending} className="flex flex-col gap-4 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle size="lg" privacy={privacy}>
+              {t("budget.transactions.title")}
+            </CardTitle>
+            <Button
+              variant="ghostStrong"
+              data-testid="select-all-shown"
+              disabled={!anySelected && lotsBucketSelected}
+              title={!anySelected && lotsBucketSelected
+                ? t("budget.transactions.selectAllShownDisabledLots")
+                : undefined}
+              onClick={() => (anySelected ? clearSelection() : selectAllShown())}
+            >
+              {anySelected
+                ? t("budget.transactions.deselectAll")
+                : t("budget.transactions.selectAllShown")}
+            </Button>
+          </div>
 
-        <SearchSurface counts={counts.data} onSubmitSearch={submitSearch} />
+          <SearchSurface counts={counts.data} countsStale={counts.isPlaceholderData} onSubmitSearch={submitSearch} />
 
-        <TransactionsTable
-          rows={rows}
-          showChecked={prefs.showChecked}
-          counts={counts.data}
-          filtered={isFiltered(filters)}
-          loading={list.isPending}
-          error={list.isError}
-          onRetry={onRetry}
-          hasNextPage={Boolean(list.hasNextPage)}
-          fetchingNextPage={list.isFetchingNextPage}
-          onLoadMore={onLoadMore}
-          onClearFilters={onClearFilters}
-          onConnect={onConnect}
-          renderRow={(row) => (
-            <TransactionRow
-              key={row.id}
-              tx={row}
-              showChecked={prefs.showChecked}
-              masked={privacy.masked}
-              // "All shown" covers the cash rows only: a buy or sale is never
-              // in a selection, so never lit as one.
-              selected={row.source !== "lot" && isSelected(row.id)}
-              anySelected={anySelected}
-              onToggleSelect={toggleRow}
-              onOpenCategory={onOpenCategory}
-              onOpenTags={onOpenTags}
-              onToggleChecked={onToggleChecked}
-            />
-          )}
-        />
-
+          <TransactionsTable
+            rows={rows}
+            showChecked={prefs.showChecked}
+            counts={counts.data}
+            filtered={isFiltered(filters)}
+            loading={list.isPending}
+            stale={list.isPlaceholderData}
+            error={list.isError}
+            onRetry={onRetry}
+            hasNextPage={Boolean(list.hasNextPage)}
+            fetchingNextPage={list.isFetchingNextPage}
+            onLoadMore={onLoadMore}
+            onClearFilters={onClearFilters}
+            onConnect={onConnect}
+            renderRow={(row) => (
+              <TransactionRow
+                key={row.id}
+                tx={row}
+                showChecked={prefs.showChecked}
+                masked={privacy.masked}
+                // "All shown" covers the cash rows only: a buy or sale is never
+                // in a selection, so never lit as one.
+                selected={row.source !== "lot" && isSelected(row.id)}
+                anySelected={anySelected}
+                onToggleSelect={toggleRow}
+                onOpenCategory={onOpenCategory}
+                onOpenTags={onOpenTags}
+                onToggleChecked={onToggleChecked}
+              />
+            )}
+          />
+        </LoadingFrame>
       </Surface>
 
       <SelectionBar
@@ -287,7 +290,8 @@ export function TransactionsMode() {
               </Button>
               <Button
                 data-testid="apply-to-all-confirm"
-                disabled={applyToDescription.isPending}
+                busy={applyToDescription.isPending}
+                busyLabel={t("common.busy.applying")}
                 onClick={() => runApplyToDescription(applyOffer.id, applyOffer.categoryId)}
               >
                 {t("budget.transactions.applyToAllConfirm")}

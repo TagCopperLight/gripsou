@@ -20,6 +20,7 @@ describe("UserDetailModal", () => {
         user={{ ...user, isSelf: true }}
         role="admin"
         onToggleRole={() => {}}
+        roleSaving={false}
         onClose={() => {}}
       />,
     );

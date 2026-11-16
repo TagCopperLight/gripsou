@@ -62,7 +62,9 @@ export function EditProfileModal({ onClose }: { onClose: () => void }) {
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
-          <Button onClick={save} disabled={!canSave}>{t("settings.account.saveChanges")}</Button>
+          <Button onClick={save} disabled={!canSave} busy={updateProfile.isPending} busyLabel={t("common.busy.saving")}>
+            {t("settings.account.saveChanges")}
+          </Button>
         </>
       }
     >

@@ -12,6 +12,7 @@ import { CHART_BASE } from "../../lib/chartTheme";
 import { formatShare } from "../../lib/distribution";
 import { formatMoney } from "../../lib/money";
 import { usePrivacy } from "../../auth/usePrivacy";
+import { Bone, Skeleton, TextBone } from "../../ui/Skeleton";
 import { STRIPE_CSS, stripePattern, type DonutItem } from "./exposureColors";
 
 type ExposureDonutProps = {
@@ -24,7 +25,9 @@ type ExposureDonutProps = {
   wide?: boolean;
   /** What the middle says over the total; "Value" by default. */
   centerLabel?: string;
-  /** Shown under the title instead of the chart (loading, error). */
+  /** The items are on their way: a grey ring and legend rows in their place. */
+  loading?: boolean;
+  /** Shown under the title instead of the chart (an error). */
   placeholder?: ReactNode;
   /** Set when `total` leaves holdings out for want of an exchange rate: how
    *  many (0 when unknown). An asterisk on the total, a footnote under the card. */
@@ -55,6 +58,7 @@ export function ExposureDonut({
   total,
   wide = false,
   centerLabel,
+  loading = false,
   placeholder,
   fxExcluded,
   masked: sharedMask,
@@ -187,10 +191,12 @@ export function ExposureDonut({
   return (
     <Surface className={`w-full ${className}`}>
       <div className="flex h-full flex-col p-4 md:p-5">
-        <CardTitle privacy={ownEye && !placeholder && privacy}>
+        <CardTitle privacy={ownEye && !placeholder && !loading && privacy}>
           {title}
         </CardTitle>
-        {placeholder ?? (
+        {loading ? (
+          <DonutSkeleton wide={wide} centerLabel={centerLabel ?? t("investments.exposure.center")} />
+        ) : placeholder ?? (
         <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>
           <div className={`relative shrink-0 ${wide ? "size-64" : "size-50"}`}>
             <ReactECharts option={option} onEvents={onEvents} style={{ height: "100%", width: "100%" }} />
@@ -231,8 +237,38 @@ export function ExposureDonut({
           </div>
         </div>
         )}
-        {!placeholder && fxExcluded !== undefined && <ExcludedFootnote count={fxExcluded} className="mt-4" />}
+        {!placeholder && !loading && fxExcluded !== undefined && <ExcludedFootnote count={fxExcluded} className="mt-4" />}
       </div>
     </Surface>
+  );
+}
+
+/** The card's layout in grey: a ring as wide as the donut's, its middle label
+ *  over a bone for the total, and four legend rows. */
+function DonutSkeleton({ wide, centerLabel }: { wide: boolean; centerLabel: string }) {
+  return (
+    <div className={`mt-3 flex flex-col items-center gap-4 ${wide ? "md:flex-row md:items-start md:gap-8" : "lg:flex-row lg:items-start lg:gap-4"}`}>
+      <div className={`relative flex shrink-0 items-center justify-center ${wide ? "size-64" : "size-50"}`}>
+        <Skeleton className="flex size-[92%] items-center justify-center rounded-full bg-surface-3">
+          <span className="size-[67%] rounded-full bg-surface" />
+        </Skeleton>
+        <div className="absolute top-1/2 left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
+          <span className="text-fg-faint text-xs">{centerLabel}</span>
+          <Skeleton>
+            <TextBone text="text-lg" className="w-20" />
+          </Skeleton>
+        </div>
+      </div>
+      <Skeleton className={`w-full flex-1 ${wide ? "md:columns-2 md:gap-6" : ""}`}>
+        {[40, 28, 34, 22].map((w) => (
+          <div key={w} className="grid break-inside-avoid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-2 px-2 py-1.5">
+            <Bone className="size-3 rounded-sm" />
+            <TextBone text="text-sm" style={{ width: `${w}%` }} />
+            <TextBone text="text-sm" className="ml-auto w-10" />
+            <TextBone text="text-xs" className="ml-3 w-14" />
+          </div>
+        ))}
+      </Skeleton>
+    </div>
   );
 }

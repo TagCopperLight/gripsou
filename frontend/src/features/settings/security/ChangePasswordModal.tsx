@@ -75,7 +75,9 @@ export function ChangePasswordModal({ onClose, onChanged }: { onClose: () => voi
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
-          <Button onClick={update} disabled={!canUpdate}>{t("settings.account.updatePassword")}</Button>
+          <Button onClick={update} disabled={!canUpdate} busy={change.isPending} busyLabel={t("common.busy.saving")}>
+            {t("settings.account.updatePassword")}
+          </Button>
         </>
       }
     >

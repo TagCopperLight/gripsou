@@ -10,6 +10,7 @@ import { useAccounts } from "../../../api/accounts";
 import { TIME_FRAMES, isFiltered, withTimeFrame } from "../../../lib/budgetFilters";
 import type { TransactionCounts } from "../../../api/wire";
 import { TextInput } from "../../../ui/TextInput";
+import { staleClass } from "../../../ui/stale";
 
 /** The Transactions search surface: three parts, each rendered only when it has
  *  something to show.
@@ -18,8 +19,10 @@ import { TextInput } from "../../../ui/TextInput";
  *  Transactions surface above it is `surface`, this whole search surface —
  *  all three parts — is `surface-2`, and every control sitting on it drops
  *  back to `surface` so it reads as a control and not as more panel. */
-export function SearchSurface({ counts, onSubmitSearch }: {
+export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
   counts?: TransactionCounts;
+  /** `counts` are a previous filter's, while this one's load. */
+  countsStale?: boolean;
   onSubmitSearch?: () => void;
 }) {
   const { t } = useTranslation();
@@ -83,7 +86,7 @@ export function SearchSurface({ counts, onSubmitSearch }: {
           data-testid="filters-toggle"
           onClick={() => setPanelOpen((v) => !v)}
           className={`inline-flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-fg transition-colors duration-140 ${
-            panelOpen ? "bg-surface-3" : "hover:bg-surface-3"
+            panelOpen ? "bg-surface-3" : "enabled:hover:bg-surface-3"
           }`}
         >
           <Funnel className="size-4" />
@@ -130,7 +133,7 @@ export function SearchSurface({ counts, onSubmitSearch }: {
             {counts && (
               <p
                 data-testid="counts-readout"
-                className="absolute right-0 top-3 text-xs text-fg-faint"
+                className={`absolute right-0 top-3 text-xs text-fg-faint ${staleClass(countsStale)}`}
               >
                 {t("budget.transactions.matchingOfTotal", {
                   matching: counts.matching,

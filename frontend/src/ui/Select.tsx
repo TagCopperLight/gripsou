@@ -45,7 +45,7 @@ export function Select({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={(e) => menu.toggle("open", e.currentTarget)}
-        className={`w-full flex items-center justify-between gap-2 ${TONES[tone]} rounded-xl px-3.5 py-2.25 text-fg text-sm cursor-pointer transition-colors duration-140 disabled:opacity-60 disabled:cursor-not-allowed`}
+        className={`w-full flex items-center justify-between gap-2 ${TONES[tone]} rounded-xl px-3.5 py-2.25 text-fg text-sm cursor-pointer transition-colors duration-140 disabled:opacity-60`}
       >
         <span title={selected?.label} className="min-w-0 truncate">{selected?.label ?? t("common.select")}</span>
         <ChevronDown

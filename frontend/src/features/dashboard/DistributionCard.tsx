@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
 
-import { CardState } from "../../ui/CardState";
+import { CardError } from "../../ui/CardError";
 import { ExposureDonut } from "../exposure/ExposureDonut";
 import { useAccounts } from "../../api/accounts";
 import { useFxExcludedCount } from "../../api/holdings";
@@ -12,7 +12,7 @@ type DistributionCardProps = {
 
 export function DistributionCard({ className = "" }: DistributionCardProps) {
   const { t } = useTranslation();
-  const { data, isError, refetch } = useAccounts();
+  const { data, isPending, refetch } = useAccounts();
   const excluded = useFxExcludedCount();
   const accounts = data ?? [];
   // The middle shows the net worth, overdrafts included; the ring shows how
@@ -36,10 +36,10 @@ export function DistributionCard({ className = "" }: DistributionCardProps) {
       total={total}
       fxExcluded={excluded > 0 || accounts.some((a) => a.fxMissing) ? excluded : undefined}
       minSlice={MIN_DRAWN_SHARE}
+      loading={isPending}
       placeholder={
-        data === undefined ? (
-          <CardState
-            variant={isError ? "error" : "loading"}
+        data === undefined && !isPending ? (
+          <CardError
             onRetry={() => refetch()}
             className="mt-2 h-55"
           />

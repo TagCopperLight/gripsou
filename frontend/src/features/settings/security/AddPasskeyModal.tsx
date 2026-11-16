@@ -70,7 +70,7 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
     footer = (
       <>
         <Button variant="ghost" onClick={close}>{t("common.cancel")}</Button>
-        <Button onClick={() => void submitPassword()} disabled={!password || checking}>
+        <Button onClick={() => void submitPassword()} disabled={!password} busy={checking} busyLabel={t("common.busy.verifying")}>
           {t("twoFactor.continue")}
         </Button>
       </>

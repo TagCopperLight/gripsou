@@ -42,7 +42,9 @@ export function TotpSetupModal({ onClose }: { onClose: () => void }) {
     footer = (
       <>
         <Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
-        <Button onClick={() => void submitPassword()} disabled={!password || busy}>{t("twoFactor.continue")}</Button>
+        <Button onClick={() => void submitPassword()} disabled={!password} busy={busy} busyLabel={t("common.busy.verifying")}>
+          {t("twoFactor.continue")}
+        </Button>
       </>
     );
   } else if (state.step === "scan") {

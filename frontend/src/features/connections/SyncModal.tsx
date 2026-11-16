@@ -4,8 +4,8 @@ import { useConnections, useSyncAll } from "../../api/connections";
 import { flattenConnections } from "../../lib/connectionState";
 import { useErrorToast } from "../../lib/errorToasts";
 import { Button } from "../../ui/Button";
-import { CardState } from "../../ui/CardState";
-import { ConnectionRow } from "./ConnectionRow";
+import { CardError } from "../../ui/CardError";
+import { ConnectionRow, ConnectionRowsSkeleton } from "./ConnectionRow";
 import { Dialog } from "../../ui/Dialog";
 
 type SyncModalProps = { onClose: () => void };
@@ -14,7 +14,7 @@ type SyncModalProps = { onClose: () => void };
 // while the header and the "Sync all" footer stay visible.
 export function SyncModal({ onClose }: SyncModalProps) {
   const { t } = useTranslation();
-  const { data, isError, refetch } = useConnections();
+  const { data, isPending, isError, refetch } = useConnections();
   const syncAll = useSyncAll();
   useErrorToast(syncAll.isError && t("sync.startFailed"));
 
@@ -34,7 +34,9 @@ export function SyncModal({ onClose }: SyncModalProps) {
           <Button
             variant="primary"
             onClick={() => syncAll.mutate()}
-            disabled={data === undefined || isEmpty || syncAll.isPending}
+            disabled={data === undefined || isEmpty}
+            busy={syncAll.isPending}
+            busyLabel={t("common.busy.syncing")}
           >
             {t("sync.syncAll")}
           </Button>
@@ -42,9 +44,8 @@ export function SyncModal({ onClose }: SyncModalProps) {
       }
     >
       <div className="flex flex-col gap-2.5">
-        {data === undefined && (
-          <CardState variant={isError ? "error" : "loading"} onRetry={() => void refetch()} className="h-40" />
-        )}
+        {isPending && <ConnectionRowsSkeleton deletable={false} />}
+        {isError && data === undefined && <CardError onRetry={() => void refetch()} className="h-40" />}
         {isEmpty && <p className="text-fg-faint text-sm">{t("sync.empty")}</p>}
         {connections.map((c) => (
           <ConnectionRow key={c.id} conn={c} />

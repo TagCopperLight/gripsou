@@ -25,6 +25,7 @@ export function DeleteCategoryModal({ category, onClose }: DeleteCategoryModalPr
         count: category.txCount,
       })}
       confirmLabel={t("settings.budget.categories.deleteConfirm")}
+      busyLabel={t("common.busy.deleting")}
       busy={remove.isPending}
       onConfirm={() => remove.mutate(category.id, { onSuccess: onClose })}
       onClose={onClose}

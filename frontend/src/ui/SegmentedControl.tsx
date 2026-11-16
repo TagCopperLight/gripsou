@@ -38,7 +38,7 @@ export function SegmentedControl<T extends string>({
             className={`px-2.5 py-1 rounded-lg text-[12.5px] font-medium cursor-pointer transition-colors duration-140 ${
               isSelected
                 ? "bg-surface-3 text-fg"
-                : `text-fg-faint hover:text-fg-dim ${option.className ?? ""}`
+                : `text-fg-faint enabled:hover:text-fg-dim ${option.className ?? ""}`
             }`}
           >
             {option.label}

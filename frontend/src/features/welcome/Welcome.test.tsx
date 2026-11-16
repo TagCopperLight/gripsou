@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { screen, fireEvent, waitFor } from "@testing-library/react";
+import { screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { goTo } from "../../lib/navigate";
 import { Welcome } from "./Welcome";
 import { type AuthValue } from "../../auth/context";
@@ -84,8 +84,10 @@ afterEach(() => {
 describe("Welcome", () => {
   it("takes an admin through their profile and security, then the server's keys one group at a time, then their bank", async () => {
     renderWelcome({ user: { ...newcomer, role: "admin" } });
-    // The admin's flow waits for the server's keys.
-    expect(await screen.findByRole("heading", { name: "Welcome, Alex" })).toBeInTheDocument();
+    // The admin's flow waits for the server's keys: its first screen shows, off.
+    expect(screen.getByRole("heading", { name: "Welcome, Alex" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    await screen.findByRole("img", { name: "Step 1 of 5" });
     // An admin can't leave the flow before the server is set up.
     expect(screen.queryByRole("button", { name: "Skip setup for now" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
@@ -383,7 +385,7 @@ describe("Welcome", () => {
       renderWelcome();
 
       expect(await screen.findByText("Your bank couldn't be connected. Nothing was saved.")).toBeInTheDocument();
-      expect(screen.getByText("Connecting…")).toBeInTheDocument();
+      expect(within(screen.getByText("Bank 9").parentElement!).getByText("Connecting…")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Skip this step" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Next" })).not.toBeInTheDocument();

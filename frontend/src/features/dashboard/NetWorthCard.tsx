@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ChartBone } from "../../ui/Skeleton";
 
 import { Surface } from "../../ui/Surface";
 import { CardTitle } from "../../ui/CardTitle";
@@ -9,7 +10,9 @@ import { PhoneRangeRow, RangeSelector } from "../../ui/RangeSelector";
 import { NetWorthHeadline } from "./NetWorthHeadline";
 import { ValueChart } from "../../ui/ValueChart";
 import { ChartLegend } from "../../ui/ChartLegend";
-import { CardState } from "../../ui/CardState";
+import { CardError } from "../../ui/CardError";
+import { LoadingFrame } from "../../ui/LoadingFrame";
+import { staleClass } from "../../ui/stale";
 import { NetWorthEmpty } from "../connections/NetWorthEmpty";
 import { useFxExcludedCount } from "../../api/holdings";
 import { useNetWorth } from "../../api/accounts";
@@ -27,13 +30,15 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
   const privacy = usePrivacy();
   const [range, setRange] = useState<Range>(DEFAULT_RANGE);
   const [unit, setUnit] = useState<ChartUnit>("value");
-  const { data, isError, refetch } = useNetWorth(range);
+  const { data, isPending, isPlaceholderData, refetch } = useNetWorth(range);
   // Counts what the headline leaves out; shares the holdings card's query.
   const excluded = useFxExcludedCount();
   const ready = data !== undefined;
   // No points means no accounts (the server sends none then): a 0 €
   // headline, a gain pill and a flat line would only look like data.
   const empty = ready && data.points.length === 0;
+  // A new range keeps the last one's figures on screen, dimmed, until its own arrive.
+  const stale = staleClass(isPlaceholderData);
 
   const UNIT_OPTIONS = [
     { value: "value", label: t("common.value") },
@@ -57,7 +62,7 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
 
   return (
     <Surface className={`w-full ${className}`}>
-      <div className="flex flex-col p-4 md:p-5">
+      <LoadingFrame loading={isPending} className="flex flex-col p-4 md:p-5">
         <div className="flex flex-col gap-3 md:flex-row md:justify-between md:gap-4">
           <div className="flex flex-col gap-1">
             <div className="flex items-center justify-between gap-2">
@@ -73,7 +78,11 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
                 />
               )}
             </div>
-            {ready && !empty && <NetWorthHeadline summary={data.summary} range={range} masked={privacy.masked} />}
+            {!empty && (ready || isPending) && (
+              <div className={`flex flex-col gap-1 ${stale}`}>
+                <NetWorthHeadline summary={data?.summary} range={range} masked={privacy.masked} />
+              </div>
+            )}
           </div>
           {!empty && (
             <div className="flex flex-col gap-2 md:gap-3">
@@ -93,19 +102,20 @@ export function NetWorthCard({ className = "" }: { className?: string }) {
             series={series}
             unit={unit}
             percentLabel={t("common.return")}
-            className="mt-4"
+            className={`mt-4 ${stale}`}
             surfaceColor={SURFACE}
           />
+        ) : isPending ? (
+          <ChartBone className="mt-4 h-80" />
         ) : (
-          <CardState
-            variant={isError ? "error" : "loading"}
+          <CardError
             onRetry={() => refetch()}
             className="mt-4 h-80"
           />
         )}
         {/* Last, after the phone's range row too. */}
         {ready && !empty && data.summary.fxMissing && <ExcludedFootnote count={excluded} className="order-last mt-3" />}
-      </div>
+      </LoadingFrame>
     </Surface>
   );
 }

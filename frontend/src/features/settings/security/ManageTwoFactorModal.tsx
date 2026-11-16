@@ -105,7 +105,13 @@ export function ManageTwoFactorModal({
           <Button variant="ghost" onClick={() => (start === "turnOff" ? onClose() : open("menu"))}>
             {t("common.cancel")}
           </Button>
-          <Button variant={turningOff ? "danger" : "primary"} onClick={() => void submit()} disabled={!password || busy}>
+          <Button
+            variant={turningOff ? "danger" : "primary"}
+            onClick={() => void submit()}
+            disabled={!password}
+            busy={busy}
+            busyLabel={t(checking ? "common.busy.verifying" : turningOff ? "common.busy.turningOff" : "common.busy.creating")}
+          >
             {turningOff ? t("twoFactor.turnOff") : t("twoFactor.continue")}
           </Button>
         </>

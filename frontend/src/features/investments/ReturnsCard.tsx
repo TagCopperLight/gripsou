@@ -11,6 +11,8 @@ import { ExcludedNotes } from "./ExcludedNotes";
 import type { InvestmentReturns, ReturnAccount } from "../../api/wire";
 import { usePrivacy } from "../../auth/usePrivacy";
 import { HEAD_TEXT } from "../../ui/gridTable";
+import { Bone, TextBone } from "../../ui/Skeleton";
+import { boneWidths } from "../../ui/boneWidths";
 
 const HIDDEN_ON_PHONE = "hidden md:table-cell";
 // The figure columns get a wide left gutter so they don't run together.
@@ -18,7 +20,8 @@ const PAD_TEXT = "px-2 md:px-3";
 const PAD_FIGURE = "pl-4 pr-2 md:pl-10 md:pr-3";
 
 type ReturnsCardProps = {
-  data: InvestmentReturns;
+  /** Undefined while loading: three rows of bones. */
+  data?: InvestmentReturns;
   className?: string;
 };
 
@@ -41,7 +44,7 @@ export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
   return (
     <Surface className={`w-full ${className}`}>
       <div className="flex flex-col p-4 md:p-5">
-        <CardTitle privacy={privacy}>
+        <CardTitle privacy={data !== undefined && privacy}>
           {t("investments.returns.title")}
         </CardTitle>
         <table className="mt-4 w-full border-separate border-spacing-0">
@@ -56,12 +59,14 @@ export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
             </tr>
           </thead>
           <tbody>
-            {data.accounts.map((a) => (
-              <AccountRow key={a.id} account={a} today={data.today} masked={privacy.masked} />
-            ))}
+            {data === undefined
+              ? <RowsSkeleton />
+              : data.accounts.map((a) => (
+                  <AccountRow key={a.id} account={a} today={data.today} masked={privacy.masked} />
+                ))}
           </tbody>
         </table>
-        <ExcludedNotes figures={data.total} className="mt-4" />
+        {data && <ExcludedNotes figures={data.total} className="mt-4" />}
       </div>
     </Surface>
   );
@@ -144,4 +149,34 @@ function AccountRow({ account: a, today, masked }: { account: ReturnAccount; tod
       </td>
     </tr>
   );
+}
+
+/** Three rows in the table's cells and line heights while the returns load.
+ *  A `<tbody>` can't hold a `Skeleton`, so each row pulses on its own and is
+ *  hidden from screen readers. */
+function RowsSkeleton() {
+  const row = "py-3 border-t border-surface-2";
+  const cell = `${row} ${PAD_FIGURE}`;
+  const figure = <TextBone text="text-sm" className="ml-auto w-16" />;
+  return boneWidths(1).map((w) => (
+    <tr key={w} aria-hidden className="motion-safe:animate-pulse">
+      <td className={`${row} ${PAD_TEXT} max-w-0 w-full`}>
+        <div className="flex items-center gap-3">
+          <Bone className="size-3 shrink-0 rounded-[4px]" />
+          <TextBone text="flex-1 text-sm" style={{ width: `${w}%` }} />
+        </div>
+      </td>
+      <td className={`${cell} align-top md:align-middle`}>
+        {figure}
+        <TextBone text="text-[11px]" className="ml-auto w-14" />
+      </td>
+      <td className={`${cell} ${HIDDEN_ON_PHONE}`}>{figure}</td>
+      <td className={`${cell} ${HIDDEN_ON_PHONE}`}>{figure}</td>
+      <td className={`${cell} ${HIDDEN_ON_PHONE}`}>{figure}</td>
+      <td className={`${cell} ${HIDDEN_ON_PHONE}`}>
+        {figure}
+        <TextBone text="text-xs" className="ml-auto w-10" />
+      </td>
+    </tr>
+  ));
 }
