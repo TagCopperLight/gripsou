@@ -12,7 +12,6 @@ use sqlx::PgPool;
 
 struct MockProvider {
     symbol: Option<String>,
-    /// Currency the mock stamps on returned points (equity_holding is "USD").
     currency: String,
     fetch_calls: Arc<AtomicUsize>,
 }
@@ -59,7 +58,7 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
     let calls = Arc::new(AtomicUsize::new(0));
     let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
         symbol: Some("MC.PA".into()),
-        currency: "USD".into(), // matches equity_holding's instrument currency
+        currency: "USD".into(),
         fetch_calls: calls.clone(),
     })];
 
@@ -71,8 +70,7 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
     assert_eq!(s1.failed, 0);
     assert_eq!(price_count(&pool).await, 1);
 
-    // The resolved ticker is cached in meta, and the identity columns the next
-    // sync re-resolves this row by are left exactly as they were.
+    // The resolved ticker is cached in meta; the identity columns the next sync resolves by stay untouched.
     let (kind, symbol, meta): (String, Option<String>, serde_json::Value) =
         sqlx::query_as("select kind, symbol, meta from instrument where isin = 'US0378331005'")
             .fetch_one(&pool)
@@ -82,7 +80,6 @@ async fn resolves_inserts_then_guard_skips(pool: PgPool) {
     assert_eq!(symbol, None, "ISIN path keeps symbol null");
     assert_eq!(kind, "equity");
 
-    // Second pass: latest price is today → guard skips, fetch not called again.
     let s2 = fetch_prices_for_connection(&pool, conn_id, &providers)
         .await
         .unwrap();
@@ -123,15 +120,12 @@ async fn unresolved_marks_meta_and_inserts_nothing(pool: PgPool) {
 
 #[gripsou_core::testkit::db_test]
 async fn stores_prices_in_the_listings_own_currency(pool: PgPool) {
-    // equity_holding's instrument is labelled USD; a provider returning
-    // EUR-quoted points must still store them, tagged EUR. unit_value_asof
-    // converts from the price row's currency at read time, so a provider
-    // mislabelling an instrument doesn't cost it its whole price series.
+    // A mislabelled point is stored tagged EUR: `unit_value_asof` converts from the price row's currency at read time.
     let conn_id = testkit::seed_one_equity(&pool).await;
     let calls = Arc::new(AtomicUsize::new(0));
     let providers: Vec<Box<dyn PriceProvider>> = vec![Box::new(MockProvider {
         symbol: Some("MC.PA".into()),
-        currency: "EUR".into(), // ≠ the instrument's USD
+        currency: "EUR".into(),
         fetch_calls: calls.clone(),
     })];
 

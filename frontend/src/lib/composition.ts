@@ -1,10 +1,8 @@
 import type { Allocation } from "../api/wire";
 
-/** An allocation as whole percents, largest first, plus the remainder that
- *  takes it to exactly 100%: Boursorama lists only the top holdings, so the
- *  listed weights sum to less, and rounding each slice leaves a leftover too.
- *  Sorted here because Boursorama's own order breaks once repeated lines are
- *  merged (a 13 % line after an 8 % one). */
+/** Whole percents, largest first, plus the remainder that makes exactly 100%:
+ *  Boursorama lists only top holdings. Sorted here because its order breaks
+ *  once repeated lines are merged. */
 export function allocationPercents(items: Allocation[]): {
   listed: { name: string; percent: number }[];
   other: number;

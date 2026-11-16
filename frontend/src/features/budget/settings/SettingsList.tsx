@@ -5,9 +5,7 @@ import { Bone, TextBone } from "../../../ui/Skeleton";
 import { HEAD_TEXT } from "../../../ui/gridTable";
 import { withAlpha } from "../../../lib/color";
 
-/** A group of `ListRow`s under its heading. The rows' hover fill reaches past
- *  the card's text edge by their own padding, so tiles and heading still line
- *  up with the card's title. */
+/** The rows' hover fill reaches past the card's text edge by their padding, so tiles and heading line up with the card's title. */
 export function List({ label, children }: { label?: string; children: ReactNode }) {
   return (
     <section aria-label={label} className="-mx-2">
@@ -17,13 +15,8 @@ export function List({ label, children }: { label?: string; children: ReactNode 
   );
 }
 
-/** One category on one line: a coloured tile, its name, then a faint
- *  note in the room left. Names sit in a column of their own, so the notes
- *  start at the same x on every row. The row is one button that opens it;
- *  `extra` sits over the row's end, before the chevron, for controls of its
- *  own (the reorder arrows). */
+/** `extra` sits over the row's end, before the chevron, for controls of its own (the reorder arrows). */
 export function ListRow({ label, tile, title, subtitle, dimmed = false, extra, onOpen }: {
-  /** The button's accessible name: "Modify Groceries". */
   label: string;
   tile: ReactNode;
   title: ReactNode;
@@ -43,7 +36,6 @@ export function ListRow({ label, tile, title, subtitle, dimmed = false, extra, o
         <span className={`flex min-w-0 flex-1 items-center gap-3 ${dimmed ? "opacity-70 [&>:first-child]:grayscale" : ""}`}>
           {tile}
           <span className="flex w-48 shrink-0 items-center gap-2 text-sm font-medium text-fg">{title}</span>
-          {/* Runs up to the chevron, and gives way to `extra` only when it shows. */}
           <span
             className={`min-w-0 flex-1 truncate text-xs text-fg-faint ${
               extra ? "group-hover:pr-18 group-focus-within:pr-18" : ""
@@ -59,7 +51,6 @@ export function ListRow({ label, tile, title, subtitle, dimmed = false, extra, o
   );
 }
 
-/** The square a row leads with, tinted with its colour. */
 export function ListTile({ color, children }: { color: string; children: ReactNode }) {
   return (
     <span
@@ -71,7 +62,6 @@ export function ListTile({ color, children }: { color: string; children: ReactNo
   );
 }
 
-/** A `ListRow` still loading. */
 export function ListRowBone({ width }: { width: number }) {
   return (
     <div className="flex h-11 items-center gap-3 px-2">
@@ -87,7 +77,6 @@ export function ListRowBone({ width }: { width: number }) {
   );
 }
 
-/** A `List` heading still loading. */
 export function ListHeadingBone() {
   return (
     <div className="-mx-2 flex h-8 items-center px-2">
@@ -96,7 +85,6 @@ export function ListHeadingBone() {
   );
 }
 
-/** A short state after a name: "System", "Archived". */
 export function ListBadge({ icon, title, testId, children }: { icon: ReactNode; title?: string; testId?: string; children: ReactNode }) {
   return (
     <span

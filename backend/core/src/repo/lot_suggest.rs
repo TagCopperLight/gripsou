@@ -1,15 +1,12 @@
-//! Lot suggestions: a quantity change seen between two snapshots, matched to
-//! the one buy/sell transaction that explains it, offered to the user as a
-//! pre-filled row of the record-lots form. Nothing here writes: a false match
-//! would corrupt the cost basis silently, so the user confirms every one.
+//! Matches a snapshot quantity change to the one buy/sell transaction that explains it, offered
+//! as a pre-filled lot row. Nothing here writes.
 //!
-//! The match never reads the transaction's wording (it is broker-specific).
-//! It uses only `type in ('buy','sell')`, the day and the size of the amount;
-//! the direction comes from the quantity change, because Trade Republic
-//! mirrors each trade on its portfolio account with the opposite sign and type.
+//! The match never reads the transaction's wording (broker-specific). Direction comes from the
+//! quantity change: Trade Republic mirrors each trade on its portfolio account with the opposite
+//! sign and type.
 //!
-//! The fee is never guessed: every reader of a lot uses `quantity × price ±
-//! fee`, so putting the whole amount in the price changes no figure.
+//! The fee is not guessed: readers use `quantity × price ± fee`, so putting the whole amount in
+//! the price changes no figure.
 
 use std::collections::HashMap;
 
@@ -21,7 +18,6 @@ use crate::error::CoreError;
 use crate::repo::holding::{OwnedHolding, owned_holding};
 use crate::repo::lot::{LOT_DECIMAL_PLACES, LotSide};
 
-/// A buy/sell transaction whose day and amount fit a jump.
 #[derive(Debug, Clone)]
 pub struct Candidate {
     pub txn_id: Uuid,
@@ -29,17 +25,13 @@ pub struct Candidate {
     pub amount: Decimal,
 }
 
-/// A quantity change of one holding between two snapshots, with every
-/// transaction that could explain it.
 #[derive(Debug, Clone)]
 pub struct Jump {
     pub holding_id: Uuid,
-    /// The snapshot day the new quantity was first seen.
     pub day: NaiveDate,
-    /// New quantity minus the previous one (from 0 for a first snapshot).
     pub dq: Decimal,
-    /// False when a lot already covers it or the holding's lots explain its
-    /// quantity: it gets no suggestion but still claims its candidates.
+    /// False when a lot or the holding's lots already explain it: no suggestion, but it still
+    /// claims its candidates.
     pub open: bool,
     pub candidates: Vec<Candidate>,
 }
@@ -54,11 +46,8 @@ pub struct Suggestion {
     pub fee: Decimal,
 }
 
-/// Keep only the unambiguous matches: an open jump with exactly one candidate,
-/// which no other jump of the account also claims. Closed jumps (already
-/// covered or explained) get no suggestion but still count as claimants, so
-/// their transaction is never handed to another holding. Anything else is left
-/// to the user.
+/// Closed jumps give no suggestion but still count as claimants, so their transaction is never
+/// handed to another holding.
 pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
     let mut claims: HashMap<Uuid, usize> = HashMap::new();
     for j in jumps {
@@ -96,17 +85,11 @@ pub fn pick(jumps: &[Jump]) -> Vec<Suggestion> {
         .collect()
 }
 
-/// Every quantity jump of the account's non-cash holdings, with its
-/// candidate transactions:
-/// - a jump is a snapshot whose quantity differs from the holding's previous
-///   one, or a holding's first snapshot when the account already had an
-///   earlier snapshot (a rise from 0);
-/// - its window is [min(prev_day + 1, day − 3), day + 3];
-/// - it is closed (`open = false`) when a lot of the same side lies in that
-///   window, or when the holding's lots explain its quantity; closed jumps
-///   are kept so they still claim their candidates;
-/// - a candidate is a buy or sell of the account, in the window, whose
-///   absolute amount is within 5 % of the shares' market value that day.
+/// A jump is a snapshot whose quantity differs from the holding's previous one, or a first
+/// snapshot when the account had an earlier one (a rise from 0). Candidates are the account's
+/// buys and sells in [min(prev_day + 1, day − 3), day + 3] whose absolute amount is within 5 %
+/// of the shares' market value that day. A jump is closed (`open = false`) when a same-side lot
+/// lies in the window or the holding's lots explain its quantity.
 async fn account_jumps(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -160,9 +143,8 @@ async fn account_jumps(
         select oj.holding_id as "holding_id!", oj.day as "day!", oj.dq as "dq!", oj."open" as "open!",
                c.id as "txn_id?", c.day as "txn_day?", c.amount as "amount?"
         from open_jumps oj
-        -- A trade is matched on the day it was executed (`spent_on`), not the
-        -- day its cash settled (`txn_day`): that is the day its lot is dated
-        -- and the day whose price its amount reflects.
+        -- Matched on the execution day (`spent_on`), not the cash settlement day: that is the
+        -- lot's date and the day whose price the amount reflects.
         left join lateral (
             select t.id, t.spent_on as day, t.amount
             from transaction t
@@ -213,9 +195,8 @@ async fn account_jumps(
     Ok(jumps)
 }
 
-/// This holding's suggested lots. Uniqueness is decided across the whole
-/// account (two holdings may compete for one transaction), then filtered to
-/// the holding asked for.
+/// Uniqueness is decided across the whole account (two holdings may compete for one
+/// transaction), then filtered to the holding asked for.
 pub async fn suggest_lots(
     pool: &sqlx::PgPool,
     user_id: Uuid,

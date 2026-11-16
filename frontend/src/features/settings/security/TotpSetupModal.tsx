@@ -11,11 +11,9 @@ import { TotpCode, TotpScan } from "./TotpSteps";
 
 const STEPS = ["password", "scan", "code", "codes"] as const;
 
-/** Turning two-factor on: password, scan, first code, backup codes. */
 export function TotpSetupModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const { password, setPassword, error, setError, checking, check } = useReauthStep();
-  // An expired setup starts over from the password.
   const enrolment = useTotpEnrolment(() => {
     setPassword("");
     setError(t("twoFactor.expired"));

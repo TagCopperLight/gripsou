@@ -1,5 +1,3 @@
-//! Integration tests for `gripsou_jobs::handle_webhook`.
-
 use std::sync::Arc;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -14,8 +12,6 @@ use uuid::Uuid;
 
 const WEBHOOK_SECRET: &str = "test-webhook-secret";
 
-/// Deps whose only account adapter is Powens with [`WEBHOOK_SECRET`], its
-/// server unreachable.
 fn deps() -> Arc<Deps> {
     let deps = gripsou_jobs::testing::deps();
     let powens = PowensProvider::for_test_with_secret("http://127.0.0.1:1", WEBHOOK_SECRET);
@@ -29,15 +25,12 @@ fn deps() -> Arc<Deps> {
     Arc::new(deps)
 }
 
-/// Compute the BI-Signature for a Powens webhook.
 fn sign(secret: &str, path: &str, date: &str, body: &str) -> String {
     let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
     mac.update(format!("POST.{path}.{date}.{body}").as_bytes());
     STANDARD.encode(mac.finalize().into_bytes())
 }
 
-/// Insert a connection in 'ok' status with provider_meta containing an
-/// `external_connection_id` field and encrypted credentials.
 async fn seed_connection(pool: &PgPool, user_id: Uuid, ext_conn_id: &str) -> Uuid {
     let conn_id = Uuid::new_v4();
     let meta = serde_json::json!({ "external_connection_id": ext_conn_id });
@@ -61,8 +54,6 @@ async fn seed_connection(pool: &PgPool, user_id: Uuid, ext_conn_id: &str) -> Uui
     conn_id
 }
 
-/// A correctly-signed webhook with a known connection id claims the connection
-/// and returns Accepted.
 #[gripsou_core::testkit::db_test]
 async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -92,8 +83,6 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
         "expected Accepted for valid webhook"
     );
 
-    // The spawned sync may already have failed against the unreachable server:
-    // either way the connection was claimed.
     let status: String = sqlx::query_scalar("select status from connection where id=$1")
         .bind(conn_id)
         .fetch_one(&pool)
@@ -106,8 +95,6 @@ async fn handle_webhook_valid_claims_connection(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-/// A webhook with a wrong signature is rejected with Unauthorized; the
-/// connection status is not touched.
 #[gripsou_core::testkit::db_test]
 async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Result<()> {
     let (_g, mut writer) = gripsou_core::logs::capture(100);
@@ -122,7 +109,6 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
         "bi-signature-date".to_string(),
         "2024-01-15T10:00:00.000Z".to_string(),
     );
-    // Wrong signature — deliberately corrupted (valid base64, wrong value).
     headers.insert(
         "bi-signature".to_string(),
         "bm90LXRoZS1yaWdodC1zaWc=".to_string(),
@@ -143,7 +129,6 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
         "expected Unauthorized for bad signature"
     );
 
-    // The rejection says why, without the body.
     writer.flush(&pool).await;
     let f: serde_json::Value =
         sqlx::query_scalar("select fields from log where message = 'webhook rejected'")
@@ -157,7 +142,6 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
             .contains("bad webhook signature")
     );
 
-    // Status must be untouched ('ok').
     let status: String = sqlx::query_scalar("select status from connection where id=$1")
         .bind(conn_id)
         .fetch_one(&pool)
@@ -170,13 +154,11 @@ async fn handle_webhook_bad_signature_unauthorized(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-/// A valid signature whose connection.id matches no row returns Accepted
-/// (the provider should stop retrying) and does not panic.
 #[gripsou_core::testkit::db_test]
 async fn handle_webhook_unknown_connection_accepted(pool: PgPool) -> anyhow::Result<()> {
     let path = "/api/webhooks/powens";
     let date = "2024-01-15T10:00:00.000Z";
-    let body = r#"{"connection":{"id":9999}}"#; // no matching row
+    let body = r#"{"connection":{"id":9999}}"#;
     let sig = sign(WEBHOOK_SECRET, path, date, body);
 
     let mut headers = std::collections::HashMap::new();
@@ -201,8 +183,6 @@ async fn handle_webhook_unknown_connection_accepted(pool: PgPool) -> anyhow::Res
     Ok(())
 }
 
-/// A provider the admin turned off accepts no webhook, even correctly signed:
-/// its connections must not sync behind the admin's back.
 #[gripsou_core::testkit::db_test]
 async fn handle_webhook_refuses_a_disabled_provider(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;

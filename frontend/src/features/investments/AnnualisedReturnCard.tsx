@@ -13,13 +13,10 @@ import { usePrivacy } from "../../auth/usePrivacy";
 import { Skeleton, TextBone } from "../../ui/Skeleton";
 
 type AnnualisedReturnCardProps = {
-  /** Undefined while loading: bones in place of the figures. */
   data?: InvestmentReturns;
   className?: string;
 };
 
-/** The page's headline: the money-weighted return of everything invested,
- *  per year, with the money it annualises to its right. */
 export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnCardProps) {
   const { t } = useTranslation();
   const privacy = usePrivacy();
@@ -54,7 +51,6 @@ export function AnnualisedReturnCard({ data, className = "" }: AnnualisedReturnC
                     fractionDigits={1}
                     className={`text-[32px] font-semibold tracking-tight md:text-[40px] ${toneClass(data.total.annualised)}`}
                   />
-                  {/* /yr at 65% of the figure's size. */}
                   <span className={`ml-1 font-mono text-[21px] md:text-[26px] ${mutedToneClass(data.total.annualised)}`}>
                     {t("investments.returns.perYearShort")}
                   </span>

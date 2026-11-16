@@ -2,7 +2,6 @@ mod institutions;
 mod map;
 mod model;
 
-/// The mapping and wire models, for the adapter's tests.
 #[cfg(feature = "test-util")]
 pub mod testing {
     pub mod map {
@@ -29,26 +28,19 @@ use crate::registry::{About, AccountKind, Context};
 pub struct PowensProvider {
     pub(crate) client_id: String,
     pub(crate) client_secret: String,
-    /// Where Powens sends the user after the bank-connection webview.
     pub(crate) redirect_uri: String,
-    /// Raw domain, e.g. "myapp.biapi.pro". Used in the webview URL's `domain` param.
     pub(crate) domain: String,
-    /// Scheme + host, no trailing slash, no /2.0. Used as REST API base.
     pub(crate) origin: String,
     pub(crate) http: reqwest::Client,
-    /// Optional HMAC secret for verifying incoming Powens webhooks.
+    /// Optional HMAC secret for verifying incoming webhooks.
     pub(crate) webhook_secret: Option<String>,
 }
 
-/// Powens caps `limit` at 1000 on every list endpoint.
 const PAGE_LIMIT: usize = 1000;
-/// Bound so a provider bug cannot spin forever. 100 pages of 1000 rows is far
-/// past any real portfolio or ledger, so reaching it means the cursor stopped
-/// advancing rather than that the data is genuinely that large.
+/// Bound so a provider bug cannot spin forever: 100 pages of 1000 rows is far past any real ledger,
+/// so reaching it means the cursor stopped advancing.
 const MAX_PAGES: usize = 100;
 
-/// One page of a Powens list endpoint: its rows, plus the cursor to the next
-/// page for the endpoints that use relational pagination.
 pub(crate) trait ListPage: serde::de::DeserializeOwned {
     type Item;
     fn into_parts(self) -> (Vec<Self::Item>, Option<String>);
@@ -75,10 +67,8 @@ impl ListPage for model::InvestmentsResponse {
     }
 }
 
-/// The webview's base address, the same for every domain.
 const WEBVIEW: &str = "https://webview.powens.com/en";
 
-/// What a Powens connection stores: its permanent user token.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Credentials {
     auth_token: String,
@@ -92,7 +82,6 @@ impl Credentials {
     }
 }
 
-/// Sends `req`, whatever status comes back. `what` names the call in errors.
 async fn transport(
     req: reqwest::RequestBuilder,
     what: &str,
@@ -105,7 +94,6 @@ async fn transport(
     })
 }
 
-/// `resp`, unless its status is not a success.
 fn success(resp: reqwest::Response, what: &str) -> Result<reqwest::Response, ProviderError> {
     if !resp.status().is_success() {
         return Err(ProviderError::Other(format!(
@@ -116,7 +104,6 @@ fn success(resp: reqwest::Response, what: &str) -> Result<reqwest::Response, Pro
     Ok(resp)
 }
 
-/// Sends `req`, refusing a non-success status.
 async fn send(
     req: reqwest::RequestBuilder,
     what: &str,
@@ -137,8 +124,7 @@ pub const KIND: AccountKind = AccountKind {
     about: About {
         key: "powens",
         display_name: "Powens",
-        // The redirect address is not asked for: it is always
-        // `Context::callback_url`.
+        // The redirect address is not asked for: it is always `Context::callback_url`.
         fields: &[
             ConfigField {
                 key: "client_id",
@@ -170,7 +156,6 @@ pub const KIND: AccountKind = AccountKind {
 };
 
 impl PowensProvider {
-    /// `None` until client id, domain and client secret are all set.
     pub fn from_config(config: &ProviderConfig, ctx: &Context) -> Option<Self> {
         let get = |f| config.get(KIND.about.key, f).map(str::to_string);
         let domain = get("domain")?;
@@ -185,12 +170,10 @@ impl PowensProvider {
         })
     }
 
-    /// `path` may start with `/` or not; both are accepted.
     pub(crate) fn api_url(&self, path: &str) -> String {
         format!("{}/2.0/{}", self.origin, path.trim_start_matches('/'))
     }
 
-    /// An adapter whose REST API is `base_url` (a mock server).
     #[cfg(any(test, feature = "test-util"))]
     pub fn for_test(base_url: &str) -> Self {
         Self {
@@ -211,17 +194,12 @@ impl PowensProvider {
         p
     }
 
-    /// Walks a Powens list endpoint to exhaustion.
-    ///
-    /// Two pagination styles are in play. Transactions hand back a
-    /// `_links.next` cursor; `/accounts` and `/investments` document only
-    /// `limit`/`offset`. Follow the cursor when the page carries one, fall back
-    /// to offset paging when a full page arrives without one.
-    ///
-    /// A fetch that cannot be walked to the end is an **error, never a short
-    /// list**: the ingest reads "holding absent from this sync" as "position
-    /// sold" and stamps a zero snapshot for it, so a truncated page would not
-    /// merely under-report — it would destroy that position's history.
+    /// Follows the `_links.next` cursor (transactions) when the page carries one, else offset paging
+    /// when a full page arrives without one (`/accounts` and `/investments` document only
+    /// `limit`/`offset`).
+    /// A fetch that cannot be walked to the end is an error, never a short list: ingest reads "holding
+    /// absent from this sync" as "position sold" and stamps a zero snapshot, so a truncated page would
+    /// destroy that position's history.
     async fn fetch_all<P: ListPage>(
         &self,
         auth_token: &str,
@@ -251,10 +229,8 @@ impl PowensProvider {
         )))
     }
 
-    /// The token's connections with their bank and sources, which carry the
-    /// institution and the health. Never fatal to a sync: on any failure the
-    /// sync goes on with none, so the institution keeps its last value and
-    /// the health reads as unknown.
+    /// Never fatal to a sync: on failure it goes on with none, so the institution keeps its last value
+    /// and the health reads as unknown.
     async fn connections_for_sync(&self, auth_token: &str) -> Vec<model::Connection> {
         let req = self
             .http
@@ -275,8 +251,6 @@ impl PowensProvider {
 
 #[async_trait]
 impl AccountProvider for PowensProvider {
-    /// Powens creates an anonymous user on its side and returns a one-time
-    /// `code` in the callback for us to exchange.
     async fn connect(&self) -> Result<ConnectInit, ProviderError> {
         let mut url = reqwest::Url::parse(&format!("{WEBVIEW}/connect")).expect("static URL");
         url.query_pairs_mut().extend_pairs([
@@ -289,7 +263,6 @@ impl AccountProvider for PowensProvider {
         })
     }
 
-    /// Exchanges the callback's `code` for a permanent user token.
     async fn complete_connect(
         &self,
         params: &HashMap<String, String>,
@@ -352,11 +325,9 @@ impl AccountProvider for PowensProvider {
             .await?;
         let connections = self.connections_for_sync(&auth_token).await;
 
-        // Full history, every sync. Powens' `last_update` filter returns only
-        // rows edited since a timestamp and therefore cannot backfill, so
-        // incremental is unsafe; full-fetch + external_id dedup is idempotent
-        // instead. The largest history seen is 2,111 rows; a `min_date` window
-        // would bound much larger ones.
+        // Full history every sync: the `last_update` filter returns only edited rows, so it cannot
+        // backfill. Full fetch + `external_id` dedup is idempotent. The largest history seen is 2,111
+        // rows.
         let transactions = self
             .fetch_all::<model::TransactionsResponse>(&auth_token, "/users/me/transactions")
             .await?;
@@ -386,8 +357,7 @@ impl AccountProvider for PowensProvider {
             "GET /users/me/connections",
         )
         .await?;
-        // A connection with no stored external id resolves only when the token
-        // holds exactly one connection; never choose an arbitrary bank.
+        // Without a stored external id, resolve only when the token holds exactly one connection.
         let stored_id = provider_meta[EXTERNAL_CONNECTION_ID].as_str();
         let connection = match stored_id {
             Some(id) => connections
@@ -419,15 +389,12 @@ impl AccountProvider for PowensProvider {
             ("code", code.code.as_str()),
             ("connection_id", &connection.id.to_string()),
         ]);
-        // Do not use the add-connection callback: it can delete a failed pending
-        // row. Manage opens separately and operates on the existing connection.
+        // Not the add-connection callback: it can delete a failed pending row.
         Ok(ConnectInit {
             redirect_url: Some(url.to_string()),
         })
     }
 
-    /// Webhook-driven once a webhook secret is set, for a connection whose
-    /// Powens id is known (the webhook names it).
     fn refresh_mode(&self, provider_meta: &serde_json::Value) -> RefreshMode {
         let known = provider_meta[EXTERNAL_CONNECTION_ID]
             .as_str()
@@ -455,8 +422,7 @@ impl AccountProvider for PowensProvider {
             .bearer_auth(&auth_token)
             .query(&[("psu_requested", "false")]);
         let resp = transport(req, what).await?;
-        // 409: Powens considers the connection up to date (or a sync is
-        // already running) and sends no webhook.
+        // 409: Powens considers the connection up to date (or a sync is running) and sends no webhook.
         if resp.status() == reqwest::StatusCode::CONFLICT {
             return Ok(Refresh::AlreadyFresh);
         }
@@ -492,7 +458,7 @@ impl AccountProvider for PowensProvider {
         mac.update(format!("POST.{path}.{date}.{body_str}").as_bytes());
         let expected = STANDARD.encode(mac.finalize().into_bytes());
 
-        // Compare decoded bytes; timing leakage is negligible (HMAC over unknown secret).
+        // Timing leakage is negligible here (HMAC over an unknown secret).
         let given_bytes = STANDARD.decode(given).unwrap_or_default();
         let expected_bytes = STANDARD.decode(&expected).unwrap_or_default();
         if given_bytes.is_empty() || given_bytes != expected_bytes {

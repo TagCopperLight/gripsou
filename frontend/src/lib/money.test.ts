@@ -52,7 +52,6 @@ describe("formatPercent / formatQuantity", () => {
   afterEach(() => setPrefs(DEFAULT_PREFS));
 
   it("formats a ratio as a percent with the prefs decimal separator", () => {
-    // 0.1234 ratio -> 12.34 % ; default percentDecimals = 2.
     expect(formatPercent("0.1234")).toBe("12,34%");
   });
 

@@ -54,7 +54,6 @@ async fn insert_prices_batches_and_upserts(pool: PgPool) {
     .unwrap();
     assert_eq!(n, 2);
 
-    // Re-running with an overlapping ts upserts (no duplicate row), updates price.
     insert_prices(&mut conn, instrument, &[(t2, Decimal::new(99, 0))], "EUR")
         .await
         .unwrap();
@@ -73,7 +72,6 @@ async fn insert_prices_batches_and_upserts(pool: PgPool) {
             .unwrap();
     assert_eq!(latest, Decimal::new(99, 0));
 
-    // Empty input is a no-op.
     assert_eq!(
         insert_prices(&mut conn, instrument, &[], "EUR")
             .await

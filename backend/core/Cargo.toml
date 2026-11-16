@@ -22,7 +22,6 @@ ts-rs.workspace = true
 gripsou-test-macros = { path = "../test-macros", optional = true }
 
 [features]
-# Seeders and fixtures for the tests of every crate (`testkit`).
 test-util = ["dep:gripsou-test-macros"]
 
 [dev-dependencies]

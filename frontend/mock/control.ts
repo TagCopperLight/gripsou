@@ -1,6 +1,3 @@
-// What the review panel drives: the live store, the active per-screen states,
-// and per-request overrides that keep a request loading or make it fail.
-
 import type { Role, UserPrefs } from "../src/api/wire.ts";
 import { injected, requestKey, type OverrideMode } from "./faults.ts";
 import type { Sent } from "./router.ts";
@@ -8,31 +5,23 @@ import { router } from "./routes/index.ts";
 import type { MockState, Piece } from "./states/pieces.ts";
 import { createStore } from "./store.ts";
 
-/** The panel's own App settings: kept across state changes, Reset and restarts. */
 export type AppSettings = { role: Role; uiLanguage: UserPrefs["uiLanguage"]; currency: string };
 
-/** What survives a dev-server restart. */
 export type Saved = { active: string[]; app: AppSettings | null };
 
-/** How long every API answer waits while the panel's delay is on: a real
- *  server's round trip, to see how a screen loads when the data isn't instant. */
+/** A real server's round trip, to see how a screen loads. */
 const SLOW_MS = 900;
 
 export type ControlInfo = {
-  /** The piece under review (`FOCUS` in states/index.ts). */
   focus: Piece | null;
   states: { id: string; label: string; pieces: Piece[]; group?: string; option?: string; active: boolean }[];
-  /** By request (`GET /accounts`). */
   overrides: Record<string, OverrideMode>;
-  /** Whether every answer waits, and how long. */
   slow: { on: boolean; ms: number };
-  /** Requests the app made, for the override list. */
   seen: string[];
   unhandled: string[];
   user: { role: string; uiLanguage: UserPrefs["uiLanguage"]; currency: string };
 };
 
-/** `saved`: what was on before a restart; `onChange` sees every change to it. */
 export function createControl(
   states: MockState[],
   { focus = null, saved = { active: [], app: null }, onChange }: { focus?: Piece | null; saved?: Saved; onChange?: (saved: Saved) => void } = {},
@@ -53,7 +42,6 @@ export function createControl(
     store.user.prefs = { ...store.user.prefs, uiLanguage: app.uiLanguage, currency: app.currency };
   }
 
-  /** Read back after the panel (or the app's own settings page) changed them. */
   function captureApp(): void {
     app = { role: store.user.role, uiLanguage: store.user.prefs.uiLanguage, currency: store.user.prefs.currency };
     save();
@@ -65,7 +53,7 @@ export function createControl(
     for (const s of states) if (active.has(s.id)) s.apply(store);
   }
 
-  /** States sharing a `group` exclude each other: turning one on turns the rest off. */
+  /** States sharing a `group` exclude each other. */
   function setState(id: string, on: boolean): void {
     const group = states.find((s) => s.id === id)?.group;
     if (on && group) for (const s of states) if (s.group === group) active.delete(s.id);
@@ -80,7 +68,6 @@ export function createControl(
     captureApp();
   }
 
-  /** `request` as `seen` lists it. */
   function setOverride(request: string, mode: OverrideMode | null): void {
     if (mode) overrides.set(request, mode);
     else overrides.delete(request);
@@ -90,7 +77,6 @@ export function createControl(
     slow = on;
   }
 
-  /** How long to wait before answering. */
   function delay(): number {
     return slow ? SLOW_MS : 0;
   }

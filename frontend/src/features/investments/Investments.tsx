@@ -30,7 +30,6 @@ export function Investments() {
       {view !== null && returns.data !== undefined ? (
         view.empty ? <InvestmentsEmpty /> : <InvestmentsBody data={returns.data} held={view.held} excluded={view.excluded} />
       ) : loading ? (
-        // Whether anything is invested is still unknown: the full page, in bones.
         <InvestmentsBody />
       ) : (
         <Placeholder
@@ -44,10 +43,8 @@ export function Investments() {
   );
 }
 
-/** The page's cards; without data (still loading), each one in bones. */
 function InvestmentsBody({ data, held = [], excluded = 0 }: { data?: InvestmentReturns; held?: ExposureHolding[]; excluded?: number }) {
   const { t, i18n } = useTranslation();
-  // One eye by the section's heading reveals the three donuts.
   const privacy = usePrivacy();
   const e = exposure(held);
   // Securities with no rate are worth zero here, so every donut leaves them out.
@@ -97,8 +94,6 @@ function InvestmentsBody({ data, held = [], excluded = 0 }: { data?: InvestmentR
   );
 }
 
-/** The API can't be reached: the page keeps its shape, each surface saying
- *  so the way every other card in the app does. */
 function Placeholder({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
   const card = (title: string, height: string, className = "") => (

@@ -5,7 +5,6 @@ import { useState } from "react";
 
 import { CodeInput } from "./CodeInput";
 
-/** CodeInput is controlled: hold its value like the real callers do. */
 function Harness({ initial = "", onChange }: { initial?: string; onChange?: (d: string) => void }) {
   const [value, setValue] = useState(initial);
   return (
@@ -74,7 +73,6 @@ describe("CodeInput", () => {
     await user.click(screen.getByRole("textbox"));
     expect(ringed()).toEqual([false, false, true, false, false, false]);
     await user.type(screen.getByRole("textbox"), "3456");
-    // All six typed: the last box keeps the ring.
     expect(ringed()).toEqual([false, false, false, false, false, true]);
     await user.tab();
     expect(ringed()).toEqual([false, false, false, false, false, false]);

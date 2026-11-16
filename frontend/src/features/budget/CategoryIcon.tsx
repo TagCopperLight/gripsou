@@ -10,12 +10,8 @@ type CategoryIconProps = {
   style?: CSSProperties;
 };
 
-/** A category's glyph, with the one fallback every surface shares: a category
- *  without an icon is a solid dot in its own colour — on the chip, the row
- *  avatar, the settings table and the modal's preview alike. */
 export function CategoryIcon({ icon, className, style }: CategoryIconProps) {
-  // Indexed, not looked up through a function: `react-hooks/static-components`
-  // only accepts a component taken from a static record.
+  // Indexed from a static record: `react-hooks/static-components` rejects anything else.
   const Icon = (icon && BUDGET_ICONS[icon]) || FilledDot;
   return <Icon className={className} style={style} />;
 }

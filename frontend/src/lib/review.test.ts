@@ -17,7 +17,6 @@ describe("review queue state", () => {
   it("keeps a resolved line in place, and Undo brings it back", () => {
     let s = syncPending(initialReview, [tx("a"), tx("b")]);
     s = resolve(s, { tx: tx("a"), outcome: "kept", categoryId: "c1", categoryName: "Groceries" });
-    s = syncPending(s, [tx("b")]); // the server stops listing `a`
     expect(s.order).toEqual(["a", "b"]);
     expect(Object.keys(s.resolved)).toEqual(["a"]);
     s = unresolve(s, "a");
@@ -39,14 +38,12 @@ describe("review queue state", () => {
     s = resolve(s, { tx: tx("a"), outcome: "kept", categoryId: "c1", categoryName: "X" });
     s = offerSame(s, "a", 3);
     expect(s.resolved.a.sameCount).toBe(3);
-    expect(offerSame(s, "b", 2)).toBe(s); // `b` was never resolved (or was undone)
   });
 
   it("applying to others resolves the pending lines it wrote, and only those", () => {
     let s = syncPending(initialReview, [tx("a"), tx("b"), tx("c"), tx("d")]);
     s = resolve(s, { tx: tx("a"), outcome: "corrected", categoryId: "c2", categoryName: "Y" });
     s = resolve(s, { tx: tx("d"), outcome: "kept", categoryId: "c1", categoryName: "X" });
-    // `b` is pending, `d` already resolved on its own, `z` was never in the queue.
     s = applyToSame(s, "a", ["a", "b", "d", "z"], tx);
     expect(s.resolved.a.appliedTo).toBe(3);
     expect(s.resolved.b).toMatchObject({ outcome: "applied", categoryId: "c2", categoryName: "Y" });

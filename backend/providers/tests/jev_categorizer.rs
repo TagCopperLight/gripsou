@@ -145,7 +145,6 @@ async fn a_rate_limit_keeps_the_answers_already_received() {
         out.interrupted,
         Some(CategorizeError::RateLimited)
     ));
-    // With eight in flight, all three were sent; the two good answers stay.
     let keys: Vec<Uuid> = out.guesses.iter().map(|g| g.key).collect();
     assert_eq!(keys, vec![Uuid::from_u128(1), Uuid::from_u128(3)]);
     assert_eq!(out.usage, Usage::known(600, 60));

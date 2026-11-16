@@ -67,8 +67,6 @@ describe("refreshing as an AI run moves on", () => {
       return Response.json([]);
     });
     const { client: qc, wrapper } = appWrapper();
-    // Two status readers at once, as the Budget page and its banner are,
-    // beside the figures and the transaction list.
     const { result } = renderHook(() => ({
       statuses: [useAiStatus(), useAiStatus()],
       summary: useBudgetSummary(SEPTEMBER),
@@ -95,7 +93,6 @@ describe("refreshing as an AI run moves on", () => {
     await poll({ remaining: 8 });
     expect(reads("/budget/summary")).toBe(2);
 
-    // Nothing moved: nothing to refresh.
     await poll({});
     expect(reads("/budget/summary")).toBe(2);
   });

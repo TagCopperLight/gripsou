@@ -1,6 +1,4 @@
-//! Challenges: short-lived, single-use proofs between two requests (the
-//! second login step, the passkey ceremonies, a fresh password check). Each
-//! kind has its own state type, stored as the row's JSON.
+//! Short-lived, single-use proofs between two requests; each kind has its own state type, stored as JSON.
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -11,12 +9,10 @@ use crate::auth;
 use crate::error::ApiError;
 use gripsou_core::repo::login_challenge::{self, ChallengeKind};
 
-/// A challenge's state, tied to its kind.
 pub trait Kind: Serialize + DeserializeOwned {
     const KIND: ChallengeKind;
 }
 
-/// The second step of a password login.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Mfa {
     pub remember: bool,
@@ -26,7 +22,6 @@ impl Kind for Mfa {
     const KIND: ChallengeKind = ChallengeKind::Mfa;
 }
 
-/// A fresh password check, authorising one sensitive change.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Reauth {}
 
@@ -53,13 +48,11 @@ impl Kind for PasskeyLogin {
 }
 
 pub struct Challenge<K> {
-    /// `None` for a sign-in that names no account yet (passwordless).
+    /// `None` for a passwordless sign-in, which names no account yet.
     pub user_id: Option<Uuid>,
     pub state: K,
 }
 
-/// Store a challenge and return its token, for the client to send back
-/// within [`login_challenge::TTL_MINUTES`].
 pub async fn issue<K: Kind>(
     pool: &sqlx::PgPool,
     user_id: Option<Uuid>,
@@ -77,7 +70,7 @@ pub async fn issue<K: Kind>(
     Ok(token)
 }
 
-/// The challenge behind `token`, still unused and unexpired, left in place.
+/// Leaves the challenge unspent.
 pub async fn find<K: Kind>(
     pool: &sqlx::PgPool,
     token: &str,
@@ -88,8 +81,7 @@ pub async fn find<K: Kind>(
         .transpose()
 }
 
-/// Use the challenge behind `token`: of two concurrent callers only one gets
-/// it. Runs on a pool or in a caller's transaction (rolled back, it is back).
+/// Of two concurrent callers only one gets it. Works in a caller's transaction too.
 pub async fn consume<K: Kind>(
     db: impl sqlx::PgExecutor<'_>,
     token: &str,
@@ -107,8 +99,7 @@ fn typed<K: Kind>(c: login_challenge::Challenge) -> Result<Challenge<K>, ApiErro
     })
 }
 
-/// Spend a reauth token. Single use either way: a token that belongs to
-/// someone else is burnt and refused.
+/// Single use: a token belonging to someone else is burnt and refused.
 pub async fn spend_reauth(
     db: impl sqlx::PgExecutor<'_>,
     user_id: Uuid,
@@ -120,10 +111,7 @@ pub async fn spend_reauth(
     }
 }
 
-/// The reauth token adding a second factor needs, or `None` while the user
-/// hasn't finished the welcome flow, which offers a second factor right after
-/// signing up and asks for no password there: the caller then has nothing to
-/// check or spend.
+/// `None` before the welcome flow is finished: it offers a second factor without a password, so there is nothing to check or spend.
 pub async fn factor_reauth<'a>(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -142,8 +130,7 @@ pub async fn factor_reauth<'a>(
     }
 }
 
-/// Check a reauth token without spending it (a ceremony that finishes later
-/// spends it).
+/// Does not spend: a ceremony that finishes later does.
 pub async fn check_reauth(pool: &sqlx::PgPool, user_id: Uuid, token: &str) -> Result<(), ApiError> {
     match find::<Reauth>(pool, token).await? {
         Some(c) if c.user_id == Some(user_id) => Ok(()),

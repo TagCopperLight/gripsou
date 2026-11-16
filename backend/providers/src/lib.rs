@@ -5,10 +5,8 @@ pub mod powens;
 pub mod registry;
 pub mod yahoo;
 
-/// A JSON decode error as `"{what} decode error (<kind>) at line L column C"`.
-/// serde's own text quotes the offending value (an amount, a description),
-/// and this text reaches the connection's error and the saved logs, so it is
-/// dropped: the position is enough to find it in a recorded body.
+/// serde's own text quotes the offending value (an amount, a description) and this text reaches
+/// saved logs, so it is dropped: the position is enough to find it in a recorded body.
 pub(crate) fn json_decode_error(what: &str, e: &serde_json::Error) -> String {
     format!(
         "{what} decode error ({:?}) at line {} column {}",
@@ -18,9 +16,6 @@ pub(crate) fn json_decode_error(what: &str, e: &serde_json::Error) -> String {
     )
 }
 
-/// A response body decoded as JSON. The error is the read failure, or the
-/// decode error without the value (`json_decode_error`); each adapter wraps it
-/// in its own error type.
 pub(crate) async fn read_json<T: serde::de::DeserializeOwned>(
     resp: reqwest::Response,
     what: &str,

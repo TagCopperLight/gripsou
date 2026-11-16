@@ -1,32 +1,17 @@
-/** Classes shared by every grid table (`GridTable`): the transactions list,
- *  the holdings card. A grid table is a CSS grid, not a table layout, so its
- *  columns are tracks a caller defines once (`minmax(110px, 180px)`, `3fr`)
- *  and the header and every row sit on them through `grid-cols-subgrid`:
- *  filtering or searching never reshuffles the columns.
- *
- *  Columns are spaced by padding on each cell (the gutter on its right),
- *  never by a grid `column-gap`: the hover fill is painted by the cells
- *  themselves, so a real gap would slice it into stripes.
- */
+/** A CSS grid, not a table layout: callers define the column tracks once and the
+ *  header and rows sit on them through `grid-cols-subgrid`, so filtering never
+ *  reshuffles columns. Columns are spaced by cell padding, never `column-gap`:
+ *  cells paint the hover fill, so a real gap would slice it into stripes. */
 
-/** Everything a row's cells share, applied from the `<tr>`.
+/** Applied from the `<tr>`. The background lives on the cells because only a cell
+ *  can round a corner. Cells stretch to the row height, so `flex items-center`
+ *  centres the content.
  *
- *  The background lives on the cells, not on the `<tr>`: only a cell can round
- *  a corner, so the first and last one carry the row's rounded ends.
- *
- *  Each cell is a grid item on the table's tracks, so it stretches to the
- *  row's height; `flex items-center` is what centres the content inside it.
- *
- *  Vertical geometry, top to bottom: a 1px transparent top border, the
- *  rectangle, then a 2px transparent bottom border. `bg-clip-padding` keeps
- *  the hover fill off those borders, so each rectangle stops 1px short of its
- *  neighbours; `::after` draws the separator into the middle of the resulting
- *  3px band: 1px gap, 1px rule, 1px gap.
- *
- *  Horizontally the rule is flush with the text, not with the row: the end
- *  cells pull it in by their own edge padding. The hover rectangle still goes
- *  full-bleed underneath; only the separator is inset.
- */
+ *  Vertical: a 1px transparent top border, the rectangle, a 2px transparent
+ *  bottom border. `bg-clip-padding` keeps the hover fill off the borders, and
+ *  `::after` draws the separator in the resulting 3px band (1px gap, 1px rule,
+ *  1px gap). Horizontally the rule is flush with the text: end cells pull it in
+ *  by their edge padding while the hover rectangle stays full-bleed. */
 export const ROW_CELLS = [
   "col-span-full grid grid-cols-subgrid",
   "[&>td]:flex [&>td]:items-center [&>td]:min-w-0",
@@ -38,15 +23,11 @@ export const ROW_CELLS = [
   "[&>td:first-child]:rounded-l-xl [&>td:last-child]:rounded-r-xl",
 ].join(" ");
 
-/** The hover fill of a row that does something when clicked or hovered. */
 export const ROW_HOVER = "hover:[&>td]:bg-hover";
 
-/** A column's track: at least `min`, growing to `max` (a length, `Nfr`,
- *  `max-content`, `auto`); exactly `min` without one. */
+/** At least `min`, growing to `max` (a length, `Nfr`, `max-content`, `auto`). */
 export type Track = { min: string; max?: string };
 
-/** The grid's `grid-template-columns`, and the width below which it scrolls
- *  sideways: the sum of the tracks' minimums. */
 export function gridColumns(tracks: Track[]): { template: string; minWidth: string } {
   return {
     template: tracks.map((t) => (t.max ? `minmax(${t.min}, ${t.max})` : t.min)).join(" "),
@@ -54,12 +35,8 @@ export function gridColumns(tracks: Track[]): { template: string; minWidth: stri
   };
 }
 
-/** The type of every table head and list group heading: 11px mono, faint,
- *  wide-tracked. */
 export const HEAD_TEXT = "font-mono text-[11px] font-medium tracking-wide text-fg-faint";
 
-/** The header row: `HEAD_TEXT`, uppercase. */
 export const HEAD_ROW = `col-span-full grid grid-cols-subgrid text-left uppercase ${HEAD_TEXT}`;
 
-/** A header cell; add the column's padding and alignment. */
 export const HEAD_CELL = "flex items-center py-2 font-medium";

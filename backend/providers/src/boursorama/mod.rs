@@ -13,10 +13,8 @@ const UA: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 \
 
 pub struct BoursoramaCompositionProvider {
     base_url: String,
-    /// Follows redirects — for the composition page (which 301s to add a slash).
     client: reqwest::Client,
-    /// Does NOT follow redirects — so we can read the search's 302 `Location`,
-    /// which points at `/cours/<symbol>/` for an exact ticker match.
+    /// Does not follow redirects: the search's 302 `Location` is the symbol.
     no_redirect: reqwest::Client,
 }
 

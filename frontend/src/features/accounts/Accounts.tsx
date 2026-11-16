@@ -6,8 +6,6 @@ import { AccountsList } from "./AccountsList";
 
 export function Accounts() {
   const { t } = useTranslation();
-  // The account under the pointer, in the legend, the bar or the list: the
-  // chart brings its band forward.
   const [hovered, setHovered] = useState<string | null>(null);
   return (
     <div>

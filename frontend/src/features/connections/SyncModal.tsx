@@ -10,8 +10,6 @@ import { Dialog } from "../../ui/Dialog";
 
 type SyncModalProps = { onClose: () => void };
 
-// One list of connections, whatever provider each comes from; the body scrolls
-// while the header and the "Sync all" footer stay visible.
 export function SyncModal({ onClose }: SyncModalProps) {
   const { t } = useTranslation();
   const { data, isPending, isError, refetch } = useConnections();

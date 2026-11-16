@@ -39,7 +39,6 @@ describe("BreakdownSurface", () => {
 
   it("computes share against the period's expenses total", () => {
     renderTable();
-    // 1200 / 1940 = 61,9 %
     expect(within(screen.getByTestId("breakdown-row-cat:c1")).getByTestId("share")).toHaveTextContent("61");
   });
 
@@ -54,7 +53,7 @@ describe("BreakdownSurface", () => {
   it("sorts by category name", () => {
     renderTable();
     fireEvent.click(screen.getByTestId("sort-category"));
-    expect(rowIds()[0]).toBe("breakdown-row-cat:c2"); // Groceries
+    expect(rowIds()[0]).toBe("breakdown-row-cat:c2");
   });
 
   it("shows each row's transaction count and sorts by it", () => {
@@ -88,7 +87,7 @@ describe("BreakdownSurface", () => {
     expect(onOpen).toHaveBeenCalledWith({ kind: "uncategorised" });
   });
 
-  it("does not link the Other row — its members are not in the payload", () => {
+  it("does not link the Other row, whose members are not in the payload", () => {
     const onOpen = renderTable();
     fireEvent.click(screen.getByTestId("breakdown-row-other"));
     expect(onOpen).not.toHaveBeenCalled();
@@ -119,10 +118,8 @@ describe("BreakdownSurface", () => {
         onOpen={vi.fn()}
       />,
     );
-    // Unchanged is neutral, not "good".
     const same = within(screen.getByTestId("breakdown-row-cat:c1")).getByTestId("avg12");
     expect(same.querySelector("[data-tone]")).toHaveAttribute("data-tone", "flat");
-    // Against a zero average the change is an amount, not a dash.
     const fromZero = within(screen.getByTestId("breakdown-row-cat:c2")).getByTestId("avg12");
     expect(fromZero).toHaveTextContent("+80,00");
     expect(fromZero.querySelector("[data-tone]")).toHaveAttribute("data-tone", "bad");

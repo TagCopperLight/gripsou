@@ -61,10 +61,6 @@ describe("TransactionRow", () => {
   });
 
   it("exposes no selection checkbox and no checked checkbox on a lot row", () => {
-    // The server's assignment/bulk endpoints only ever touch the `transaction`
-    // table, so a lot row must offer
-    // neither control — not even a disabled one — the way its category and
-    // tag cells already behave. The avatar stays visible in their place.
     renderRow(
       {
         source: "lot", type: "buy", description: null, ticker: "CW8",
@@ -97,12 +93,7 @@ describe("TransactionRow", () => {
   });
 
   it("keeps the selection checkbox reachable by keyboard even before anything is selected", () => {
-    // Regression guard: the checkbox must never fall back to `hidden` /
-    // display:none, which would both drop it from the tab order and hide it
-    // from assistive tech. jsdom doesn't evaluate Tailwind, so this only
-    // proves DOM presence, an accessible-name lookup, absence of the
-    // `hidden` class, and that a plain click (no hover) still fires the
-    // handler — not that it is visually revealed on hover/focus.
+    // jsdom ignores Tailwind: this proves the checkbox is in the DOM, not `hidden`, and clickable without hover.
     const h = renderRow({}, { anySelected: false, selected: false });
     const box = screen.getByRole("checkbox", { name: "Select this transaction: ALDI SARL 1234" });
     expect(box).toBe(screen.getByTestId("tx-select"));
@@ -112,11 +103,7 @@ describe("TransactionRow", () => {
   });
 
   it("keeps the add-tag button reachable by keyboard, and still absent on a lot row", () => {
-    // Mirrors the checkbox regression guard above: the add-tag affordance
-    // must never fall back to `hidden`/display:none. jsdom doesn't evaluate
-    // Tailwind, so this only proves DOM presence, an accessible-name lookup,
-    // absence of the `hidden` class, and that a plain click (no hover) still
-    // fires the handler — not that it is visually revealed on hover/focus.
+    // Same guard for the add-tag button.
     const h = renderRow({ tags: [{ id: "g1", name: "holiday", color: "#f0b952" }] });
     const addTag = screen.getByRole("button", { name: "Add tags: ALDI SARL 1234" });
     expect(addTag).toBe(screen.getByTestId("tx-add-tag"));
@@ -125,8 +112,6 @@ describe("TransactionRow", () => {
     expect(h.onOpenTags).toHaveBeenCalled();
     cleanup();
 
-    // The lot-row isolation rule must survive: no tag affordance at all,
-    // hidden or otherwise, on an investment record.
     renderRow({
       source: "lot", type: "buy", description: null, ticker: "CW8",
       quantity: "3", unitPrice: "512.30", amount: "-1536.90",

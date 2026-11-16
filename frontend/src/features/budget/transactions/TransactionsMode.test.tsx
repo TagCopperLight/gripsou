@@ -48,22 +48,11 @@ let patchBodies: unknown[] = [];
 let bulkBodies: unknown[] = [];
 let applyBodies: unknown[] = [];
 let sameDescriptionCount = 0;
-// What the bulk and apply-to-description endpoints report back as the number
-// of internal-transfer pairs an unconfirmed write would dissolve. 0 means the
-// write goes straight through, which is every other test in this file.
 let pendingPairBreaks = 0;
-// The same, for a single-row category change: the server refuses an
-// unconfirmed recategorisation of a row it knows to be paired.
 let patchPendingPairBreaks = 0;
-// Forces the row-patch endpoint to fail, to exercise `usePatchTransaction`'s
-// rollback — every other test in this file only ever sees a 200.
 let patchShouldFail = false;
-// Forces the bulk endpoint to fail, to exercise the error toast.
 let bulkShouldFail = false;
-// Mutable server-side state for `t1`'s tags, kept in sync with accepted
-// PATCHes so a post-mutation refetch (`onSettled` invalidation) returns what
-// the "server" actually holds — exactly like the real backend — instead of
-// silently reverting an accepted write back to the fixture's initial tags.
+// Tags the stub keeps in step with accepted PATCHes, so a refetch returns what the server holds.
 let serverRowsState: Transaction[] = [];
 
 function errorJson(status = 500) {
@@ -255,8 +244,6 @@ describe("TransactionsMode", () => {
     fireEvent.click(screen.getAllByTestId("category-chip")[0]);
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
     await screen.findByTestId("apply-to-all");
-    // The row's own patch already went through — this offer is only about
-    // widening the fix, so declining it must not touch the network again.
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByTestId("apply-to-all")).toBeNull());
     await settle(client);
@@ -268,16 +255,11 @@ describe("TransactionsMode", () => {
     patchShouldFail = true;
     const client = renderMode();
     await screen.findByText("ALDI");
-    // Before the write, the row is uncategorised.
     expect(screen.getAllByTestId("category-chip")[0]).toHaveTextContent("Uncategorised");
     fireEvent.click(screen.getAllByTestId("category-chip")[0]);
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
-    // The request was actually sent (and rejected)...
     await waitFor(() => expect(patchBodies).toEqual([{ categoryId: "gro" }]));
     await settle(client);
-    // ...and once the failed mutation has settled, the chip is back to
-    // uncategorised rather than stuck on the optimistic "Groceries" value —
-    // the user must never be shown a write that the server rejected.
     expect(screen.getAllByTestId("category-chip")[0]).toHaveTextContent("Uncategorised");
   });
 
@@ -325,9 +307,7 @@ describe("TransactionsMode", () => {
   });
 
   it("wires the selection bar's total to the exact sum of the id-selected rows", async () => {
-    // Both fixture rows carry amountReporting "-12.40" — a hand-picked
-    // selection of both must show their exact sum, not the server's
-    // matchingTotal (which the stub sets to a different, unrelated value).
+    // Selected rows sum exactly, not the server's matchingTotal.
     const client = renderMode();
     await screen.findByText("ALDI");
     fireEvent.click(screen.getAllByTestId("tx-select")[0]);
@@ -352,10 +332,8 @@ describe("TransactionsMode", () => {
   });
 
   it("accumulates every toggle against the live row, not a frozen snapshot", async () => {
-    // t1 starts with tag A. Opening the chooser and toggling B then C must
-    // each patch against the CURRENT tag set (including whatever the previous
-    // toggle's optimistic update just added) — not the row as it looked the
-    // instant the chooser opened. A regression here silently destroys tags.
+    // Each toggle must patch against the current tags, including the previous optimistic one.
+    // A regression silently destroys tags.
     const client = renderMode();
     await screen.findByText("ALDI");
     fireEvent.click(screen.getAllByTestId("tx-add-tag")[0]);
@@ -430,10 +408,6 @@ describe("TransactionsMode", () => {
     expect(screen.queryByTestId("error-toast")).toBeNull();
   });
 
-  // Recategorising half of an auto-paired transfer dissolves the pair on both
-  // sides. That is destructive enough to confirm, and the count can only come
-  // from the server for a bulk write, whose target set the client may never
-  // have loaded.
 
   it("confirms before recategorising half of an auto-paired transfer", async () => {
     serverRowsState = [tx({ id: "t1", isTransfer: true })];
@@ -451,8 +425,6 @@ describe("TransactionsMode", () => {
   });
 
   it("keeps a pair without asking when one half moves to a neutral category", async () => {
-    // Savings counts toward nothing, as the pair does: the server keeps the
-    // pair, so there is nothing to confirm and the row stays a transfer.
     serverRowsState = [tx({ id: "t1", isTransfer: true })];
     const client = renderMode();
     await screen.findByText("ALDI");
@@ -466,8 +438,6 @@ describe("TransactionsMode", () => {
   });
 
   it("asks when the server refuses a single-row change that would break a pair the list did not know about", async () => {
-    // The row was paired after the list loaded: the screen has no reason to
-    // ask, so the server's refusal is what brings the question up.
     patchPendingPairBreaks = 1;
     const client = renderMode();
     await screen.findByText("ALDI");
@@ -476,7 +446,6 @@ describe("TransactionsMode", () => {
 
     await screen.findByRole("dialog", { name: "Break the transfer pairing?" });
     expect(patchBodies).toEqual([{ categoryId: "gro" }]);
-    // Refused means unwritten: the chip goes back while the question is open.
     await waitFor(() =>
       expect(screen.getAllByTestId("category-chip")[0]).toHaveTextContent("Uncategorised"),
     );
@@ -510,7 +479,6 @@ describe("TransactionsMode", () => {
     fireEvent.click(screen.getByLabelText(/assign a category/i));
     fireEvent.click(await screen.findByTestId("chooser-option-gro"));
 
-    // The first attempt came back refused, not applied.
     const modal = await screen.findByRole("dialog", { name: "Break the transfer pairing?" });
     expect(modal).toHaveTextContent("3");
     expect(bulkBodies).toEqual([{ ids: ["t1"], categoryId: "gro" }]);

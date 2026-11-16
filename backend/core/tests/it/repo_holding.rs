@@ -17,7 +17,6 @@ async fn upserts_holding_and_updates_quantity(pool: PgPool) -> anyhow::Result<()
 
     let hid1 = upsert_holding(&mut conn, account_id, instrument_id, &h1).await?;
 
-    // Re-sync with a new quantity.
     let h2 = cash_holding("acct-1", Decimal::new(250, 0));
     let hid2 = upsert_holding(&mut conn, account_id, instrument_id, &h2).await?;
     assert_eq!(hid1, hid2, "same (account, instrument) is one holding");

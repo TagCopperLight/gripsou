@@ -1,8 +1,7 @@
 import type { TFunction } from "i18next";
 import type { Account, AccountSeries } from "../api/wire";
 
-// Account types are data-driven: the backend sends a stable key. A type added
-// to the database but not yet to the locale files shows its key.
+// A type added to the database but not yet to the locale files shows its key.
 export function accountTypeLabel(t: TFunction, key: string): string {
   return t(`accountTypes.${key}`, { defaultValue: key });
 }
@@ -15,8 +14,7 @@ export type ConnectionGroup = {
   accounts: Account[];
 };
 
-/** Accounts grouped by their connection, biggest subtotal first. Accounts keep
- * their incoming order (the API sends them by value, descending). */
+/** Accounts keep their incoming order (the API sends them by value, descending). */
 export function groupByConnection(accounts: Account[]): ConnectionGroup[] {
   const groups = new Map<string, ConnectionGroup>();
   for (const a of accounts) {
@@ -37,13 +35,9 @@ export function groupByConnection(accounts: Account[]): ConnectionGroup[] {
   return [...groups.values()].sort((x, y) => y.total - x.total);
 }
 
-/** How many accounts the chart's legend names before "+N others". */
 const LEGEND_MAX = 5;
 
-/** The chart's accounts, biggest first at the range's end: the stack's
- *  bottom band, the tooltip's first line, the legend's first name. One at
- *  zero over the whole range has no band, so it's left out of the tooltip
- *  and the legend too; one emptied during the range keeps its history. */
+/** One at zero over the whole range has no band, so it is left out of the tooltip and legend; one emptied during the range keeps its history. */
 export function bySize(series: AccountSeries): AccountSeries["accounts"] {
   const last = series.points.at(-1)?.values ?? {};
   return series.accounts
@@ -51,9 +45,7 @@ export function bySize(series: AccountSeries): AccountSeries["accounts"] {
     .sort((a, b) => Number(last[b.id] ?? 0) - Number(last[a.id] ?? 0));
 }
 
-/** The accounts the chart's legend names: the biggest at the range's end,
- *  and how many more are left out (only ever more than one: naming a sixth
- *  takes no more room than "+1 other"). */
+/** Only ever more than one left out: naming a sixth takes no more room than "+1 other". */
 export function legendAccounts(series: AccountSeries, max = LEGEND_MAX): { shown: AccountSeries["accounts"]; others: string[] } {
   const sorted = bySize(series);
   if (sorted.length <= max + 1) return { shown: sorted, others: [] };

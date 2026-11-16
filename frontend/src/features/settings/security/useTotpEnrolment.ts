@@ -7,17 +7,12 @@ import { useTotpConfirm, useTotpSetup } from "../../../api/auth";
 import { TOTP_DIGITS, type TotpSetup } from "../../../api/wire";
 import { throttledError } from "../../../auth/throttle";
 
-/** Where a setup is. Scanning and the first code need the server's secret;
- *  the last step shows the backup codes the confirmed code earned. */
 export type TotpState =
   | { step: "scan"; setup: TotpSetup }
   | { step: "code"; setup: TotpSetup }
   | { step: "codes"; recoveryCodes: string[] };
 
-/** Setting up an authenticator once the password is checked (or needs no
- *  check): scan, first code, backup codes. `state` is null until `begin`, and
- *  again when the setup expired (10 minutes), after `onExpired`. Each `begin`
- *  starts with an empty code. */
+/** `state` is null until `begin`, and again after the setup expires (10 minutes) and `onExpired` runs. */
 export function useTotpEnrolment(onExpired: () => void) {
   const { t } = useTranslation();
   const start = useTotpSetup();
@@ -49,8 +44,7 @@ export function useTotpEnrolment(onExpired: () => void) {
         onExpired();
         return;
       }
-      // Throttled or a wrong code, next to the field; anything else failed on
-      // the server's side. The boxes are emptied for the next code.
+      // Throttled or wrong code: shown by the field. Anything else failed server-side. The boxes are emptied for the next code.
       const shown =
         throttledError(t, err) ?? (err instanceof ApiError && err.status === 400 ? t("twoFactor.wrongCode") : null);
       if (shown) setError(shown);
@@ -58,14 +52,12 @@ export function useTotpEnrolment(onExpired: () => void) {
     }
   };
 
-  /** The sixth digit sends the code; there is no button for it. */
   const typeCode = (digits: string) => {
     setCode(digits);
     setError(null);
     if (digits.length === TOTP_DIGITS) void submitCode(digits);
   };
 
-  /** Between scanning and the code, which share the setup. */
   const withSetup = (step: "scan" | "code") =>
     setState((s) => (s && s.step !== "codes" ? { step, setup: s.setup } : s));
 
@@ -83,7 +75,6 @@ export function useTotpEnrolment(onExpired: () => void) {
     submitCode: () => void submitCode(code),
     toCode: () => withSetup("code"),
     backToScan,
-    /** Leaves the setup (abandoned, or done once the codes are saved). */
     close: () => setState(null),
     busy: start.isPending || confirm.isPending,
   };

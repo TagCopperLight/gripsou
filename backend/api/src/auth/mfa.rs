@@ -1,6 +1,3 @@
-//! Two-factor settings: set up and remove an authenticator app, regenerate
-//! backup codes, and the password re-authentication the destructive steps need.
-
 use crate::error::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -17,8 +14,6 @@ use crate::auth::throttle::Throttles;
 use crate::auth::{AuthUser, factors, password};
 use crate::error::ApiError;
 
-/// Trade the password for a short-lived token that authorises one sensitive
-/// change (a second factor, a reset link).
 pub async fn reauth(
     State(pool): State<PgPool>,
     State(throttles): State<Arc<Throttles>>,
@@ -47,12 +42,8 @@ pub async fn status(
     }))
 }
 
-/// Start (or restart) enrolment: a fresh secret replaces any unconfirmed one
-/// and restarts its 10-minute confirmation window.
-/// Needs a fresh reauth token (outside the welcome flow): otherwise a stolen
-/// session could enrol its own authenticator and lock the owner out. Like
-/// every reauth-gated change, the checks that need no password come first, so
-/// a refusal doesn't spend the token.
+/// Outside the welcome flow it needs a fresh reauth token, or a stolen session could enrol its own authenticator and lock the owner out.
+/// Checks that need no password come first, so a refusal doesn't spend the token.
 pub async fn totp_setup(
     State(pool): State<PgPool>,
     State(key): State<EncryptionKey>,
@@ -82,12 +73,8 @@ pub async fn totp_setup(
     }))
 }
 
-/// Prove the app works by entering a code; turns the factor on, hands out the
-/// backup codes once, and signs out every other session. Only a setup started
-/// in the last 10 minutes can be confirmed, and wrong codes count on the
-/// second-factor limiter: a stolen session (which can't start a setup without
-/// the password) must not be able to guess its way into a setup the owner
-/// abandoned, and so to the backup codes.
+/// Wrong codes count on the second-factor limiter, and only a setup started in the last 10 minutes can be confirmed:
+/// a stolen session must not guess its way into an abandoned setup and so to the backup codes.
 pub async fn totp_confirm(
     State(pool): State<PgPool>,
     State(key): State<EncryptionKey>,
@@ -227,7 +214,6 @@ mod tests {
             .is_some()
     }
 
-    /// Set up and confirm; returns the secret and the recovery codes.
     async fn enrol(pool: &PgPool, a: &AuthUser) -> (Vec<u8>, Vec<String>) {
         let _ = setup(pool, a).await.unwrap();
         let secret = stored_secret(pool, a.user_id).await;
@@ -324,7 +310,6 @@ mod tests {
         assert!(confirm(&pool, &me, totp_now(&second)).await.is_ok());
     }
 
-    /// The welcome flow offers it without the password; afterwards it's asked.
     #[gripsou_core::testkit::db_test]
     async fn setup_needs_no_reauth_until_the_welcome_is_done(pool: PgPool) {
         let uid = seed_user(&pool, "a@t.local").await;
@@ -358,7 +343,6 @@ mod tests {
             StatusCode::FORBIDDEN
         );
         assert!(repo::totp(&pool, uid).await.unwrap().is_none());
-        // Single use.
         let tok = reauth_token(&pool, &me, "hunter22").await;
         assert!(setup_with(&pool, &me, Some(&tok)).await.is_ok());
         assert_eq!(
@@ -382,7 +366,6 @@ mod tests {
             StatusCode::NOT_FOUND
         );
         assert_eq!(sessions(&pool, uid).await, 2);
-        // Refused before the token is spent; the pending setup stays.
         assert!(reauth_valid(&pool, &tok).await);
         assert!(repo::totp(&pool, uid).await.unwrap().is_some());
     }
@@ -412,7 +395,6 @@ mod tests {
                 .unwrap_err();
             assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         }
-        // A right code clears the four failures.
         let _ = confirm_with(&pool, &me, totp_now(&secret), &throttle)
             .await
             .unwrap();
@@ -434,7 +416,6 @@ mod tests {
                 .unwrap_err();
             assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         }
-        // Even the right code is refused during the wait.
         let err = confirm_with(&pool, &me, totp_now(&secret), &throttle)
             .await
             .unwrap_err();
@@ -493,7 +474,6 @@ mod tests {
             remove(&pool, &me, &theirs).await.unwrap_err().status(),
             StatusCode::FORBIDDEN
         );
-        // Refused, and burnt.
         assert!(!reauth_valid(&pool, &theirs).await);
         assert!(repo::status(&pool, uid).await.unwrap().totp);
 
@@ -506,7 +486,6 @@ mod tests {
         assert!(!st.totp);
         assert_eq!(st.recovery_remaining, 0);
         assert_eq!(sessions(&pool, uid).await, 1);
-        // Single use: spent on the removal.
         assert!(!reauth_valid(&pool, &fresh).await);
     }
 
@@ -572,7 +551,6 @@ mod tests {
             .unwrap()
             .is_some()
         );
-        // The token was single use.
         let err = regenerate(&pool, &me, &tok).await.unwrap_err();
         assert_eq!(err.status(), StatusCode::FORBIDDEN);
     }

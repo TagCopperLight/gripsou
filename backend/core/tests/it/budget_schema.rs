@@ -1,13 +1,11 @@
 use gripsou_core::testkit;
 use sqlx::PgPool;
 
-/// Inserting a user must seed their category set — via the trigger, not via
-/// application code, so every creation path is covered including this one.
+/// Seeding happens in a trigger, so every creation path is covered.
 #[gripsou_core::testkit::db_test]
 async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
 
-    // Numbering is dense within a kind: 1..n, no gaps, no duplicates.
     let gaps: i64 = sqlx::query_scalar(
         "select count(*) from (
              select kind, sort_order,
@@ -20,7 +18,6 @@ async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
     .await?;
     assert_eq!(gaps, 0, "sort_order is 1..n within each kind");
 
-    // Nothing ships archived: the taxonomy arrives fully in play.
     let archived: i64 = sqlx::query_scalar(
         "select count(*) from budget_category where user_id = $1 and archived_at is not null",
     )
@@ -37,7 +34,6 @@ async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
     .await?;
     assert_eq!(kinds, vec!["expense", "income", "neutral"]);
 
-    // Every seeded row carries a stable key so the frontend can translate it.
     let without_key: i64 = sqlx::query_scalar(
         "select count(*) from budget_category where user_id = $1 and default_key is null",
     )
@@ -49,7 +45,6 @@ async fn a_new_user_gets_seeded_categories(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Two users own two independent taxonomies; names collide across users.
 #[gripsou_core::testkit::db_test]
 async fn categories_are_per_user(pool: PgPool) -> anyhow::Result<()> {
     let a = testkit::seed_user(&pool).await;
@@ -72,8 +67,7 @@ async fn categories_are_per_user(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Deleting a user must still work even though they own system categories —
-/// the protection lives in the repository, not in a delete trigger.
+/// Deleting a user works: system categories are protected in the repository, not by a trigger.
 #[gripsou_core::testkit::db_test]
 async fn deleting_a_user_cascades_through_categories(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -91,10 +85,7 @@ async fn deleting_a_user_cascades_through_categories(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// The normalisation the "apply to all" prompt keys on: dates and digit
-/// runs removed. A card mask is the adapter's to strip; one left in the
-/// wording keeps its letters but loses its digits, so the card number never
-/// splits a merchant in two.
+/// A card mask left in the wording keeps its letters but loses its digits, so the number never splits a merchant.
 #[gripsou_core::testkit::db_test]
 async fn norm_description_strips_dates_and_digits(pool: PgPool) -> anyhow::Result<()> {
     let cases = [

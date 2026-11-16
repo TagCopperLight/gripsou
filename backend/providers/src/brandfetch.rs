@@ -1,5 +1,4 @@
-//! Brandfetch logo URLs for institutions (banks/brokers) and instruments,
-//! built at read time so a change of the Brandfetch client id reaches every logo.
+//! Brandfetch logo URLs, built at read time so a change of the client id reaches every logo.
 
 use gripsou_core::provider_config::{ConfigField, ProviderConfig};
 
@@ -26,8 +25,6 @@ impl Logos {
         }
     }
 
-    /// The Brandfetch parameters every logo uses: `/fallback/404/theme/light`
-    /// and `?c={client id}` when one is saved.
     fn url(&self, path: &str) -> String {
         let base = format!("https://cdn.brandfetch.io/{path}/fallback/404/theme/light");
         match &self.client_id {
@@ -36,14 +33,10 @@ impl Logos {
         }
     }
 
-    /// An institution's logo by its provider's key for it, or `None` when the
-    /// key is absent or its provider maps it to no website.
     pub fn institution(&self, provider_key: &str, institution_key: Option<&str>) -> Option<String> {
         institution_domain(provider_key, institution_key?).map(|d| self.url(d))
     }
 
-    /// An instrument's logo: by ISIN, else ticker. `None` for cash or when
-    /// there is nothing to look it up by.
     pub fn instrument(
         &self,
         kind: &str,

@@ -1,5 +1,3 @@
-//! Saving keys takes effect without a restart.
-
 use gripsou_core::provider_config::ProviderConfig;
 
 #[test]

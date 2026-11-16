@@ -1,6 +1,4 @@
-//! All of core's integration tests in one binary: one link instead of one
-//! per file, and every test runs in parallel. `logs_install` stays its own
-//! binary because it installs the process-wide subscriber.
+//! One binary for all of core's integration tests. `logs_install` stays separate: it installs the process-wide subscriber.
 
 mod backfill;
 mod budget_ai_run;

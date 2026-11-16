@@ -17,8 +17,7 @@ async fn lists_seeded_categories_grouped_by_kind(pool: PgPool) -> anyhow::Result
 
     let rows = list_categories(&pool, user_id).await?;
     assert_eq!(rows.len(), 32);
-    // expense first, then income, then neutral — the order the settings
-    // table renders in.
+    // expense, income, neutral: the settings table order.
     let kinds: Vec<&str> = rows.iter().map(|r| r.kind.as_str()).collect();
     assert_eq!(kinds[0], "expense");
     assert_eq!(kinds[31], "neutral");
@@ -99,8 +98,6 @@ async fn creates_updates_and_archives(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Renaming a seeded category drops its translation key: from then on the
-/// user's own wording is shown verbatim in every language.
 #[gripsou_core::testkit::db_test]
 async fn renaming_a_seeded_category_clears_its_default_key(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
@@ -110,7 +107,6 @@ async fn renaming_a_seeded_category_clears_its_default_key(pool: PgPool) -> anyh
         .find(|c| c.default_key.as_deref() == Some("groceries"))
         .unwrap();
 
-    // A patch that does not touch the name keeps the key.
     let recoloured = update_category(
         &pool,
         user_id,
@@ -147,8 +143,6 @@ async fn renaming_a_seeded_category_clears_its_default_key(pool: PgPool) -> anyh
     Ok(())
 }
 
-/// The pairing pass writes to the system row, so it cannot be deleted and its
-/// kind cannot move. Everything else about it is editable.
 #[gripsou_core::testkit::db_test]
 async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
@@ -189,8 +183,6 @@ async fn the_system_category_is_renamable_but_not_deletable(pool: PgPool) -> any
     Ok(())
 }
 
-/// Deleting returns the transactions to uncategorised rather than deleting
-/// them, and to nobody's choice: the AI has them to look at again.
 #[gripsou_core::testkit::db_test]
 async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
@@ -250,7 +242,6 @@ async fn deleting_a_category_leaves_its_transactions(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// Another user's category is invisible and untouchable.
 #[gripsou_core::testkit::db_test]
 async fn categories_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()> {
     let (owner, _c1) = seed_user_and_connection(&pool).await;
@@ -297,9 +288,7 @@ async fn categories_are_scoped_to_their_owner(pool: PgPool) -> anyhow::Result<()
     Ok(())
 }
 
-/// The ids come in the order the user dragged them to; each kind is numbered
-/// `1..n` in that order, and another user's id is skipped so the caller can
-/// refuse the partial write.
+/// Another user's id is skipped so the caller can refuse the partial write.
 #[gripsou_core::testkit::db_test]
 async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;
@@ -315,7 +304,6 @@ async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow
         .map(|r| r.id)
         .collect();
 
-    // Last expense first, kinds interleaved.
     let mut order = vec![*expenses.last().unwrap(), incomes[1], incomes[0]];
     order.extend(&expenses[..expenses.len() - 1]);
     assert!(reorder_categories(&pool, user_id, &order).await?);
@@ -330,8 +318,6 @@ async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow
         .collect();
     assert_eq!(income_order, vec![incomes[1], incomes[0]]);
 
-    // A list naming a row that is not the user's is refused whole: their own
-    // rows keep the order they had.
     let (stranger, _c) = seed_user_and_connection(&pool).await;
     let theirs = list_categories(&pool, stranger).await?[0].id;
     let before = list_categories(&pool, user_id).await?;
@@ -353,7 +339,6 @@ async fn reordering_numbers_each_kind_in_the_order_given(pool: PgPool) -> anyhow
     Ok(())
 }
 
-/// Created together, two categories still get distinct positions.
 #[gripsou_core::testkit::db_test]
 async fn concurrent_creates_get_distinct_positions(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _conn) = seed_user_and_connection(&pool).await;

@@ -5,16 +5,14 @@ import type { EChartsOption } from "echarts";
 import { TrendSurface } from "./TrendSurface";
 import type { BudgetTrend } from "../../../api/wire";
 
-// The raw option (functions included — `JSON.stringify` below drops them) so
-// the decimal-string tooltip test can invoke the tooltip formatter directly.
+// The raw option (functions included, which `JSON.stringify` drops) so the tooltip test can call the formatter.
 let capturedOption: EChartsOption | undefined;
 type ChartSeries = { data: number[]; itemStyle: { color: (p: { dataIndex: number }) => string } };
 
 let capturedEvents: Record<string, (...args: unknown[]) => void> | undefined;
 
 vi.mock("../../../ui/EChart", () => ({
-  // Capture the chart option and handlers; the tooltip formatter runs here as the
-  // real component builds it, while browser checks cover SVG rendering.
+    // Capture the chart option and handlers: the tooltip formatter runs as the real component builds it.
   default: (props: { option: EChartsOption; onEvents?: Record<string, (...args: unknown[]) => void> }) => {
     capturedOption = props.option;
     capturedEvents = props.onEvents;
@@ -89,7 +87,6 @@ describe("TrendSurface", () => {
     const august = formatter({ dataIndex: 1 });
     const september = formatter({ dataIndex: 2 });
     expect(july.indexOf("Rent")).toBeLessThan(july.indexOf("Other"));
-    // Ties retain the series order; zero categories are omitted.
     expect(august.indexOf("Rent")).toBeLessThan(august.indexOf("Other"));
     expect(september).not.toContain("Other");
     expect(september).toContain("Rent");
@@ -106,7 +103,6 @@ describe("TrendSurface", () => {
     render(<TrendSurface trend={changing} onSelectMonth={vi.fn()} />);
     const series = capturedOption!.series as unknown as ChartSeries[];
     expect(series.map((s) => s.data)).toEqual([[1300, 1200, 1200], [1200, 1200, 0]]);
-    // Rent is the top segment in July, but the bottom in September.
     expect(series[1].itemStyle.color({ dataIndex: 0 })).toBe("#e0605f");
     expect(series[0].itemStyle.color({ dataIndex: 2 })).toBe("#e0605f");
     expect(series[1].itemStyle.color({ dataIndex: 2 })).not.toBe("#e0605f");
@@ -118,11 +114,9 @@ describe("TrendSurface", () => {
     const formatter = (Array.isArray(tooltip) ? tooltip[0] : tooltip)!.formatter as (
       params: unknown,
     ) => string;
-    // ECharts hands the formatter its own (possibly re-derived) `number`s —
-    // deliberately wrong ones here (999) — to prove the rendered amounts come
-    // from `trend.series[*].values` at `dataIndex`, never `String(it.value)`.
+        // ECharts hands the formatter its own `number`s, deliberately wrong here (999), to prove amounts come from
+        // `trend.series[*].values`, never `String(it.value)`.
     const html = formatter({ dataIndex: 0, seriesName: "other", value: 999 });
-    // Hovering Other must also include Rent. dataIndex 0 → "1200.00" (Rent) + "140.00" (other) = "1340.00".
     expect(html).toContain("1 340,00");
     expect(html).toContain("1 200,00");
     expect(html).not.toContain("999");

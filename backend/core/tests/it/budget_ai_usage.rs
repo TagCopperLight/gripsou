@@ -11,8 +11,7 @@ use sqlx::PgPool;
 use std::str::FromStr;
 use uuid::Uuid;
 
-/// A finished run's model and token counts; `None` is a count the provider
-/// did not report.
+/// `None` is a count the provider did not report.
 struct Run {
     model: &'static str,
     tokens_in: Option<i64>,

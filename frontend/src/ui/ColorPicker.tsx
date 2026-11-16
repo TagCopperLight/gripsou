@@ -10,19 +10,14 @@ const WIDTH = 240;
 type ColorPickerProps = {
   value: string;
   onChange: (color: string) => void;
-  /** The swatch that opened it: the panel hangs under it, right-aligned. */
   anchor: HTMLElement;
   onClose: () => void;
 };
 
-/** A colour area, a hue slider and the hex code, in a small panel under the
- *  swatch that opened it. Ours rather than the system's picker: that one is a
- *  separate window the page can't close, so it would outlive the window it was
- *  opened from. */
+/** Ours rather than the system picker: that is a separate window the page can't close. */
 export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerProps) {
   const { t } = useTranslation();
-  // Kept apart from `value`: a grey or black has no hue of its own, and the
-  // slider must not jump back to red when the area reaches one.
+  // Kept apart from `value`: a grey has no hue, and the slider must not jump to red.
   const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(HEX6.test(value) ? value : "#000000"));
   const [hex, setHex] = useState(value.replace("#", ""));
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -35,8 +30,7 @@ export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerPro
     onChange(color);
   };
 
-  // Drawn on a canvas: CSS gradients layered over a background colour leave
-  // a thin line of the hue at the rounded corners.
+  // Canvas: layered CSS gradients leave a thin hue line at the rounded corners.
   useEffect(() => {
     const ctx = canvas.current?.getContext("2d");
     if (!ctx) return;
@@ -55,7 +49,6 @@ export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerPro
     ctx.fillRect(0, 0, width, height);
   }, [hsv.h]);
 
-  /** Follows the pointer from a press until it's released, even outside. */
   const track = (apply: (x: number, y: number) => void) => (e: PointerEvent<HTMLElement>) => {
     const el = e.currentTarget;
     el.setPointerCapture?.(e.pointerId);
@@ -69,7 +62,6 @@ export function ColorPicker({ value, onChange, anchor, onClose }: ColorPickerPro
     el.onpointerup = () => (el.onpointermove = null);
   };
 
-  /** Arrow keys for a slider: a 1 % step, 10 % with Shift. */
   const keys = (axis: "x" | "y" | "both", apply: (dx: number, dy: number) => void) => (e: KeyboardEvent) => {
     const step = e.shiftKey ? 0.1 : 0.01;
     const d: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };

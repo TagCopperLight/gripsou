@@ -50,11 +50,9 @@ export function Invite() {
     <AuthPage note={t("auth.dataNotice")}>
       <form
         onSubmit={submit}
-        // Typing again: the refused value is being fixed.
         onInput={() => setError(null)}
         className="flex flex-col gap-4 rounded-3xl bg-surface p-6"
       >
-        {/* Off until the link is known to be valid; else the guard leaves. */}
         <LoadingFrame loading={guard.status !== "valid"}>
           <div className="pb-1 text-lg font-semibold text-fg">{t("auth.createAccount")}</div>
           <NewAccountFields account={account} onChange={setAccount} error={error} />

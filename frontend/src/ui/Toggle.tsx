@@ -3,7 +3,6 @@ type ToggleProps = {
   onChange: (next: boolean) => void;
   disabled?: boolean;
   "aria-label"?: string;
-  /** Track colour when off; the default suits a toggle on a plain surface. */
   offClassName?: string;
 };
 

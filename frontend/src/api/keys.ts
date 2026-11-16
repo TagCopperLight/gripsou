@@ -1,20 +1,8 @@
 import type { TransactionFilterQuery } from "./filter";
 import type { Period } from "../lib/period";
 
-// The one definition of every react-query key.
-//
-// Every read and every invalidation goes through it: a key re-typed by hand
-// drifts, and a mutation then leaves a screen stale.
-//
-// Parameterised keys take their parameter as OPTIONAL, and omitting it yields
-// the family prefix:
-//
-//     keys.netWorth("1y")  ->  ["net-worth", "1y"]   one cached range
-//     keys.netWorth()      ->  ["net-worth"]         every cached range
-//
-// That works because react-query matches invalidations by key prefix, so the
-// read sites pass the parameter and the invalidation sites don't. Do not
-// hand-write a key anywhere else; add it here instead.
+// The one definition of every react-query key. Parameters are optional: omitting one yields the family
+// prefix that invalidations use (`keys.netWorth()` matches every cached range).
 export const keys = {
   health: () => ["health"] as const,
   setupStatus: () => ["setup-status"] as const,
@@ -29,16 +17,14 @@ export const keys = {
   accountTypes: () => ["account-types"] as const,
 
   holdings: () => ["holdings"] as const,
-  // `range` is only meaningful with an `id`; the id-only form is the family
-  // prefix for one holding's price history across every range.
+  // `range` needs an `id`; the id-only form is the prefix for one holding's price history.
   holdingPrices: (id?: string, range?: string) =>
     (id === undefined ? ["holding-prices"] : range === undefined
       ? ["holding-prices", id]
       : ["holding-prices", id, range]) as readonly unknown[],
   holdingLots: (id?: string) =>
     (id === undefined ? ["holding-lots"] : ["holding-lots", id]) as readonly unknown[],
-  // Under the `holding-lots` prefix on purpose: `afterLotsSaved` invalidates
-  // `holdingLots(id)`, which refetches these too, so a saved suggestion goes.
+  // Under the `holding-lots` prefix so `afterLotsSaved` refetches these too.
   holdingLotSuggestions: (id: string) => ["holding-lots", id, "suggestions"] as const,
   investmentReturns: () => ["investment-returns"] as const,
 
@@ -49,8 +35,6 @@ export const keys = {
 
   budgetCategories: () => ["budget-categories"] as const,
   budgetTags: () => ["budget-tags"] as const,
-  // Parameterised like the others: the read sites pass the parameter, the
-  // invalidation sites omit it and get the family prefix.
   budgetSummary: (period?: Period) =>
     (period === undefined ? ["budget-summary"] : ["budget-summary", period]) as readonly unknown[],
   budgetLatestMonth: () => ["budget-latest-month"] as const,

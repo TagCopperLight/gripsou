@@ -1,6 +1,5 @@
-//! Copies saved events (see [`is_saved`]) onto the writer's channel, with the
-//! fields of every enclosing span merged in. Never blocks: a full channel
-//! drops the line and counts it.
+//! Copies saved events (see [`is_saved`]) onto the writer's channel with enclosing span fields merged in.
+//! Never blocks: a full channel drops the line and counts it.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -17,9 +16,8 @@ use tracing_subscriber::registry::LookupSpan;
 
 use super::LogLine;
 
-/// Saved: gripsou's own lines at info and above. Library chatter (sqlx,
-/// hyper, reqwest) stays terminal-only; so does the writer, which never logs
-/// through tracing, so saving can't loop.
+/// Saved: gripsou's own lines at info and above. Library chatter stays terminal-only, and so does the
+/// writer, so saving can't loop.
 fn is_saved(meta: &Metadata<'_>) -> bool {
     meta.target().starts_with("gripsou") && *meta.level() <= Level::INFO
 }
@@ -31,8 +29,7 @@ pub struct LogLayer {
 }
 
 impl LogLayer {
-    /// The layer with its saving filter attached as a per-layer filter, so the
-    /// terminal's `RUST_LOG` filter never decides what is saved.
+    /// Attached as a per-layer filter so the terminal's `RUST_LOG` never decides what is saved.
     pub fn filtered<S>(self) -> impl Layer<S>
     where
         S: Subscriber + for<'a> LookupSpan<'a>,
@@ -41,8 +38,7 @@ impl LogLayer {
     }
 }
 
-/// A string value as saved: Postgres refuses a NUL (`\u0000`) in text and
-/// jsonb, and one such line would make it reject the writer's whole batch.
+/// Postgres refuses a NUL in text and jsonb, and one such line would reject the writer's whole batch.
 fn text(v: &str) -> Value {
     if v.contains('\0') {
         Value::from(v.replace('\0', ""))
@@ -51,7 +47,6 @@ fn text(v: &str) -> Value {
     }
 }
 
-/// A span's (or event's) fields as JSON.
 #[derive(Default, Clone)]
 struct Fields(Map<String, Value>);
 

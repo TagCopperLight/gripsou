@@ -84,16 +84,10 @@ async fn filters_by_date_range(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Strengthened from the brief: a stranger UUID against a table containing
-/// only one user's data proves nothing (an empty table would pass the same
-/// assertion). Seed a *second* real user with their own connection, account
-/// and transactions, then confirm querying as the first user returns only
-/// the first user's rows -- the second user's transactions must never leak.
 #[gripsou_core::testkit::db_test]
 async fn never_returns_another_users_rows(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _) = seed(&pool).await;
 
-    // A second, unrelated user with their own connection/account/transactions.
     let other_conn_id = seed_connection(&pool).await;
     let other_user_id = testkit::owner(&pool, other_conn_id).await;
     assert_ne!(user_id, other_user_id);
@@ -109,11 +103,9 @@ async fn never_returns_another_users_rows(pool: PgPool) -> anyhow::Result<()> {
     .await
     .unwrap();
 
-    // Sanity: the other user's data actually exists in the table.
     let other_rows = transactions(&pool, other_user_id, &all()).await?;
     assert_eq!(other_rows.len(), 1);
 
-    // The first user's query must not see the other user's rows.
     let rows = transactions(&pool, user_id, &all()).await?;
     assert_eq!(rows.len(), 3);
     assert!(rows.iter().all(|r| r.account_id != other_account_id));
@@ -122,7 +114,6 @@ async fn never_returns_another_users_rows(pool: PgPool) -> anyhow::Result<()> {
             .all(|r| r.description.as_deref() != Some("OTHER USER PURCHASE"))
     );
 
-    // A totally unknown user id sees nothing at all.
     let stranger = Uuid::new_v4();
     let stranger_rows = transactions(&pool, stranger, &all()).await?;
     assert!(stranger_rows.is_empty());
@@ -136,9 +127,7 @@ fn pea_account(external_id: &str) -> gripsou_core::dto::CanonicalAccount {
     }
 }
 
-/// A buy/sell is the cash leg of an investment; the lot is the record of it.
-/// Hidden on ANY account — TR's trades land on a checking account — while the
-/// PEA's transfers, dividends and fees, real cash movements, still show.
+/// Hidden on any account: TR's trades land on a checking account.
 #[gripsou_core::testkit::db_test]
 async fn hides_buy_and_sell_on_every_account_but_shows_other_cash(
     pool: PgPool,
@@ -200,7 +189,6 @@ async fn hides_buy_and_sell_on_every_account_but_shows_other_cash(
     Ok(())
 }
 
-/// Unreachable, not merely hidden: searching must not resurrect a buy.
 #[gripsou_core::testkit::db_test]
 async fn a_search_does_not_resurrect_buys(pool: PgPool) -> anyhow::Result<()> {
     let conn_id = seed_connection(&pool).await;
@@ -230,10 +218,7 @@ async fn a_search_does_not_resurrect_buys(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A hand-entered lot must still appear on the transactions page after moving
-/// out of `transaction` — the lots entered by hand predate the PEA connector's
-/// history and have no provider row behind them, so losing them here would
-/// erase real entries.
+/// Hand-entered lots have no provider row, so they must still show.
 #[gripsou_core::testkit::db_test]
 async fn lots_appear_on_the_transactions_list(pool: PgPool) {
     let conn_id = seed_connection(&pool).await;

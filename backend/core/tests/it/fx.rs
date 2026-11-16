@@ -97,8 +97,7 @@ async fn unit_value_asof_of_cash_is_the_fx_rate(pool: PgPool) -> anyhow::Result<
 async fn unit_value_asof_converts_using_the_price_rows_own_currency(
     pool: PgPool,
 ) -> anyhow::Result<()> {
-    // The instrument claims EUR (as Powens sometimes does) but Yahoo quotes it
-    // in USD. The price row's currency must win.
+    // Instrument says EUR but Yahoo quotes USD: the price row's currency wins.
     let usd = testkit::seed_cash_instrument(&pool, "USD").await;
     let equity: Uuid = sqlx::query_scalar(
         "insert into instrument (kind, symbol, name, currency) \
@@ -168,7 +167,6 @@ async fn reporting_fx_asof_reads_the_users_currency_and_is_null_without_a_rate(
     let conn_id = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn_id).await;
 
-    // The default currency is the pivot: divisor 1.
     let d: Option<Decimal> = sqlx::query_scalar("select reporting_fx_asof($1, $2)")
         .bind(user_id)
         .bind(day(2026, 8, 14))
@@ -176,7 +174,6 @@ async fn reporting_fx_asof_reads_the_users_currency_and_is_null_without_a_rate(
         .await?;
     assert_eq!(d, Some(Decimal::ONE));
 
-    // Reporting in USD with a known rate → that rate.
     let usd = testkit::seed_cash_instrument(&pool, "USD").await;
     let mut conn = pool.acquire().await?;
     gripsou_core::testkit::insert_price(
@@ -198,7 +195,7 @@ async fn reporting_fx_asof_reads_the_users_currency_and_is_null_without_a_rate(
         .await?;
     assert_eq!(d, Some("0.90".parse()?));
 
-    // Reporting in a currency with no rate: no divisor, never the pivot's 1.
+    // No rate: no divisor, never the pivot's 1.
     sqlx::query("update users set currency = 'CNY' where id = $1")
         .bind(user_id)
         .execute(&pool)

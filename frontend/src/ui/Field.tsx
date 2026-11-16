@@ -2,11 +2,7 @@ import type { ReactNode } from "react";
 
 import { FieldError } from "./FieldError";
 
-/** A form field's name above its control (`htmlFor` is the control's id), and
- *  what's wrong with what was typed under it, outside the label so it isn't
- *  read as part of the field's name. The name still names the control for
- *  screen readers, but clicking it does nothing: it is a heading, not a
- *  button. */
+/** The error sits outside the label so it isn't read as part of the name. Clicking the name does nothing: it is a heading. */
 export function Field({
   label,
   htmlFor,

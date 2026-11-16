@@ -5,13 +5,10 @@ import { spanBetween } from "../../lib/span";
 type ReturnSpanProps = {
   since: string;
   today: string;
-  /** Size (and spacing) classes; defaults to text-xs. */
   className?: string;
 };
 
-/** "over 1 yr 10 mo": the time an annualised figure covers. Under a year it turns
- *  amber: a few months' return, scaled to a year, can look far bigger than it
- *  is. */
+/** Under a year it turns amber: a few months' return scaled to a year can look far bigger than it is. */
 export function ReturnSpan({ since, today, className = "text-xs" }: ReturnSpanProps) {
   const { t } = useTranslation();
   const span = spanBetween(since, today);

@@ -21,7 +21,6 @@ export function DeleteUserModal({ user, onClose, onDeleted }: DeleteUserModalPro
   useErrorToast(remove.isError && t("settings.users.removeUser.error"));
 
   return (
-    // Large: a long name in the title, a long email to type back.
     <ConfirmDialog
       large
       title={t("settings.users.removeUser.title", { name: user.name })}

@@ -32,7 +32,6 @@ fn source_failure_does_not_poison_checking_or_refresh_savings_date() {
             next_retry_on: day("2026-10-11"),
         }
     );
-    // The blocked savings account's balances are dated when Powens last read it.
     assert_eq!(result.accounts[0].balance_as_of, day("2026-10-10"));
     assert_eq!(result.accounts[1].balance_as_of, day("2026-10-08"));
 }

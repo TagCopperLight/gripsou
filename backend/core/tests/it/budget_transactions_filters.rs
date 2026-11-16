@@ -36,7 +36,6 @@ fn filters() -> TransactionFilters {
     }
 }
 
-/// One salary in, two spends out.
 async fn fixture(pool: &PgPool) -> anyhow::Result<(Uuid, Vec<Uuid>)> {
     let (user_id, conn_id) = seed_user_and_connection(pool).await;
     let mut conn = pool.acquire().await?;
@@ -185,7 +184,6 @@ async fn uncategorized_and_needs_review_filters(pool: PgPool) -> anyhow::Result<
         .find(|c| c.default_key.as_deref() == Some("groceries"))
         .unwrap()
         .id;
-    // One row categorised by the user, one guessed by the AI at 0.40.
     set_category(&pool, user_id, ids[1], Some(groceries)).await;
     sqlx::query(
         "update transaction set budget_category_id = $1, category_source = 'ai', \
@@ -221,7 +219,6 @@ async fn uncategorized_and_needs_review_filters(pool: PgPool) -> anyhow::Result<
     assert_eq!(review[0].id, ids[2]);
     assert!(review[0].needs_review);
 
-    // A confident guess is not in the queue.
     let confident = transactions(
         &pool,
         user_id,
@@ -265,11 +262,7 @@ async fn counts_report_matching_total_and_uncategorized(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-/// `matching` is the header pair the list's search surface shows, and the list
-/// includes lot rows under `All`/`Lots` — so the header must too, or the two
-/// numbers visibly disagree even with no filter applied at all. Bulk actions
-/// stay a separate, lot-free contract (`matching_transaction_ids`), checked
-/// here too so the two never get confused for each other again.
+/// The header's `matching` counts lot rows like the list does. Bulk actions stay lot-free (`matching_transaction_ids`).
 #[gripsou_core::testkit::db_test]
 async fn counts_include_lot_rows_the_list_actually_shows(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
@@ -314,16 +307,13 @@ async fn counts_include_lot_rows_the_list_actually_shows(pool: PgPool) -> anyhow
     assert_eq!(lots_counts.matching, lots_only.len() as i64);
     assert_eq!(lots_counts.matching, 1, "the one lot row, not zero");
 
-    // Bulk actions are a different contract: they must never reach a lot row,
-    // even while the header above correctly counts it.
+    // Bulk actions never reach a lot row.
     let bulk_ids = matching_transaction_ids(&pool, user_id, &filters()).await?;
     assert_eq!(
         bulk_ids.len(),
         3,
         "bulk-action ids stay lot-free even though the header counts the lot"
     );
-    // ...and so does what the selection bar says "select all shown" covers:
-    // its count and its total are the bulk ids', the purchase left out.
     let cash_only = transaction_counts(&pool, user_id, &filters()).await?;
     assert_eq!(cash_only.selectable, bulk_ids.len() as i64);
     let without_lot = sqlx::query_scalar::<_, Decimal>(
@@ -348,8 +338,6 @@ fn pea_account(external_id: &str) -> gripsou_core::dto::CanonicalAccount {
     }
 }
 
-/// `transactions()` hides every `buy`/`sell` row (the lot is the record of the
-/// investment). The counts must agree with it, unfiltered.
 #[gripsou_core::testkit::db_test]
 async fn counts_hide_buy_and_sell_like_the_list(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, _ids) = fixture(&pool).await?;
@@ -394,9 +382,6 @@ async fn counts_hide_buy_and_sell_like_the_list(pool: PgPool) -> anyhow::Result<
         counts.matching, counts.total,
         "unfiltered: matching (already PEA-excluded) must equal total"
     );
-    // 3 checking rows + the PEA transfer and dividend visible; the PEA
-    // buy/sell are hidden, so uncategorized (all of these are uncategorized)
-    // must match.
     assert_eq!(counts.uncategorized, 5);
     Ok(())
 }
@@ -452,10 +437,6 @@ async fn tags_come_back_grouped_by_transaction(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-/// A row the pairing pass categorised whose link has since been dissolved (by
-/// a user correcting one half) still carries `Internal transfer` but
-/// nets against nothing. The list flags it so the reader can see the
-/// consequence rather than having to hunt for it.
 #[gripsou_core::testkit::db_test]
 async fn a_pair_categorised_row_with_no_pair_left_is_an_orphan(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
@@ -471,10 +452,7 @@ async fn a_pair_categorised_row_with_no_pair_left_is_an_orphan(pool: PgPool) -> 
     Ok(())
 }
 
-/// A cross-currency transfer the user categorised by hand never had a pair to
-/// lose: pairing matches one currency only. Matching on the category would flag it
-/// forever; matching on `category_source = 'pair'` — which only the pairing
-/// pass writes, and which always comes with a link — does not.
+/// A hand-categorised cross-currency transfer has no pair to lose: the orphan flag keys on `category_source = 'pair'`, not the category.
 #[gripsou_core::testkit::db_test]
 async fn a_hand_categorised_unpaired_row_is_not_an_orphan(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
@@ -491,8 +469,6 @@ async fn a_hand_categorised_unpaired_row_is_not_an_orphan(pool: PgPool) -> anyho
     Ok(())
 }
 
-/// A live pair is not an orphan: the two states are mutually exclusive, so the
-/// reader never sees both notes at once.
 #[gripsou_core::testkit::db_test]
 async fn a_still_linked_pair_is_not_an_orphan(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
@@ -511,11 +487,6 @@ async fn a_still_linked_pair_is_not_an_orphan(pool: PgPool) -> anyhow::Result<()
     Ok(())
 }
 
-/// Internal transfers are noise in a list about spending, so the list hides
-/// them unless asked. The header's `matching` count and "select all shown"
-/// hide them too — all three read the same filter, so the count can never
-/// promise rows the list does not show, and a bulk action can never touch a
-/// row the user cannot see.
 #[gripsou_core::testkit::db_test]
 async fn internal_transfers_are_hidden_unless_asked_for(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
@@ -542,7 +513,6 @@ async fn internal_transfers_are_hidden_unless_asked_for(pool: PgPool) -> anyhow:
     assert_eq!(bulk_ids.len(), 2);
     assert!(!bulk_ids.contains(&ids[1]));
 
-    // Asked for, it comes back — and is filtered like any other row.
     let shown = transactions(&pool, user_id, &filters()).await?;
     assert_eq!(shown.len(), 3);
     let out_only = transactions(
@@ -598,7 +568,6 @@ async fn the_matching_total_converts_each_row_at_its_own_date(pool: PgPool) -> a
     .await?;
     drop(conn);
 
-    // -10 EUR, plus -100 USD at March's 0.50 = -50 EUR.
     let c = transaction_counts(&pool, user_id, &filters()).await?;
     assert_eq!(c.matching, 2);
     assert_eq!(c.matching_total, eur(-60));
@@ -636,7 +605,7 @@ async fn list_rows_carry_both_their_own_and_the_reporting_amount(
 #[gripsou_core::testkit::db_test]
 async fn a_row_without_a_rate_has_no_reporting_amount(pool: PgPool) -> anyhow::Result<()> {
     let usd = seed_cash_instrument(&pool, "USD").await;
-    // The only USD rate is AFTER the row: nothing to convert it with.
+    // The only USD rate is after the row.
     rate_on(&pool, usd, day(2026, 3, 10), Decimal::new(50, 2)).await;
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -723,9 +692,6 @@ async fn the_matching_total_respects_the_active_filters(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-/// The list, its header count and the bulk target read one filter: under
-/// every combination here the count is the list's length and the bulk target
-/// is the list's cash rows, transfers included when asked for.
 #[gripsou_core::testkit::db_test]
 async fn list_count_and_bulk_target_agree_on_every_filter(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, ids) = fixture(&pool).await?;
@@ -782,7 +748,6 @@ async fn list_count_and_bulk_target_agree_on_every_filter(pool: PgPool) -> anyho
     Ok(())
 }
 
-/// Both edge days are in.
 #[gripsou_core::testkit::db_test]
 async fn a_date_range_keeps_both_edge_days(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
@@ -819,8 +784,6 @@ async fn a_date_range_keeps_both_edge_days(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The header's total and flag agree with the rows it counts, across days
-/// where either leg has no rate (a zero reporting rate counts as none).
 #[gripsou_core::testkit::db_test]
 async fn counts_fx_flag_and_total_agree_with_rows_across_rate_gaps(
     pool: PgPool,

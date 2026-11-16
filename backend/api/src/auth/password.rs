@@ -1,6 +1,3 @@
-//! Passwords: argon2 hashing, the rule for a new one, and checking the
-//! signed-in user's own on the login throttle.
-
 use argon2::password_hash::{SaltString, rand_core::OsRng};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use uuid::Uuid;
@@ -27,22 +24,18 @@ pub fn verify(plain: &str, hash: &str) -> bool {
             .verify_password(plain.as_bytes(), &parsed)
             .is_ok(),
         Err(e) => {
-            // Same answer as a wrong password for the caller; the operator
-            // needs to know the stored hash is unreadable.
+            // Answers like a wrong password; the operator needs to know the stored hash is unreadable.
             tracing::error!(error = %gripsou_core::logs::error_chain(&e), "stored password hash unreadable");
             false
         }
     }
 }
 
-/// Hash checked when the email matches no account, so a login answers in the
-/// same time whether or not the email exists. Computed once, on first use.
+/// Checked when the email matches no account, so a login takes the same time either way.
 pub static DUMMY_HASH: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
     hash("gripsou-dummy-password").expect("hashing a constant cannot fail")
 });
 
-/// [`verify`], or the same amount of work against [`DUMMY_HASH`] when there
-/// is no account (`hash` is `None`), which never succeeds.
 pub fn verify_or_dummy(plain: &str, hash: Option<&str>) -> bool {
     match hash {
         Some(h) => verify(plain, h),
@@ -53,8 +46,7 @@ pub fn verify_or_dummy(plain: &str, hash: Option<&str>) -> bool {
     }
 }
 
-/// The one rule for a password being set (invite, reset, change): length
-/// only, counted in characters. Existing shorter passwords keep working.
+/// Length only, counted in characters. Existing shorter passwords keep working.
 pub fn validate_new(pw: &str) -> Result<(), ApiError> {
     if (MIN_CHARS..=MAX_CHARS).contains(&pw.chars().count()) {
         Ok(())
@@ -65,9 +57,7 @@ pub fn validate_new(pw: &str) -> Result<(), ApiError> {
     }
 }
 
-/// Check the signed-in user's password on the login throttle, counted for
-/// their account like a login, so a stolen session guesses no faster than the
-/// login form allows.
+/// Counted on the account's login throttle, so a stolen session guesses no faster than the login form allows.
 pub async fn check(
     pool: &sqlx::PgPool,
     throttles: &Throttles,

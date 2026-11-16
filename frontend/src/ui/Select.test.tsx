@@ -11,7 +11,6 @@ describe("Select", () => {
   it("shows the selected label and opens to reveal options", () => {
     render(<Select value="checking" onChange={() => {}} options={OPTIONS} />);
     expect(screen.getByText("Checking")).toBeInTheDocument();
-    // List is closed: the other option is not rendered yet.
     expect(screen.queryByText("Savings")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button"));
     expect(screen.getByText("Savings")).toBeInTheDocument();
@@ -34,9 +33,7 @@ describe("Select", () => {
     );
     fireEvent.click(screen.getByRole("button"));
     const option = screen.getByText("Savings");
-    // Portalled to the body, so a scrolling dialog cannot clip it.
     expect(container.contains(option)).toBe(false);
-    // A click on the menu itself is not "outside".
     fireEvent.pointerDown(option);
     expect(screen.getByText("Savings")).toBeInTheDocument();
     fireEvent.pointerDown(document.body);

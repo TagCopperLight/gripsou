@@ -22,7 +22,6 @@ fn eur(units: i64) -> Decimal {
     Decimal::new(units * 100, 2)
 }
 
-/// The id of a seeded category by its `default_key`.
 async fn cat(pool: &PgPool, user_id: Uuid, key: &str) -> Uuid {
     list_categories(pool, user_id)
         .await
@@ -33,7 +32,6 @@ async fn cat(pool: &PgPool, user_id: Uuid, key: &str) -> Uuid {
         .id
 }
 
-/// Set the user's reporting currency.
 async fn set_reporting_currency(pool: &PgPool, user_id: Uuid, currency: &str) {
     sqlx::query("update users set currency = $2 where id = $1")
         .bind(user_id)
@@ -106,8 +104,7 @@ async fn uncategorised_rows_come_back_with_a_null_category(pool: PgPool) -> anyh
 
 #[gripsou_core::testkit::db_test]
 async fn converts_at_the_transactions_own_date_not_todays(pool: PgPool) -> anyhow::Result<()> {
-    // USD was worth 0.50 EUR in March and 0.90 EUR in September. A $100 spend
-    // in March is 50 EUR, and must stay 50 EUR when read in September.
+    // $100 in March stays 50 EUR when read in September.
     let usd = seed_cash_instrument(&pool, "USD").await;
     rate_on(&pool, usd, day(2026, 3, 1), Decimal::new(50, 2)).await;
     rate_on(&pool, usd, day(2026, 9, 1), Decimal::new(90, 2)).await;
@@ -138,7 +135,7 @@ async fn converts_at_the_transactions_own_date_not_todays(pool: PgPool) -> anyho
 
 #[gripsou_core::testkit::db_test]
 async fn a_missing_rate_is_zero_and_flagged(pool: PgPool) -> anyhow::Result<()> {
-    // A cash instrument with no price at all: the rate is unknown, never 1.
+    // No price at all: the rate is unknown, never 1.
     seed_cash_instrument(&pool, "CNY").await;
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
@@ -188,7 +185,6 @@ async fn neutral_ignore_category_counts_nowhere(pool: PgPool) -> anyhow::Result<
 
 #[gripsou_core::testkit::db_test]
 async fn neutral_categories_are_dropped(pool: PgPool) -> anyhow::Result<()> {
-    // Investments is a neutral category: a name, not a side. It counts nowhere.
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -215,9 +211,7 @@ async fn neutral_categories_are_dropped(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A pair the user broke by recategorising the other half leaves this half
-/// filed by the pairing pass with no partner. It moved money with nothing on
-/// the other side, so it counts as uncategorised by its sign, not as neutral.
+/// An orphaned pair half counts as uncategorised by its sign, not as neutral.
 #[gripsou_core::testkit::db_test]
 async fn a_pair_half_without_its_partner_counts_as_uncategorised(
     pool: PgPool,
@@ -255,9 +249,7 @@ async fn a_pair_half_without_its_partner_counts_as_uncategorised(
 
 #[gripsou_core::testkit::db_test]
 async fn buy_and_sell_are_dropped_on_every_account(pool: PgPool) -> anyhow::Result<()> {
-    // A buy/sell is the cash leg of an investment, never spending or income.
-    // TR books its trades on a checking account, so the rule cannot be
-    // keyed on the account type.
+    // TR books trades on a checking account, so the rule can't key on account type.
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let checking = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -342,9 +334,6 @@ async fn buy_and_sell_are_dropped_on_every_account(pool: PgPool) -> anyhow::Resu
     Ok(())
 }
 
-/// A paired checking -> PEA transfer must net
-/// to zero, not leave the checking half standing as an internal-transfer
-/// outflow.
 #[gripsou_core::testkit::db_test]
 async fn a_paired_transfer_into_the_pea_nets_to_zero(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
@@ -384,8 +373,6 @@ async fn a_paired_transfer_into_the_pea_nets_to_zero(pool: PgPool) -> anyhow::Re
     Ok(())
 }
 
-/// A pair whose halves land in different months must vanish from both, not
-/// leave -x in one month and +x in the other.
 #[gripsou_core::testkit::db_test]
 async fn a_pair_straddling_a_month_end_is_absent_from_both_months(
     pool: PgPool,
@@ -476,9 +463,7 @@ async fn another_users_rows_are_invisible(pool: PgPool) -> anyhow::Result<()> {
 
 #[gripsou_core::testkit::db_test]
 async fn reporting_currency_converts_at_its_own_days_rate(pool: PgPool) -> anyhow::Result<()> {
-    // Reporting in GBP: 1 GBP = 1.25 EUR in March, 1.00 EUR in April. A 100 EUR
-    // spend must become a different GBP figure depending on which day it fell
-    // on, not the latest rate — the same own-date rule as the account leg.
+    // Each spend uses the rate of its own day, not the latest.
     let gbp = seed_cash_instrument(&pool, "GBP").await;
     rate_on(&pool, gbp, day(2026, 3, 1), Decimal::new(125, 2)).await;
     rate_on(&pool, gbp, day(2026, 4, 1), Decimal::new(100, 2)).await;
@@ -519,7 +504,6 @@ async fn reporting_currency_converts_at_its_own_days_rate(pool: PgPool) -> anyho
 async fn a_missing_reporting_rate_leaves_the_row_out_and_flags_it(
     pool: PgPool,
 ) -> anyhow::Result<()> {
-    // No rate at all for CHF: the euros are not shown as francs.
     seed_cash_instrument(&pool, "CHF").await;
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     set_reporting_currency(&pool, user_id, "CHF").await;
@@ -542,8 +526,6 @@ async fn a_missing_reporting_rate_leaves_the_row_out_and_flags_it(
     Ok(())
 }
 
-/// The Overview and the Transactions list it deep-links into leave out the
-/// same rows when the reader's currency has no rate on their day.
 #[gripsou_core::testkit::db_test]
 async fn overview_and_transactions_list_agree_on_a_missing_reporting_rate(
     pool: PgPool,
@@ -601,16 +583,9 @@ async fn overview_and_transactions_list_agree_on_a_missing_reporting_rate(
 async fn a_partly_valued_bucket_keeps_the_valued_leg_and_flags_the_gap(
     pool: PgPool,
 ) -> anyhow::Result<()> {
-    // Two uncategorised transactions on the same day, one an inflow (valued
-    // EUR) and one an outflow (unvalued JPY). Uncategorised rows must split
-    // by sign: a mixed-sign uncategorised day is two buckets, not
-    // one netted one, because `figures()` reads an uncategorised row's own
-    // sign to decide income vs expense and a pre-netted row has
-    // already lost that distinction. This also pins the "bucket is
-    // understated" contract for a partly-unvalued bucket: the unvalued leg's
-    // own bucket sums to zero and flags `fx_missing`, rather than dropping
-    // out of some other bucket's sum silently.
-    seed_cash_instrument(&pool, "JPY").await; // no rate at all
+    // A mixed-sign uncategorised day is two buckets: `figures()` reads each row's sign.
+    // The unvalued leg's bucket sums to zero and flags `fx_missing`.
+    seed_cash_instrument(&pool, "JPY").await;
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let eur_account = upsert_account(&mut conn, conn_id, &checking_account("acct-eur")).await?;
@@ -665,10 +640,7 @@ async fn a_partly_valued_bucket_keeps_the_valued_leg_and_flags_the_gap(
 
 #[gripsou_core::testkit::db_test]
 async fn a_payday_shape_keeps_income_and_expense_apart(pool: PgPool) -> anyhow::Result<()> {
-    // On payday, everything may still be uncategorised (all of it, without
-    // the AI). A salary
-    // and a small same-day outflow must not net into one row, or Income and
-    // Expenses collapse into a single signed figure.
+    // A same-day salary and small outflow must stay separate rows.
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
     let mut conn = pool.acquire().await?;
     let account_id = upsert_account(&mut conn, conn_id, &checking_account("acct-1")).await?;
@@ -711,7 +683,6 @@ async fn a_payday_shape_keeps_income_and_expense_apart(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-/// One pairing pass, under the user's write lock, committed.
 async fn pair(pool: &PgPool, user_id: Uuid) -> anyhow::Result<usize> {
     let mut tx = gripsou_core::db::begin_user_writes(pool, user_id).await?;
     let paired = pair_internal_transfers(&mut tx).await?;
@@ -719,8 +690,7 @@ async fn pair(pool: &PgPool, user_id: Uuid) -> anyhow::Result<usize> {
     Ok(paired)
 }
 
-/// The user's catch-all is folded into the trend's Other series by what it
-/// was seeded as, so renaming it does not put two "Other"s in the legend.
+/// Folded into the Other series by seeded key, so renaming it doesn't add a second Other.
 #[gripsou_core::testkit::db_test]
 async fn a_renamed_catch_all_still_folds_into_other(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::budget::overview::{

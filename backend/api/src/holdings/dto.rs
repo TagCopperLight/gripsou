@@ -1,5 +1,3 @@
-//! What the holdings, lots and returns endpoints send and accept.
-
 use chrono::NaiveDate;
 use gripsou_providers::brandfetch::Logos;
 use serde::{Deserialize, Serialize};
@@ -18,36 +16,27 @@ pub struct Holding {
     pub account_id: String,
     pub account_name: String,
     pub account_color: String,
-    /// Stable account-type key; the frontend translates it via i18n.
     pub account_type: String,
     pub qty: String,
-    /// Unit price, denominated in `price_currency` — NOT in `currency`.
+    /// Unit price, denominated in `price_currency`, not in `currency`.
     pub price: String,
-    /// The instrument's quote currency. Identity/labelling only; no amount on
-    /// this struct is denominated in it.
+    /// The instrument's quote currency: labelling only, no amount here is in it.
     pub currency: String,
-    /// Currency of the unit price and of the price chart (the price domain).
     pub price_currency: String,
-    /// The account's currency (the amount domain): `invested_native` and every
-    /// figure on the holding's transactions are in it.
+    /// The account's currency: `invested_native` and every figure on the holding's transactions are in it.
     pub account_currency: String,
     pub invested: String,
     pub invested_native: String,
     pub value: String,
-    /// `qty × price` in `price_currency`: what the holding is worth before any
-    /// conversion, shown when `fx_missing` leaves `value` at zero. Absent when
-    /// there is no price at all.
+    /// `qty * price` in `price_currency`, shown when `fx_missing` leaves `value` at zero.
     pub value_native: Option<String>,
     pub gl: String,
     pub gl_pct: String,
     pub fx_missing: bool,
     pub spark: Option<Vec<String>>,
     pub composition: Option<gripsou_core::dto::Composition>,
-    /// Shares no recorded lot explains. "0" when the position is fully
-    /// accounted for. A non-zero value drives the fill-in badge.
     pub unexplained_qty: String,
-    /// Fee-inclusive mean buy price, amount domain (account currency); the
-    /// basis over the quantity when no buy is recorded.
+    /// Fee-inclusive mean buy price in the account's currency; the basis over the quantity when no buy is recorded.
     pub mean_price: String,
 }
 
@@ -100,10 +89,8 @@ pub struct LotEntry {
     #[serde(rename = "type")]
     pub kind: gripsou_core::repo::lot::LotSide,
     pub date: NaiveDate,
-    /// Decimal strings — money and quantities never cross the wire as floats.
     pub quantity: String,
     pub unit_price: String,
-    /// Absent parses as zero — most manual entries have no fee to record.
     pub fee: Option<String>,
 }
 
@@ -122,15 +109,11 @@ pub struct SaveLotsReq {
 #[serde(rename_all = "camelCase")]
 pub struct Lot {
     pub id: String,
-    /// Epoch milliseconds at UTC midnight of `acquired_on`, like every other
-    /// timestamp in this API. The stored value is a plain date — a lot has no
-    /// time of day — and this is the wire representation of it.
     pub t: i64,
     pub side: gripsou_core::repo::lot::LotSide,
     pub qty: String,
     pub price: String,
     pub fee: String,
-    /// True when the user entered this row; only these may be deleted.
     pub manual: bool,
 }
 
@@ -148,8 +131,6 @@ impl Lot {
     }
 }
 
-/// A lot inferred from a quantity change and its one matching transaction,
-/// shaped like `LotEntry` so the form can save it unchanged.
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct LotSuggestion {
@@ -182,11 +163,8 @@ pub struct PreviewLotsReq {
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct BasisPreview {
-    /// In the account's currency.
     #[serde(flatten)]
     pub account: BasisFigures,
-    /// The same figures in the reader's currency; null when the rate from the
-    /// account's currency is unknown today.
     pub reporting: Option<BasisFigures>,
 }
 
@@ -205,7 +183,6 @@ pub struct BasisFigures {
     pub mean_price: String,
     pub invested: String,
     pub realised: String,
-    /// Null when today's price or rate is unknown.
     pub unrealised: Option<String>,
 }
 
@@ -246,12 +223,8 @@ impl PricePoint {
     }
 }
 
-/// One scope's figures on the Investments page. `annualised` is a ratio per
-/// year ("0.0712"), null when it can't be computed. `invested` is every
-/// purchase, `received` every sale and dividend, `gain` value + received −
-/// invested and `gain_pct` its ratio to `invested`: the money the return
-/// annualises. Each is null when a rate is missing for a flow it needs. Every
-/// figure leaves out the same holdings, counted by reason.
+/// `annualised` is a ratio per year ("0.0712"). `gain` is value + received - invested, `gain_pct` its ratio to `invested`.
+/// Each is null when a rate it needs is missing; all leave out the same holdings, counted by reason.
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ReturnFigures {
@@ -298,10 +271,7 @@ pub struct ReturnAccount {
     pub id: String,
     pub name: String,
     pub color: String,
-    /// The bank or broker the account comes from; empty when unknown.
     pub source: String,
-    /// Holdings left out of the figures: their purchases and sales don't
-    /// explain what is held.
     pub missing: Vec<MissingHolding>,
     #[serde(flatten)]
     pub figures: ReturnFigures,
@@ -309,7 +279,6 @@ pub struct ReturnAccount {
 
 #[derive(Serialize, TS)]
 pub struct InvestmentReturns {
-    /// The user's today, which `since` periods run up to.
     pub today: String,
     pub total: ReturnFigures,
     pub accounts: Vec<ReturnAccount>,

@@ -1,6 +1,3 @@
-//! Seeders the api's tests share on top of `gripsou_core::testkit`: the ones
-//! that need the api's own password and session hashing.
-
 use crate::auth::client::Client;
 use crate::auth::dto::{self, LoginReq};
 use crate::auth::login::login;
@@ -16,20 +13,16 @@ use sqlx::PgPool;
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// The shared test [`gripsou_jobs::Deps`], ready for a handler's state.
 pub(crate) fn deps() -> Arc<gripsou_jobs::Deps> {
     Arc::new(gripsou_jobs::testing::deps())
 }
 
-/// The password `seed_user` gives its users.
 pub(crate) const PASSWORD: &str = "hunter22";
 
-/// A user who can log in with `PASSWORD`.
 pub(crate) async fn seed_user(pool: &PgPool, email: &str) -> Uuid {
     seed_user_with_password(pool, email, PASSWORD, Role::User).await
 }
 
-/// A user who can log in with `password`.
 pub(crate) async fn seed_user_with_password(
     pool: &PgPool,
     email: &str,
@@ -65,8 +58,6 @@ pub(crate) async fn sessions(pool: &PgPool, user_id: Uuid) -> i64 {
         .unwrap()
 }
 
-/// Enrol TOTP for `user_id` with a secret encrypted under the test key and
-/// ten recovery codes; returns the secret and the plain recovery codes.
 pub(crate) async fn enable_totp(pool: &PgPool, user_id: Uuid) -> (Vec<u8>, Vec<String>) {
     use gripsou_core::repo::mfa;
     let secret = factors::new_totp_secret();
@@ -87,13 +78,11 @@ pub(crate) async fn enable_totp(pool: &PgPool, user_id: Uuid) -> (Vec<u8>, Vec<S
     (secret, codes.plain)
 }
 
-/// The authenticator code for `secret` right now.
 pub(crate) fn totp_now(secret: &[u8]) -> String {
     let now = chrono::Utc::now().timestamp() as u64;
     factors::totp_code(secret, factors::current_step(now))
 }
 
-/// A well-formed code that isn't [`totp_now`].
 pub(crate) fn wrong_totp(secret: &[u8]) -> String {
     if totp_now(secret) == "000000" {
         "000001".into()
@@ -102,12 +91,10 @@ pub(crate) fn wrong_totp(secret: &[u8]) -> String {
     }
 }
 
-/// Limiters with nothing counted yet.
 pub(crate) fn throttles() -> Arc<Throttles> {
     Arc::new(Throttles::default())
 }
 
-/// A caller on localhost whose browser sent no User-Agent.
 pub(crate) fn local() -> Client {
     Client {
         ip: "127.0.0.1".into(),
@@ -149,7 +136,6 @@ pub(crate) async fn login_outcome(
         .0
 }
 
-/// A fresh reauth token for `a`, bought with `password`.
 pub(crate) async fn reauth_token(pool: &PgPool, a: &AuthUser, password: &str) -> String {
     crate::auth::mfa::reauth(
         State(pool.clone()),
@@ -166,7 +152,6 @@ pub(crate) async fn reauth_token(pool: &PgPool, a: &AuthUser, password: &str) ->
     .reauth
 }
 
-/// An admin who can log in with `PASSWORD`.
 pub(crate) async fn seed_admin(pool: &PgPool, email: &str) -> Uuid {
     seed_user_with_password(pool, email, PASSWORD, Role::Admin).await
 }
@@ -190,7 +175,6 @@ pub(crate) async fn principal_for(pool: &PgPool, email: &str, pw: &str) -> auth:
     }
 }
 
-/// A user with one connection; returns the connection id.
 async fn seed_connection(pool: &PgPool, email: &str) -> Uuid {
     let user_id = seed_user(pool, email).await;
     let conn_id = Uuid::new_v4();
@@ -206,8 +190,6 @@ async fn seed_connection(pool: &PgPool, email: &str) -> Uuid {
     conn_id
 }
 
-/// Seed a holding for a freshly created user/connection/account/instrument,
-/// returning (user_id, holding_id).
 pub(crate) async fn seed_holding(pool: &PgPool, email: &str) -> (Uuid, Uuid) {
     use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
     use gripsou_core::repo::account::upsert_account;
@@ -256,8 +238,7 @@ pub(crate) fn auth(user_id: Uuid) -> auth::AuthUser {
     }
 }
 
-/// One user's data: their account, their holding (snapshotted today, so it
-/// shows in account lists) and one cash transaction described as `label`.
+/// Their holding is snapshotted today, so it shows in account lists.
 pub(crate) struct Owned {
     pub(crate) user: Uuid,
     pub(crate) account: Uuid,

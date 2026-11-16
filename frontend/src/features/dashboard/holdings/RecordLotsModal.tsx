@@ -25,25 +25,14 @@ import type { BasisPreview, Holding } from "../../../api/wire";
 import { TextInput } from "../../../ui/TextInput";
 import { HEAD_TEXT } from "../../../ui/gridTable";
 
-// Every figure on this screen is AMOUNT domain (`holding.accountCurrency`):
-// quantities, unit prices, and everything the preview endpoint derives from
-// them (the server converts today's price into the account's currency for the
-// unrealised figure). Never label anything here with
-// `holding.currency` (the instrument's quote currency): it names the asset's
-// identity, not any amount on this screen.
-//
-// The resulting figures (mean price, invested, realised, unrealised) are never
-// computed here — they come verbatim from `POST /holdings/:id/lots/preview`,
-// which runs the same `lot_basis` function the save path and the chart use.
+// Amounts here are in `holding.accountCurrency`, never `holding.currency` (the instrument's quote currency).
+// Derived figures come from the preview endpoint, never computed here.
 
-/** How long to wait after the last edit before asking the server for updated
- *  figures — avoids firing a request per keystroke. */
 const PREVIEW_DEBOUNCE_MS = 300;
 
 const ADD_ROW_BUTTON =
   "rounded-xl border border-surface-3 hover:border-fg-faint hover:bg-surface-2 transition-colors duration-140";
 
-/** Column titles stay pinned while the rows scroll under them. */
 const TH = "sticky top-0 z-10 bg-surface pt-4 pb-2 font-medium";
 
 const BAR_COLOR = { short: "bg-amber", exact: "bg-green", over: "bg-red" } as const;
@@ -67,27 +56,20 @@ export function RecordLotsModal({
   const suggestions = useLotSuggestions(holding.id);
 
   const [rows, setRows] = useState<LotRow[] | null>(null);
-  // Suggestions stay out of the table until the user adds them.
   const [found, setFound] = useState<FoundLot[]>([]);
   const [dismissed, setDismissed] = useState(false);
-  // Ids the user binned. An edited saved row's delete half is derived at save
-  // time instead, so a row both edited and binned is deleted once.
+  // Edited saved rows get their delete half at save time, so a row both edited and binned is deleted once.
   const [queuedDeletes, setQueuedDeletes] = useState<string[]>([]);
   const [failed, setFailed] = useState(false);
-  // Until the first edit the table mirrors the server, so a refetch may
-  // reseed it; mid-edit it must not throw away what the user is typing.
+  // Until the first edit the table mirrors the server; mid-edit a refetch must not reseed it.
   const [dirty, setDirty] = useState(false);
   const [seededFrom, setSeededFrom] = useState<{ lots: typeof data; suggested: typeof suggestions.data }>({
     lots: undefined,
     suggested: undefined,
   });
 
-  // Mirrors the server into state during render, as React recommends for
-  // "copy this prop until the user diverges from it". Seeding waits for the
-  // suggestions to settle (loaded or failed) so pre-filled rows don't pop in
-  // after the table has rendered. The first seed always happens: rows added
-  // after the lots failed to load join them, once a retry brings them, rather
-  // than replace them.
+  // Seeds from the server during render. Waits for the suggestions to settle so pre-filled rows don't pop in;
+  // the first seed always happens so rows added after a failed load join the retried lots.
   const suggestionsSettled = !suggestions.isPending;
   const seeded = seededFrom.lots !== undefined;
   if (
@@ -102,15 +84,13 @@ export function RecordLotsModal({
   }
 
   const list = rows ?? [];
-  // The table waits for the lots and the suggestions (see the seeding above).
   const loading = rows === null && !isError;
   const set = (i: number, patch: Partial<LotRow>) => {
     setDirty(true);
     setRows((rs) => (rs ?? []).map((r, j) => (j === i ? { ...r, ...patch } : r)));
   };
 
-  /** Back in date order once a date is settled, not on every keystroke, so a
-   *  row never jumps away from the field being typed in. */
+  /** Called once a date is settled, so a row never jumps away from the field being typed in. */
   const sortRows = () => setRows((rs) => (rs === null ? rs : byDate(rs)));
 
   const addRow = () => {
@@ -143,10 +123,7 @@ export function RecordLotsModal({
   const recorded = recordedQuantity(list, language);
   const bar = accounted(recorded, holding.qty);
 
-  // Loaded rows are previewed at once; only user edits are debounced. A
-  // mutation's `data` resets to undefined whenever it goes pending, so the
-  // last answer is held here and is what renders. Null until the first
-  // answer: no figure rather than a wrong "0,00 €".
+  // A mutation's `data` resets to undefined while pending, so the last answer is held here.
   const [lastPreview, setLastPreview] = useState<BasisPreview | null>(null);
   useEffect(() => {
     if (rows === null) return;
@@ -167,14 +144,11 @@ export function RecordLotsModal({
   // Nothing to compute from: no figure, rather than the server's all-zero answer.
   const computable = list.some((r) => lotEntry(r, language) !== null);
   const figures = computable ? lastPreview : null;
-  // Bones until the first answer for loaded rows; after an edit, the last
-  // figures dimmed until the new ones come.
   const figuresLoading = loading || (computable && lastPreview === null && !preview.isError);
   const figuresStale = staleClass(computable && lastPreview !== null && preview.isPending);
 
   const { adds, deletes, pending, anyInvalid } = lotChanges(list, queuedDeletes, language);
-  // A red bar does NOT disable Save: a user entering a sale before the buy it
-  // came from is mid-task, not wrong.
+  // Over-recording (red bar) doesn't block Save: a sale may be entered before its buy.
   const canSave = pending > 0 && !anyInvalid;
 
   const save = async () => {
@@ -183,8 +157,7 @@ export function RecordLotsModal({
       await saveLots.mutateAsync({ adds, deletes });
       onClose();
     } catch {
-      // The whole batch is one DB transaction, so a failure means nothing was
-      // written — say exactly that, and keep the user's work on screen.
+      // One DB transaction: a failure means nothing was written.
       setFailed(true);
     }
   };
@@ -213,8 +186,6 @@ export function RecordLotsModal({
         </button>
       </HoldingModalHeader>
 
-      {/* Fixed above the scrolling table: the shares bar, then the found band
-          when there is one. Its bottom rule, or this one, separates them from the table. */}
       <div className={`shrink-0 px-6 pb-4 ${found.length > 0 && !dismissed ? "" : "border-b border-surface-2"}`}>
         <div className="bg-surface-2 rounded-2xl p-5 flex flex-col gap-3">
           {loading ? (
@@ -248,7 +219,6 @@ export function RecordLotsModal({
 
       <LoadingFrame loading={loading} className="flex min-h-0 flex-1 flex-col">
       <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 flex flex-col gap-4">
-        {/* Table — no surface, deliberately: it is the working area, not a card. */}
         {rows === null && !loading ? (
           <CardError
             onRetry={() => refetch()}
@@ -275,10 +245,8 @@ export function RecordLotsModal({
               {list.map((r, i) => {
                 const p = lotEntry(r, language);
                 const cell = "py-1.5 pr-2 border-t border-surface-2";
-                // Text cells line their text up with the inputs' text (input padding + cell gap).
                 const lockedCell = "py-1.5 border-t border-surface-2";
                 if (r.locked) {
-                  // A provider's lot: the same columns, as text, and a lock where the bin goes.
                   return (
                     <tr key={r.key} data-testid="lot-row" className="text-sm text-fg-dim">
                       <td className={`${lockedCell} pl-3`}>{t(`dashboard.holdings.gap.${r.type}`)}</td>
@@ -375,8 +343,6 @@ export function RecordLotsModal({
 
 
         <div className="flex items-center gap-2">
-          {/* Bordered, not bare text: it sits under a table of inputs, where an
-              unboxed label reads as a column heading rather than a control. */}
           <Button variant="ghost" className={ADD_ROW_BUTTON} onClick={addRow}>
             {t("dashboard.holdings.gap.add")}
           </Button>
@@ -384,7 +350,6 @@ export function RecordLotsModal({
 
       </div>
 
-      {/* The figures stay in view while the table scrolls above them. */}
       <div className="shrink-0 border-t border-surface-2 px-6 pt-4">
         <div className="bg-surface-2 rounded-2xl p-5">
           <span className="text-fg text-sm font-semibold">
@@ -445,14 +410,12 @@ export function RecordLotsModal({
   );
 }
 
-/** A figure's label over its value, or over a bone while it is computed. */
 function FigureSlot({ label, loading, children }: { label: string; loading: boolean; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-fg-faint text-xs">{label}</span>
       {loading ? (
         <Skeleton>
-          {/* The figure's line is the slot's own, not its text-sm. */}
           <TextBone text="text-base" className="w-24" />
         </Skeleton>
       ) : (
@@ -467,7 +430,6 @@ function Figure({ testId, label, value, currency, converted, loading }: {
   label: string;
   value: string;
   currency: string;
-  /** The figure in the reader's currency, shown on hover. */
   converted: string | null | undefined;
   loading: boolean;
 }) {
@@ -499,8 +461,7 @@ function SignedFigure({
 }) {
   return (
     <FigureSlot label={label} loading={loading}>
-      {/* `Money` renders only its own span and does not forward arbitrary
-          props, so the test hook goes on a wrapper. */}
+      {/* `Money` doesn't forward props, so the test hook goes on a wrapper. */}
       <MoneyHint side="right" currency={currency} converted={converted} signed>
         <span data-testid={testId}>
           {value === null ? (
@@ -519,8 +480,6 @@ function SignedFigure({
   );
 }
 
-/** One set of column widths for the table and the "found" panel above it, so
- *  a suggestion sits exactly over the row it will become. */
 function LotColumns() {
   return (
     <colgroup>
@@ -535,9 +494,6 @@ function LotColumns() {
   );
 }
 
-/** Purchases and sales found in the user's transactions, offered before they
- *  touch the table: a row each, in the table's own columns, added one by one
- *  or all at once, or dismissed for now. */
 function FoundPanel({ found, currency, onAdd, onDismiss }: {
   found: FoundLot[];
   currency: string;
@@ -550,12 +506,8 @@ function FoundPanel({ found, currency, onAdd, onDismiss }: {
     buys === found.length ? t("dashboard.holdings.gap.found.buys", { count: buys })
     : buys === 0 ? t("dashboard.holdings.gap.found.sells", { count: found.length })
     : t("dashboard.holdings.gap.found.mixed", { count: found.length });
-  // Cells line their text up with the inputs' text below (input padding + cell gap).
   const cell = "border-t border-blue/20 py-2.5 font-mono text-sm";
   return (
-    // A band across the whole window, not a card: the blue runs edge to edge
-    // between two rules, and the window's own margin keeps the columns over the table's.
-    // It stays put above the scrolling table.
     <section aria-label={title} className="shrink-0 border-y border-blue/25 bg-blue-soft px-6 pt-3.5 pb-1.5">
       <div className="flex items-center justify-between gap-4 pb-2">
         <h3 className="text-sm font-semibold text-fg">{title}</h3>
@@ -602,11 +554,7 @@ function FoundPanel({ found, currency, onAdd, onDismiss }: {
   );
 }
 
-/** Three rows of the table while the lots load: a bone for the buy/sell
- *  switch, one per field as tall as a `TextInput`, the total and the bin. The
- *  table's body can't hold a `Skeleton`, so each row pulses on its own and is
- *  hidden from screen readers; the line above the bar says the window is
- *  loading. */
+/** The table body can't hold a `Skeleton`, so each row pulses on its own, hidden from screen readers. */
 function LotRowsSkeleton() {
   const cell = "py-1.5 pr-2 border-t border-surface-2";
   const field = <Bone className="h-9.5 rounded-xl" />;

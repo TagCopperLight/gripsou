@@ -35,9 +35,7 @@ function jsonRes(body: unknown, status = 200) {
 
 let nextId = 100;
 
-// An in-memory fixture backend: keeps arrays of categories/tags and mutates
-// them like the real API would, so a refetch after a write reflects what the
-// write actually did rather than an optimistic guess.
+// An in-memory backend that mutates like the real API, so a refetch after a write reflects what it did.
 function makeServer(initial: ServerState) {
   const state: ServerState = structuredClone(initial);
 
@@ -146,7 +144,6 @@ describe("SettingsBudget page", () => {
     ).closest<HTMLElement>("[role=listitem]")!;
     await within(coffeeRow).findByText("Coffee shops");
 
-    // Archive: disappears from the default view, reappears behind the toggle.
     fireEvent.click(screen.getByRole("button", { name: "Modify Coffee" }));
     fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Archive" }));
     await waitFor(() => expect(screen.queryByText("Coffee")).toBeNull());
@@ -243,9 +240,7 @@ describe("SettingsBudget page", () => {
 
   describe("in French", () => {
     afterEach(async () => {
-      // The page (and its CategoriesSurface/TagsSurface/TagRow) is still
-      // mounted here — this hook runs before testing-library's own unmount —
-      // so reverting the language re-renders them and must be inside act().
+            // The page is still mounted (this hook runs before testing-library's unmount), so reverting the language must be inside act().
       await act(async () => {
         await i18n.changeLanguage("en");
       });
@@ -282,7 +277,6 @@ describe("SettingsBudget page", () => {
 
     await user.click(screen.getByRole("button", { name: "Add category" }));
     await screen.findByRole("dialog", { name: "New category" });
-    // The dialog opens on its first field, so typing starts at once.
     expect(screen.getByLabelText("Name")).toHaveFocus();
     await user.keyboard("Bakery");
     await user.keyboard("{Enter}");

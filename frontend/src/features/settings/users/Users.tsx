@@ -22,7 +22,6 @@ import { UserDetailModal } from "./UserDetailModal";
 import { formatDate } from "../../../lib/date";
 import { inviteLink } from "../../../lib/authLinks";
 import type { Role, User } from "../../../api/wire";
-// Member, role, joined, then the actions (no title: a column of icons).
 const TRACKS: Track[] = [
   { min: "14rem", max: "1fr" },
   { min: "6.5rem", max: "auto" },
@@ -46,8 +45,7 @@ export function SettingsUsers() {
     invite.mutate();
   };
 
-  // Saved on the server; the list refetches. Never on your own row (the
-  // server refuses it too), and never the last admin.
+  // Never on your own row (the server refuses it too), and never the last admin.
   const setRole = useSetUserRole();
   const roleOf = (u: User): Role => u.role;
   const toggleRole = (u: User) => setRole.mutate({ id: u.id, role: u.role === "admin" ? "user" : "admin" });
@@ -69,7 +67,6 @@ export function SettingsUsers() {
             <CardError onRetry={() => refetch()} className="mt-4 h-64" />
           ) : (
             <>
-            {/* Phone: one summary row per user; the rest lives in a modal. */}
             <div className="mt-4 flex flex-col gap-2 md:hidden">
               {isPending && <PhoneRowsSkeleton />}
               {users.map((u) => {
@@ -137,8 +134,6 @@ export function SettingsUsers() {
                             label={label}
                             as="button"
                             title={t("settings.users.changeRole")}
-                            // A badge whose text is the role: it goes off while
-                            // the change saves rather than reading "Saving…".
                             disabled={setRole.isPending}
                             onClick={() => toggleRole(u)}
                           />
@@ -146,8 +141,6 @@ export function SettingsUsers() {
                       </td>
                       <td role="cell" className="px-3 font-mono text-sm text-fg-dim">{formatDate(u.joinedAt)}</td>
                       <td role="cell" className="justify-end gap-0.5 px-3">
-                        {/* Own password lives in the Account tab; here we only
-                            offer to reset *other* users' passwords. */}
                         {!u.isSelf && (
                           <>
                             <IconButton onClick={() => setResetTarget(u)} aria-label={t("settings.users.resetPassword")}>
@@ -222,7 +215,6 @@ export function SettingsUsers() {
   );
 }
 
-/** Marks your own row, like "This device" on the sessions list. */
 function YouTag() {
   const { t } = useTranslation();
   return (
@@ -266,7 +258,6 @@ function RoleBadge({
   return <span className={`${base} ${color}`}>{label}</span>;
 }
 
-/** The phone list while it loads: three summary rows. */
 function PhoneRowsSkeleton() {
   return (
     <Skeleton className="flex flex-col gap-2">
@@ -283,7 +274,6 @@ function PhoneRowsSkeleton() {
   );
 }
 
-/** The table's rows while they load, on the table's own columns. */
 function TableRowsSkeleton() {
   return (
     <BoneRows rows={2} className={ROW_CELLS}>

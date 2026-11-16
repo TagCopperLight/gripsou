@@ -23,9 +23,6 @@ const renderAccount = () =>
 
 type Reply = () => Response;
 
-/** A fetch that answers `/auth/mfa/status` with the given two-factor state,
- *  `/auth/sessions` with two sessions, and any other path from `routes` (by
- *  path, after the `/api` prefix), else 204. */
 function stubAccount(
   totp: boolean,
   routes: Record<string, Reply> = {},
@@ -99,7 +96,6 @@ describe("SettingsAccount two-factor row", () => {
     renderAccount();
     fireEvent.click(await twoFactorSwitch());
     expect(screen.getByRole("dialog", { name: "Set up two-factor" })).toBeInTheDocument();
-    // Opening the window does not flip the switch: the server's state does.
     expect(await twoFactorSwitch()).toHaveAttribute("aria-checked", "false");
   });
 
@@ -119,7 +115,6 @@ describe("SettingsAccount two-factor row", () => {
     expect(
       screen.getByRole("dialog", { name: "Two-factor authentication" }),
     ).toBeInTheDocument();
-    // The window's backup-code count comes from the same status answer.
     expect(await screen.findByText("10 of 10 left")).toBeInTheDocument();
   });
 });
@@ -243,8 +238,6 @@ describe("SettingsAccount sessions card", () => {
   it("lists sessions, marks current, revokes others", async () => {
     const fetchMock = stubAccount(false);
     renderAccount();
-    // Phone and desktop layouts are both in the DOM (CSS picks one), so each
-    // session appears twice.
     expect(await screen.findAllByText("Chrome on macOS")).not.toHaveLength(0);
     expect(screen.getAllByText(/this device/i)).not.toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Log out" }));
@@ -295,8 +288,7 @@ describe("SettingsAccount delete account", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
 
-    // RTL's `waitFor`, not `vi.waitFor`: the delete mutation resolves and sets
-    // state between polls, and only RTL's wraps the wait in act(...).
+    // RTL's `waitFor`, not `vi.waitFor`: only RTL's wraps the wait in act(...).
     await waitFor(() => expect(logoutSpy).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/auth/account",

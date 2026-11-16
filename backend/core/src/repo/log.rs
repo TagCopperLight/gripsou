@@ -1,5 +1,4 @@
-//! The saved-log table. Written only by `logs::writer`, purged by the daily
-//! `logs` sweep.
+//! Written only by `logs::writer`, purged by the daily `logs` sweep.
 
 use crate::error::CoreError;
 use crate::logs::LogLine;

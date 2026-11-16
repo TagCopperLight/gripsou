@@ -157,9 +157,6 @@ async fn undo_refuses_a_pending_row(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Same threshold on both sides, and rows on both sides of it: a row at 75 %
-/// is in the queue at 80 % and out of it at 70 %, so a count and a list
-/// reading different thresholds, or different rules, would disagree here.
 #[gripsou_core::testkit::db_test]
 async fn the_count_agrees_with_the_list_filter(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, first, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;
@@ -185,7 +182,6 @@ async fn the_count_agrees_with_the_list_filter(pool: PgPool) -> anyhow::Result<(
         .execute(&pool)
         .await?;
     }
-    // Accepted: out of the queue whatever its confidence.
     sqlx::query("update transaction set category_reviewed_at = now() where external_id = 't3'")
         .execute(&pool)
         .await?;
@@ -204,8 +200,6 @@ async fn the_count_agrees_with_the_list_filter(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-/// Undo re-checks the row in the write itself: a row paired since it was
-/// accepted stays a transfer rather than becoming half an AI guess.
 #[gripsou_core::testkit::db_test]
 async fn undo_refuses_a_row_paired_since_it_was_accepted(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, id, groceries) = ai_row(&pool, Some(Decimal::new(40, 2)), true).await?;

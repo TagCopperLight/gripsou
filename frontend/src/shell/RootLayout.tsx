@@ -6,8 +6,7 @@ import { MAIN_SCROLL_ID } from "../lib/scroll";
 import { useAuth } from "../auth/context";
 
 export function RootLayout() {
-  // A page can be drawn while a saved session is checked: the sidebar, which
-  // names the user and their role, waits for it.
+  // The sidebar names the user, so it waits for the session.
   const { user } = useAuth();
   return (
     <Shell sidebar={user ? <Sidebar /> : <SidebarSkeleton />}>
@@ -17,9 +16,6 @@ export function RootLayout() {
   );
 }
 
-/** The app's frame while a stored session is checked, for a page that can't
- *  be drawn before it (App): the page is left empty, as which one shows
- *  depends on the session (the welcome screen, a redirect). */
 export function ShellSkeleton() {
   return <Shell sidebar={<SidebarSkeleton />} />;
 }

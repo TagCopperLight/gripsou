@@ -3,8 +3,6 @@ import { ChartColumn } from "lucide-react";
 
 import { Surface } from "../../ui/Surface";
 
-/** Stands in for the whole page when no account holds a security (cash
- *  doesn't count on this page), connections or not. */
 export function InvestmentsEmpty() {
   const { t } = useTranslation();
   return (

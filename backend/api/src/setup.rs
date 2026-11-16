@@ -1,7 +1,3 @@
-//! First-run setup: while nobody has an account, the server prints a one-time
-//! code at startup, and whoever types it in the browser creates the first
-//! account, as admin. Once any user exists, setup is closed for good.
-
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -23,13 +19,10 @@ use gripsou_core::repo::user;
 
 /// Crockford's base32: no I, L, O or U, which read like other characters.
 const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-/// 60 bits: far beyond what the per-IP limiter lets anyone try.
 const CODE_CHARS: usize = 12;
 const GROUP_CHARS: usize = 4;
 
-/// The SHA-256 of the code in effect, or nothing once setup is closed. The
-/// lock is held for a whole creation, so two requests can't both create the
-/// first admin.
+/// Held for a whole creation, so two requests can't both create the first admin.
 pub struct Setup(Mutex<Option<Vec<u8>>>);
 
 impl Setup {
@@ -42,9 +35,7 @@ impl Setup {
     }
 }
 
-/// At startup: while nobody has an account, a new code, printed to the
-/// terminal only. Info lines are saved in the `log` table, readable from the
-/// app, so the code never goes through `tracing`.
+/// Printed to the terminal only: info lines are saved in the `log` table, readable from the app, so the code never goes through `tracing`.
 pub async fn start(pool: &PgPool) -> Result<Setup, CoreError> {
     if user::any_exists(pool).await? {
         return Ok(Setup::closed());
@@ -56,7 +47,6 @@ pub async fn start(pool: &PgPool) -> Result<Setup, CoreError> {
     Ok(Setup::open(&code))
 }
 
-/// Three groups of four, `K7QM-3XRD-9PWF`, from OS randomness.
 fn new_code() -> String {
     let bits = OsRng.next_u64();
     let chars: Vec<char> = (0..CODE_CHARS)
@@ -109,7 +99,6 @@ fn closed() -> ApiError {
     ApiError::NotFound("setup is closed")
 }
 
-/// Public: whether the sign-in page should send the visitor to setup.
 pub async fn status(
     State(pool): State<PgPool>,
     State(setup): State<Arc<Setup>>,
@@ -124,8 +113,6 @@ pub async fn status(
     }))
 }
 
-/// Public: the setup code and the first account's details become that
-/// account, as admin, signed in.
 pub async fn create(
     State(pool): State<PgPool>,
     State(setup): State<Arc<Setup>>,
@@ -258,7 +245,6 @@ mod tests {
         assert_eq!(users(&pool).await, 1);
     }
 
-    /// Without the GET clearing the slot first, the insert itself refuses.
     #[gripsou_core::testkit::db_test]
     async fn the_insert_refuses_when_a_user_exists(pool: PgPool) {
         let setup = open();

@@ -4,22 +4,15 @@ import type { ProviderGroup } from "./wire";
 import { anySyncing } from "../lib/connectionState";
 import type { PrefsPatch } from "../lib/prefsPatch";
 
-// What each domain event makes stale, named once. A mutation calls one of
-// these rather than listing keys itself, so a screen's key is added to the
-// groups it belongs to here, not to every mutation.
-
 function invalidateAll(qc: QueryClient, groups: readonly (readonly unknown[])[]) {
   return Promise.all(groups.map(async (queryKey) => {
-    // invalidateQueries alone reuses an initial fetch with no cached data,
-    // even with cancelRefetch enabled. Its response can predate this write.
+    // invalidateQueries alone reuses an initial fetch whose response can predate this write.
     await qc.cancelQueries({ queryKey });
     await qc.invalidateQueries({ queryKey });
   }));
 }
 
-// For refreshes nobody asked for (a background run moving on): never cancel a
-// fetch already in flight, which would throw its work away only to start it
-// again.
+// Never cancels an in-flight fetch: that would waste its work.
 function invalidateQuietly(
   qc: QueryClient,
   groups: readonly (readonly unknown[])[],
@@ -29,9 +22,6 @@ function invalidateQuietly(
     qc.invalidateQueries({ queryKey, refetchType }, { cancelRefetch: false });
 }
 
-// Everything whose numbers come out of synced data. `transactions` is in here
-// because ingesting transactions is the main thing a sync does: without it the
-// Transactions page keeps showing pre-sync rows.
 export function afterSyncFinished(qc: QueryClient) {
   return invalidateAll(qc, [
     keys.netWorth(),
@@ -52,9 +42,7 @@ export function afterSyncFinished(qc: QueryClient) {
   ]);
 }
 
-// Refresh the status after requesting a sync or completing a connect. If the
-// very first status read already says idle, no earlier snapshot exists for
-// the watcher to compare, so refresh the data here as well.
+// If the first status read already says idle, the watcher has no earlier snapshot to compare, so refresh the data too.
 export async function afterSyncRequested(qc: QueryClient) {
   const before = qc.getQueryData<ProviderGroup[]>(keys.connections());
   await invalidateAll(qc, [keys.connections()]);
@@ -62,14 +50,10 @@ export async function afterSyncRequested(qc: QueryClient) {
   if (!before && next && !anySyncing(next)) await afterSyncFinished(qc);
 }
 
-// A failed connect: the server deleted the pending connection.
 export function afterConnectFailed(qc: QueryClient) {
   return invalidateAll(qc, [keys.connections()]);
 }
 
-// Renaming/recolouring/retyping an account. The holdings and transactions
-// tables both render the account's name and colour from their own payloads, so
-// they go stale too.
 export function afterAccountEdit(qc: QueryClient) {
   return invalidateAll(qc, [
     keys.accounts(),
@@ -82,16 +66,10 @@ export function afterAccountEdit(qc: QueryClient) {
   ]);
 }
 
-// Deleting a connection cascades to its accounts and holdings immediately, so
-// every figure on every screen changes at once.
 export function afterConnectionDeleted(qc: QueryClient) {
   return Promise.all([invalidateAll(qc, [keys.connections()]), afterSyncFinished(qc)]);
 }
 
-// A saved lot batch changes the explained quantity, the cost basis and the
-// derived history, plus this holding's own purchase list and price history.
-// Lot rows are listed and counted on the transactions page, so its counts move
-// with them.
 export function afterLotsSaved(qc: QueryClient, holdingId: string) {
   return invalidateAll(qc, [
     keys.holdings(),
@@ -110,8 +88,7 @@ export function afterSessionChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.sessions()]);
 }
 
-// Setting up, removing or renewing a second factor changes the status card, and
-// confirming a setup signs the user's other sessions out.
+// Confirming a setup signs the user's other sessions out.
 export function afterMfaChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.mfaStatus(), keys.sessions()]);
 }
@@ -120,7 +97,6 @@ export function afterUserChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.users()]);
 }
 
-// A new category or tag has no rows yet, so only its own list changes.
 export function afterBudgetCategoryCreated(qc: QueryClient) {
   return invalidateAll(qc, [keys.budgetCategories()]);
 }
@@ -129,15 +105,10 @@ export function afterBudgetTagCreated(qc: QueryClient) {
   return invalidateAll(qc, [keys.budgetTags()]);
 }
 
-// Reordering moves the category list and nothing else: no figure and no
-// transaction reads the order.
 export function afterBudgetCategoryReorder(qc: QueryClient) {
   return invalidateAll(qc, [keys.budgetCategories()]);
 }
 
-// Editing the taxonomy changes the chips the transactions table draws, so the
-// transaction pages go stale with the category/tag list itself. A rename,
-// retype or delete also moves every figure built on categories.
 export function afterBudgetCategoryChange(qc: QueryClient) {
   return invalidateAll(qc, [
     keys.budgetCategories(),
@@ -154,9 +125,6 @@ export function afterBudgetTagChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.budgetTags(), keys.transactions(), keys.transactionCounts()]);
 }
 
-// Assigning a category, tagging a row, or any bulk write. The counts feed the
-// header and the `matching / total` readout, so they go stale with the list
-// itself.
 export function afterTransactionChange(qc: QueryClient) {
   return invalidateAll(qc, [
     keys.budgetCategories(),
@@ -170,14 +138,10 @@ export function afterTransactionChange(qc: QueryClient) {
   ]);
 }
 
-// The ✓ is the user's own bookkeeping: no count, figure or review line reads
-// it, only the row itself.
 export function afterCheckedChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.transactions()]);
 }
 
-// Accepting, correcting or undoing a review line: the queue count and every
-// figure built on categories move together.
 export function afterReviewChange(qc: QueryClient) {
   return invalidateAll(qc, [
     keys.budgetCategories(),
@@ -190,16 +154,11 @@ export function afterReviewChange(qc: QueryClient) {
   ]);
 }
 
-// Asking for a run: the server answers 202 and works in the background, so only
-// the status (whose `running` starts the poll) has anything new.
 export function afterCategorizeRequested(qc: QueryClient) {
   return invalidateAll(qc, [keys.budgetAiStatus()]);
 }
 
-// A background AI run filed more rows. The Overview figures refresh live; the
-// transactions list and its counts are only marked stale — refetching every
-// loaded page on each 5 s poll would reshuffle rows under the user's cursor —
-// and are refetched when the run ends.
+// Transactions are only marked stale: refetching every loaded page on each poll would reshuffle rows under the cursor.
 export function afterAiRunProgress(qc: QueryClient) {
   invalidateQuietly(qc, [keys.budgetSummary(), keys.budgetTrend(), keys.budgetAiUsage()]);
   invalidateQuietly(qc, [keys.transactions(), keys.transactionCounts()], "none");
@@ -217,36 +176,27 @@ export function afterAiRunFinished(qc: QueryClient) {
   ]);
 }
 
-// Switching the server's AI provider or model changes whether AI is configured.
 export function afterBudgetAiSettingsChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.budgetAiSettings(), keys.budgetAiStatus()]);
 }
 
-// Prices only feed the cost column.
 export function afterBudgetAiPricesChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.budgetAiUsage()]);
 }
 
-// Both the admin catalog and the connection picker read provider availability.
 export function afterProviderChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.providers(), keys.providersEnabled()]);
 }
 
-// A key decides whether its provider works: the AI's provider list reads it.
 export function afterApiKeyChange(qc: QueryClient) {
   return invalidateAll(qc, [keys.apiKeys(), keys.budgetAiSettings(), keys.budgetAiStatus()]);
 }
 
-// What a saved preference makes stale. The server converts figures into the
-// currency and dates them in the time zone, so those two refetch everything;
-// the formatting prefs are applied in the browser and stale nothing.
+// Currency and time zone change server-converted figures, so they refetch everything; formatting prefs apply in the browser.
 const PREF_EFFECTS: { [K in keyof PrefsPatch]?: "everything" | readonly (readonly unknown[])[] } = {
   currency: "everything",
   timeZone: "everything",
-  // The threshold decides which AI guesses "need review": the flag on each
-  // row, the needs-review filter's counts and the review queue's size.
   budgetAiThreshold: [keys.transactions(), keys.transactionCounts(), keys.budgetAiStatus()],
-  // Opting in starts a run on the server, which the status shows.
   budgetAiEnabled: [keys.budgetAiStatus()],
 };
 

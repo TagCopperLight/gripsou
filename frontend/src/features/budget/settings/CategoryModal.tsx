@@ -19,16 +19,13 @@ import { ListBadge } from "./SettingsList";
 import { ACCOUNT_PALETTE } from "../../../lib/palette";
 import { withAlpha } from "../../../lib/color";
 
-/** An icon choice. The selected one is marked by a border, not a ring: a
- *  ring is a shadow, which the browser doesn't snap to screen pixels, so at a
- *  fractional display scale its sides come out unequal. */
+/** The selected icon gets a border, not a ring: a ring is a shadow, which the browser doesn't snap to pixels, so its sides come out unequal at fractional scales. */
 const ICON_SWATCH =
   "size-8 rounded-xl border-[1.5px] flex items-center justify-center cursor-pointer transition-transform duration-140 bg-surface-2";
 
 type CategoryModalProps = {
   category?: BudgetCategory;
   onClose: () => void;
-  /** Asks to delete the category: the caller confirms first. */
   onDelete: (category: BudgetCategory) => void;
 };
 
@@ -36,14 +33,11 @@ export function CategoryModal({ category, onClose, onDelete }: CategoryModalProp
   const { t } = useTranslation();
   const create = useCreateBudgetCategory();
   const update = useUpdateBudgetCategory();
-  // Its own mutation, so only the button that was pressed says it is busy.
   const archive = useUpdateBudgetCategory();
   const mutation = category ? update : create;
 
-  // The label shown when the form opened. Comparing against it is what tells a
-  // real rename apart from "the user never touched the name" — including when
-  // the UI language changes mid-draft, which must not turn a seeded row into a
-  // renamed one.
+    // The label shown when the form opened. A seeded name is unchanged if it matches that or the label in the
+    // current language, so a language switch mid-draft is not a rename.
   const [initialDisplayName] = useState(() => (category ? categoryLabel(t, category) : ""));
   const [name, setName] = useState(initialDisplayName);
   const [kind, setKind] = useState<CategoryKind>(category?.kind ?? "expense");
@@ -52,10 +46,6 @@ export function CategoryModal({ category, onClose, onDelete }: CategoryModalProp
   const [hint, setHint] = useState(category?.hint ?? "");
 
   const trimmed = name.trim();
-  // A seeded row's name is "unchanged" if it matches either the label the
-  // modal opened with, or the label under the *current* language — the
-  // latter covers a language switch mid-draft, and someone retyping the
-  // translated label by hand, without treating either as a real rename.
   const unchanged =
     Boolean(category?.defaultKey) &&
     (trimmed === initialDisplayName || trimmed === categoryLabel(t, category!));
@@ -65,8 +55,7 @@ export function CategoryModal({ category, onClose, onDelete }: CategoryModalProp
     color,
     icon,
     hint: hint.trim() || null,
-    // The system row's kind is fixed; the select is disabled, and the body
-    // re-sends what the backend already holds.
+        // The system row's kind is fixed: the select is disabled and the body re-sends what the backend holds.
     kind: category?.systemKey ? category.kind : kind,
   };
   const body: CategoryBody = category ? categoryBody(category, fields) : { ...fields, archived: false };
@@ -86,8 +75,7 @@ export function CategoryModal({ category, onClose, onDelete }: CategoryModalProp
   };
 
   const busy = mutation.isPending || archive.isPending;
-  // The system row stays editable for the things that are purely presentation —
-  // name, colour, icon. Its kind is fixed, and its hint would never be read.
+    // The system row stays editable for presentation (name, colour, icon); its kind is fixed and its hint never read.
   const locked = Boolean(category?.systemKey);
   const previewColor = safeBudgetColor(color);
 
@@ -122,8 +110,7 @@ export function CategoryModal({ category, onClose, onDelete }: CategoryModalProp
       }
       onClose={onClose}
       icon={
-        // Square-to-icon and square-to-text proportions mirror the category
-        // chip in the table (size-7 square, size-4 icon, 14px label).
+                // Proportions mirror the category chip in the table (size-7 square, size-4 icon, 14px label).
         <span
           className="flex size-10 shrink-0 items-center justify-center rounded-xl"
           style={{ backgroundColor: withAlpha(previewColor, 0.22) }}
@@ -133,8 +120,6 @@ export function CategoryModal({ category, onClose, onDelete }: CategoryModalProp
       }
       footer={
         <>
-          {/* The system row can be renamed and restyled, never archived or
-              deleted. */}
           {category && !locked && (
             <span className="mr-auto flex items-center gap-1">
               <Button

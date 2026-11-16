@@ -2,12 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 type Open<K> = { key: K; anchor: HTMLElement } | null;
 
-/** Which floating panel (`FloatingPanel`) a set of triggers has open, and the
- *  trigger it hangs under. A panel lets a press on its own anchor through, so
- *  the trigger toggles it here: pressed again it closes, and a press on
- *  another trigger opens that one instead. `onClose` runs whenever the open
- *  panel goes away, whatever closed it. `toggle` and `close` keep their
- *  identity, for memoised rows. */
+/** A panel lets a press on its own anchor through, so the trigger toggles it. `onClose` runs whenever it goes away. `toggle` and `close` keep their identity, for memoised rows. */
 export function usePopover<K extends string = "open">(onClose?: () => void) {
   const [open, setOpen] = useState<Open<K>>(null);
   const openRef = useRef<Open<K>>(open);

@@ -19,19 +19,13 @@ import type { Account } from "../../api/wire";
 
 type ConnectionAccountsCardProps = {
   group: ConnectionGroup;
-  /** Each account's share of what the accounts own (`sharesById`). */
   shares: ReadonlyMap<string, number | null>;
-  /** The longest type tag on the page, in characters: the tag column's width. */
   tagCh: number;
-  /** Private mode, revealed by the summary card's eye. */
   masked: boolean;
   onHover?: (accountId: string | null) => void;
   className?: string;
 };
 
-/** One bank connection: its subtotal, a dot on its logo when it has a
- * problem (as in the sync window), then a row per account.
- * Clicking a row opens the account's edit modal. */
 export function ConnectionAccountsCard({ group, shares, tagCh, masked, onHover, className = "" }: ConnectionAccountsCardProps) {
   const { t } = useTranslation();
   const readerCurrency = usePrefs().currency;
@@ -56,12 +50,10 @@ export function ConnectionAccountsCard({ group, shares, tagCh, masked, onHover, 
         <MaskedMoney masked={masked} value={group.total} className="ml-auto text-fg font-semibold text-sm whitespace-nowrap" />
       </div>
 
-      {/* Pulled out by the rows' own padding: the hover fill spans the whole
-          line while the values stay flush with the bank's subtotal. */}
+      {/* Pulled out by the rows' own padding so the hover fill spans the line. */}
       <ul className="-mx-2">
         {group.accounts.map((a) => {
           const share = shares.get(a.id) ?? null;
-          // A foreign account reads in its own currency, the converted value on hover.
           const native = a.currency !== readerCurrency && a.valueNative !== null && !a.fxMissing ? a.valueNative : null;
           return (
             <li key={a.id} className="border-t border-surface-2 first:border-t-0">
@@ -76,14 +68,11 @@ export function ConnectionAccountsCard({ group, shares, tagCh, masked, onHover, 
                   <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: a.color }} />
                   <span className="truncate text-fg text-[13px]">{a.name}</span>
                 </span>
-                {/* Its own column, as wide as the page's longest tag: the tags
-                    start at the same place on every row, apart from the bar. */}
                 <span className="hidden box-content pr-1 text-[11px] sm:block" style={{ width: `calc(${tagCh}ch + 1rem)` }}>
                   <span className="rounded-md px-2 py-0.5 bg-surface-3 text-fg-faint whitespace-nowrap">
                     {accountTypeLabel(t, a.typeKey)}
                   </span>
                 </span>
-                {/* No share (overdrawn, or at zero): the amount alone, as on the dashboard. */}
                 <span className="flex items-center gap-3">
                   {share !== null && (
                     <>

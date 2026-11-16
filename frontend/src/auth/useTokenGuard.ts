@@ -5,11 +5,7 @@ import type { TokenInfo } from "../api/wire";
 
 type Guard = { status: "loading" | "valid"; info: TokenInfo | null };
 
-/**
- * Validate an invite/reset token on mount. Any failure (404, network, …) sends
- * the user to `/`. Until the token is known valid, the page keeps its form off,
- * so nothing is typed into a dead link.
- */
+/** Any failure sends the user to `/`; until the token is valid the form stays off. */
 export function useTokenGuard(token: string): Guard {
   const navigate = useNavigate();
   const [guard, setGuard] = useState<Guard>({ status: "loading", info: null });

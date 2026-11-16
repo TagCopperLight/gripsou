@@ -8,7 +8,6 @@ import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("../../ui/EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
-// What the server sends while the user has no accounts.
 const NO_ACCOUNTS: NetWorthResponse = {
   points: [],
   summary: { netWorth: "0", invested: "0", gainAbs: "0", gainPct: "0", fxMissing: false },

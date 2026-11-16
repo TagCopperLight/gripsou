@@ -1,5 +1,4 @@
-//! Saved passkeys. `passkey` is the serialised webauthn-rs `Passkey`, opaque
-//! here: the API layer reads and writes it.
+//! `passkey` is the serialised webauthn-rs `Passkey`, opaque here: the API layer reads and writes it.
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -18,7 +17,6 @@ pub struct StoredPasskey {
     pub passkey: serde_json::Value,
 }
 
-/// The user's passkeys, newest first.
 pub async fn list(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<PasskeyRow>, CoreError> {
     Ok(sqlx::query_as!(
         PasskeyRow,
@@ -49,7 +47,6 @@ pub async fn credential_ids(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<Ve
     .await?)
 }
 
-/// One of the user's passkeys by credential id; another user's is invisible.
 pub async fn find(
     db: impl sqlx::PgExecutor<'_>,
     user_id: Uuid,
@@ -88,7 +85,6 @@ pub async fn insert(
     .await?)
 }
 
-/// After a sign-in: the updated passkey (sign counter) and when it was used.
 pub async fn record_use(
     db: impl sqlx::PgExecutor<'_>,
     id: Uuid,
@@ -156,7 +152,6 @@ mod tests {
             .unwrap()
             .unwrap();
         insert(&pool, b, &[3], &pk(3), "B").await.unwrap().unwrap();
-        // The same credential can't be added twice, even by someone else.
         assert!(
             insert(&pool, b, &[1], &pk(9), "dup")
                 .await

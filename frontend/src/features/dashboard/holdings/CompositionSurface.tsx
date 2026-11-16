@@ -6,14 +6,11 @@ import { allocationPercents } from "../../../lib/composition";
 import type { Allocation, Composition } from "../../../api/wire";
 import { ColorSquare } from "../../../ui/ColorSquare";
 
-// "Other", the remainder, is striped like the leftover slice of the
-// Investments donuts.
+// "Other" is striped like the leftover slice of the Investments donuts.
 const OTHER_COLOR = STRIPE_CSS;
 
 type Slice = { name: string; percent: number; color: string };
 
-/** The listed slices in the account palette's colours by position (top-N
- *  lists fit within it; longer ones wrap), then "Other" when it is >= 1%. */
 function buildSlices(items: Allocation[], otherLabel: string): Slice[] {
   const { listed, other } = allocationPercents(items);
   const slices = listed.map((s, i) => ({ ...s, color: ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length] }));

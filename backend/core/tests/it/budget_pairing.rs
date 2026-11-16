@@ -14,7 +14,6 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Row shape shared by the "assert every column" checks below.
 type PairedRow = (Uuid, Option<Uuid>, Option<Uuid>, Option<String>);
 
 fn account(external_id: &str, currency: &str) -> CanonicalAccount {
@@ -24,8 +23,6 @@ fn account(external_id: &str, currency: &str) -> CanonicalAccount {
     }
 }
 
-/// Inserts a `transfer` at an explicit instant — the only type pairing
-/// considers.
 async fn tx_at(
     pool: &PgPool,
     account_id: Uuid,
@@ -37,9 +34,6 @@ async fn tx_at(
     tx_at_kind(pool, account_id, account_ext, ext, "transfer", amount, day).await
 }
 
-/// Same as [`tx_at`], but with an explicit transaction `type` rather than the
-/// transfer default — needed to seed a `buy`, `sell`, `dividend`,
-/// `fee` or `interest` row.
 async fn tx_at_kind(
     pool: &PgPool,
     account_id: Uuid,
@@ -95,13 +89,10 @@ async fn pairs_a_clean_transfer(pool: PgPool) -> anyhow::Result<()> {
     assert_eq!(outgoing.2, Some(system));
     assert_eq!(outgoing.3.as_deref(), Some("pair"));
 
-    // Running again changes nothing.
     assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
-/// Two equally-near candidates: pair neither. A wrong pair silently deletes
-/// real spending from every chart; an unpaired row costs one correction.
 #[gripsou_core::testkit::db_test]
 async fn a_tie_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -135,9 +126,7 @@ async fn a_tie_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Two identical transfers sent together (same accounts, amount and instant on
-/// each side) tie with each other, but the tie is harmless: whichever way they
-/// pair, the result is the same. So they pair one-to-one instead of not at all.
+/// Identical transfers tie, but either pairing gives the same result, so they pair one-to-one.
 #[gripsou_core::testkit::db_test]
 async fn identical_duplicates_pair_one_to_one(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -170,10 +159,7 @@ async fn identical_duplicates_pair_one_to_one(pool: PgPool) -> anyhow::Result<()
     Ok(())
 }
 
-/// Resolving a duplicate tie must not let an unrelated single row claim one of
-/// the duplicates: a lone -10 transfer to a friend two days before two
-/// identical +10 top-ups is not their counterpart. Only a group of k identical rows pairs
-/// with a group of k identical rows.
+/// A lone -10 transfer is not the counterpart of two identical +10 top-ups.
 #[gripsou_core::testkit::db_test]
 async fn a_single_row_does_not_claim_one_of_two_duplicates(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -194,10 +180,6 @@ async fn a_single_row_does_not_claim_one_of_two_duplicates(pool: PgPool) -> anyh
     Ok(())
 }
 
-/// Only transfers pair. A card payment or cash withdrawal equal to a transfer
-/// arriving elsewhere is money leaving the user (a shop, an ATM), and a
-/// deposit equal to a transfer leaving is money arriving from someone else
-/// ("From Camille R") — neither is a movement between the user's accounts.
 #[gripsou_core::testkit::db_test]
 async fn card_payments_and_deposits_never_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -230,9 +212,7 @@ async fn card_payments_and_deposits_never_pair(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-/// Two transfers out on different days and two identical transfers in: all
-/// four are between the same two accounts, so whichever pairs with which the
-/// result is the same, and both pairs form.
+/// All four rows share two accounts, so any pairing gives the same result.
 #[gripsou_core::testkit::db_test]
 async fn two_out_on_different_days_pair_with_two_identical_in(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -254,8 +234,6 @@ async fn two_out_on_different_days_pair_with_two_identical_in(pool: PgPool) -> a
     Ok(())
 }
 
-/// Same amount and instant is not enough: counterparts on two different
-/// accounts are a real ambiguity, so the tie still pairs nothing.
 #[gripsou_core::testkit::db_test]
 async fn a_tie_across_different_accounts_still_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -296,7 +274,6 @@ async fn a_counterpart_outside_the_window_does_not_pair(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-/// The window's edge is inclusive: five days apart still pairs.
 #[gripsou_core::testkit::db_test]
 async fn a_counterpart_five_days_away_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -316,8 +293,7 @@ async fn a_counterpart_five_days_away_pairs(pool: PgPool) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// Equal |amount| is meaningless across currencies, so a cross-currency
-/// transfer never auto-pairs. Known limit, stated rather than papered over.
+/// Known limit: amounts are not comparable across currencies.
 #[gripsou_core::testkit::db_test]
 async fn cross_currency_never_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "USD").await?;
@@ -340,10 +316,6 @@ async fn two_rows_in_the_same_account_never_pair(pool: PgPool) -> anyhow::Result
     Ok(())
 }
 
-/// A `buy` row that is equal and opposite to a `deposit` within the window
-/// must never be filed as an internal transfer: it is a coincidence of
-/// amount, not a movement between the user's own accounts, and a PEA `buy`
-/// hidden this way would be uncorrectable through the transactions list.
 #[gripsou_core::testkit::db_test]
 async fn a_buy_row_never_pairs_even_when_equal_and_opposite(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -370,10 +342,6 @@ async fn a_buy_row_never_pairs_even_when_equal_and_opposite(pool: PgPool) -> any
     Ok(())
 }
 
-/// Pairing is allowed to overwrite an AI guess nobody has reviewed, since
-/// pairing outranks it, but never a category the user chose. This would fail
-/// (leaving the AI row unpaired) if the candidate filter reverted to
-/// `category_source is null` only.
 #[gripsou_core::testkit::db_test]
 async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -397,7 +365,6 @@ async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
 
     assert_eq!(pair(&pool, user_id).await?, 1);
 
-    // The guess is gone, so is its confidence: a pair row carries none.
     let confidence: Option<Decimal> =
         sqlx::query_scalar("select category_confidence from transaction where id = $1")
             .bind(out)
@@ -423,8 +390,6 @@ async fn an_ai_categorised_row_still_pairs(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Precedence: a row the user filed as something that counts — an expense
-/// here — is never touched by the pass.
 #[gripsou_core::testkit::db_test]
 async fn a_user_categorised_row_is_left_alone(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -465,9 +430,6 @@ async fn file_as(pool: &PgPool, id: Uuid, category: Uuid, source: &str) -> anyho
     Ok(())
 }
 
-/// A row the user filed in a neutral category already counts toward nothing,
-/// so pairing it hides nothing: it pairs, and keeps the category they chose.
-/// The other half, which nobody filed, becomes a pairing-set transfer.
 #[gripsou_core::testkit::db_test]
 async fn a_row_the_user_filed_as_neutral_pairs_and_keeps_its_category(
     pool: PgPool,
@@ -493,9 +455,6 @@ async fn a_row_the_user_filed_as_neutral_pairs_and_keeps_its_category(
     Ok(())
 }
 
-/// A real transfer the provider labels a deposit (or a card payment) pairs
-/// once it is filed in a neutral category; unfiled, it never does — see
-/// `card_payments_and_deposits_never_pair`.
 #[gripsou_core::testkit::db_test]
 async fn a_deposit_filed_as_internal_transfer_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -519,9 +478,6 @@ async fn a_deposit_filed_as_internal_transfer_pairs(pool: PgPool) -> anyhow::Res
     Ok(())
 }
 
-/// The cash leg of a buy or sell never pairs, even filed as Investments: the
-/// lot is its record, and a broker mirrors it across its cash and portfolio
-/// accounts.
 #[gripsou_core::testkit::db_test]
 async fn a_buy_filed_as_neutral_still_never_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -536,9 +492,6 @@ async fn a_buy_filed_as_neutral_still_never_pairs(pool: PgPool) -> anyhow::Resul
     Ok(())
 }
 
-/// An AI guess the user accepted in review is their choice, not a guess any
-/// more: pairing leaves it exactly as accepted, even when a perfect
-/// counterpart exists.
 #[gripsou_core::testkit::db_test]
 async fn an_accepted_ai_guess_is_left_alone(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -570,10 +523,6 @@ async fn an_accepted_ai_guess_is_left_alone(pool: PgPool) -> anyhow::Result<()> 
     Ok(())
 }
 
-/// A paired row whose partner is deleted (its connection removed) would
-/// otherwise keep the internal-transfer category with nothing to net against,
-/// and count as money set aside. It goes back to uncategorised, and the next
-/// pass may pair it again.
 #[gripsou_core::testkit::db_test]
 async fn a_row_whose_partner_is_deleted_is_handed_back(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
@@ -603,9 +552,6 @@ async fn a_row_whose_partner_is_deleted_is_handed_back(pool: PgPool) -> anyhow::
     Ok(())
 }
 
-/// A pair the user breaks by recategorising one half leaves the other half
-/// flagged as an orphaned transfer. It is still a transfer nobody has matched,
-/// so a later pass may pair it with a better counterpart.
 #[gripsou_core::testkit::db_test]
 async fn an_orphaned_half_can_pair_again(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
@@ -627,16 +573,7 @@ async fn an_orphaned_half_can_pair_again(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// A single round of mutual-nearest-neighbour matching can leave a true pair
-/// unwritten because its would-be counterpart is temporarily claimed by
-/// someone closer; the next round, with that claim resolved, finds it. This
-/// asserts on the total returned by the public function across however many
-/// internal rounds it takes — it would fail if `pair_internal_transfers`
-/// stopped after one round instead of looping to convergence.
-///
-/// Round 1: X's nearest is Y, but Y's nearest is W (closer), so only W-Y is
-/// mutual and pairs; X and Z are both left over. Round 2, with Y and W gone
-/// from the pool, X and Z are now each other's only (and so mutual) option.
+/// Round 1 pairs only W-Y (Y's nearest is W). With them gone, X and Z pair in round 2.
 #[gripsou_core::testkit::db_test]
 async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
@@ -666,8 +603,6 @@ async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow:
         now + Duration::days(2),
     )
     .await?;
-    // Z: farther from X than Y is, so round 1's nearest for X is still Y, not
-    // Z — Z only becomes reachable once Y is claimed by W.
     let z = tx_at(
         &pool,
         d,
@@ -700,17 +635,11 @@ async fn a_pair_blocked_in_round_one_forms_in_round_two(pool: PgPool) -> anyhow:
     );
     assert_eq!(row(z).1, Some(x));
 
-    // Re-running a converged pass writes nothing further.
     assert_eq!(pair(&pool, user_id).await?, 0);
     Ok(())
 }
 
-/// A single round of mutual-nearest-neighbour matching does not pair every
-/// non-mutual candidate with *something*: X's nearest is Y, but Y's own
-/// nearest is W (closer to Y than X is), so X-Y is not mutual. Only W-Y is.
-/// This is the case the mutual check at the end of `pair_one_round` exists
-/// for — deleting that check (pairing every entry in `out_choice`
-/// unconditionally) would pair X here, which this test catches.
+/// X's nearest is Y but Y's is W, so X-Y is not mutual. Fails if the mutual check in `pair_one_round` goes.
 #[gripsou_core::testkit::db_test]
 async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, conn_id) = seed_user_and_connection(&pool).await;
@@ -720,10 +649,7 @@ async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result
     let c = upsert_account(&mut conn, conn_id, &account("acct-c", "EUR")).await?;
 
     let now = Utc::now().date_naive();
-    // X: outflow on account a, 3 days from the only inflow Y — X's nearest (its
-    // only candidate) is Y.
     let x = tx_at(&pool, a, "acct-a", "x", Decimal::new(-50000, 2), now).await?;
-    // Y: the one inflow, on account b.
     let y = tx_at(
         &pool,
         b,
@@ -733,8 +659,6 @@ async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result
         now + Duration::days(3),
     )
     .await?;
-    // W: outflow on account c, only 1 day from Y — closer than X is, so Y's own
-    // nearest is W, not X.
     let w = tx_at(
         &pool,
         c,
@@ -764,10 +688,6 @@ async fn nearest_must_be_mutual_or_neither_pairs(pool: PgPool) -> anyhow::Result
     Ok(())
 }
 
-/// Among several candidates within the window, the nearest in time wins, not
-/// an arbitrary or farthest one. Flipping the `gap < best_gap` comparison to
-/// prefer the farther candidate would pick the +5 days inflow instead and this
-/// test would fail.
 #[gripsou_core::testkit::db_test]
 async fn pairs_the_nearest_in_time_not_the_farthest(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, a, b) = two_accounts(&pool, "EUR").await?;
@@ -809,10 +729,8 @@ async fn pairs_the_nearest_in_time_not_the_farthest(pool: PgPool) -> anyhow::Res
     Ok(())
 }
 
-/// A savings account whose transfers to the current account pass through a
-/// deposit account (savings → deposit → current account), as seen on
-/// real data. Seeds one such chain of `amount` at `day`, returning its rows as
-/// (livret out, depot in, depot out, courant in).
+/// Seeds a savings, deposit, current account chain of `amount` at `day`.
+/// Returns (livret out, depot in, depot out, courant in).
 async fn chain_at(
     pool: &PgPool,
     [livret, depot, courant]: [Uuid; 3],
@@ -847,10 +765,7 @@ async fn partner(pool: &PgPool, id: Uuid) -> anyhow::Result<Option<Uuid>> {
     )
 }
 
-/// Every row of a same-day chain ties (the Livret outflow is equally near the
-/// depot and current-account inflows), so nearest-neighbour matching alone
-/// pairs nothing. But the depot can't pay itself, so there is only one way
-/// to explain all four rows — and that one is taken.
+/// All rows of a same-day chain tie, but the depot can't pay itself, so only one explanation fits.
 #[gripsou_core::testkit::db_test]
 async fn a_chain_through_a_middle_account_pairs(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
@@ -870,9 +785,7 @@ async fn a_chain_through_a_middle_account_pairs(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-/// One extra same-amount inflow elsewhere means some row in the cluster is
-/// not a movement between the user's accounts, and nothing says which — so
-/// nothing pairs.
+/// An extra same-amount inflow means some row is not an own-account move, and nothing says which.
 #[gripsou_core::testkit::db_test]
 async fn a_chain_with_a_stray_row_pairs_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
@@ -891,8 +804,6 @@ async fn a_chain_with_a_stray_row_pairs_nothing(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-/// Two identical chains the same day: which Livret row goes with which depot
-/// row makes no difference, so both chains pair.
 #[gripsou_core::testkit::db_test]
 async fn two_identical_chains_the_same_day_pair(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
@@ -904,9 +815,7 @@ async fn two_identical_chains_the_same_day_pair(pool: PgPool) -> anyhow::Result<
     Ok(())
 }
 
-/// Chains two days apart fall inside one three-day window, where a Livret
-/// row could as well go with the other day's depot row. Looking at each day
-/// first keeps each chain to itself.
+/// Chains two days apart share one 3-day window, so each day is resolved on its own.
 #[gripsou_core::testkit::db_test]
 async fn chains_on_nearby_days_pair_within_their_own_day(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, accts) = chain_accounts(&pool).await?;
@@ -929,7 +838,6 @@ async fn chains_on_nearby_days_pair_within_their_own_day(pool: PgPool) -> anyhow
     Ok(())
 }
 
-/// Seeds a paired transfer and returns `(user_id, outgoing, incoming)`.
 async fn seeded_pair(pool: &PgPool) -> anyhow::Result<(Uuid, Uuid, Uuid)> {
     let (user_id, a, b) = two_accounts(pool, "EUR").await?;
     let now = Utc::now().date_naive();
@@ -957,9 +865,6 @@ async fn row(pool: &PgPool, id: Uuid) -> anyhow::Result<PairedRow> {
     .await?)
 }
 
-/// Adds an arrival on the incoming half's account as far from the outgoing
-/// half as the incoming half is, on the other side: the outgoing half now
-/// ties, and the pair no longer holds.
 async fn tie_the_pair(pool: &PgPool, out: Uuid, inn: Uuid) -> anyhow::Result<()> {
     let (out_ts,): (NaiveDate,) = sqlx::query_as("select spent_on from transaction where id = $1")
         .bind(out)
@@ -982,8 +887,6 @@ async fn tie_the_pair(pool: &PgPool, out: Uuid, inn: Uuid) -> anyhow::Result<()>
     Ok(())
 }
 
-/// A pair a later run no longer finds is undone, and both halves go back to
-/// uncategorised, as if never paired.
 #[gripsou_core::testkit::db_test]
 async fn a_pair_that_no_longer_holds_is_undone(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
@@ -995,7 +898,6 @@ async fn a_pair_that_no_longer_holds_is_undone(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-/// Undoing a pair never touches a category the user chose.
 #[gripsou_core::testkit::db_test]
 async fn undoing_a_pair_keeps_a_category_the_user_chose(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
@@ -1016,8 +918,6 @@ async fn undoing_a_pair_keeps_a_category_the_user_chose(pool: PgPool) -> anyhow:
     Ok(())
 }
 
-/// The run after a correction sees it: once the row that was tying is filed
-/// as spending, the pair it blocked forms.
 #[gripsou_core::testkit::db_test]
 async fn filing_the_row_that_blocked_a_pair_lets_it_form(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
@@ -1071,8 +971,6 @@ async fn the_other_half_keeps_its_category(pool: PgPool) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Clearing is a user category write too: the same dissolution applies, so a
-/// cleared row never keeps a stale link.
 #[gripsou_core::testkit::db_test]
 async fn clearing_the_category_also_unlinks_both(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
@@ -1084,7 +982,6 @@ async fn clearing_the_category_also_unlinks_both(pool: PgPool) -> anyhow::Result
     Ok(())
 }
 
-/// Another user's transaction is not this user's to unlink.
 #[gripsou_core::testkit::db_test]
 async fn a_foreign_transaction_dissolves_nothing(pool: PgPool) -> anyhow::Result<()> {
     let (_user_id, out, inn) = seeded_pair(&pool).await?;
@@ -1108,8 +1005,7 @@ async fn a_foreign_transaction_dissolves_nothing(pool: PgPool) -> anyhow::Result
     Ok(())
 }
 
-/// Both halves in one bulk write: each dissolves the other, and neither is
-/// left half-linked by the order the UPDATE happened to visit them in.
+/// Both halves in one bulk write: neither may be left half-linked.
 #[gripsou_core::testkit::db_test]
 async fn a_bulk_write_covering_both_halves_unlinks_cleanly(pool: PgPool) -> anyhow::Result<()> {
     let (user_id, out, inn) = seeded_pair(&pool).await?;
@@ -1132,8 +1028,7 @@ async fn applying_to_a_description_unlinks_the_pairs_it_touches(
     let (user_id, out, inn) = seeded_pair(&pool).await?;
     let groceries = a_category(&pool, user_id).await?;
 
-    // Both halves are seeded with the same description ("VIREMENT"), so this
-    // sweeps up the counterpart as well as the row it was launched from.
+    // Same description on both halves, so the sweep takes the counterpart too.
     let outcome = apply_to_description(
         &pool,
         user_id,
@@ -1150,8 +1045,6 @@ async fn applying_to_a_description_unlinks_the_pairs_it_touches(
     Ok(())
 }
 
-/// A bulk category write over this selection, the way the Transactions page
-/// sends it.
 fn category(id: Uuid) -> BulkChanges<'static> {
     BulkChanges {
         category_id: Some(Some(id)),
@@ -1189,7 +1082,6 @@ async fn another_users_pairs_are_not_counted(pool: PgPool) -> anyhow::Result<()>
     Ok(())
 }
 
-/// One pairing pass, under the user's write lock, committed.
 async fn pair(pool: &PgPool, user_id: Uuid) -> anyhow::Result<usize> {
     let mut tx = gripsou_core::db::begin_user_writes(pool, user_id).await?;
     let paired = pair_internal_transfers(&mut tx).await?;

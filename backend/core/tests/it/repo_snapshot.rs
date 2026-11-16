@@ -27,7 +27,6 @@ async fn stamps_and_overwrites_same_day(pool: PgPool) -> anyhow::Result<()> {
         Decimal::new(100, 0),
     )
     .await?;
-    // Same day, new values -> overwrite, not a second row.
     stamp_snapshot(
         &mut conn,
         holding_id,
@@ -114,7 +113,6 @@ async fn stamping_a_snapshot_removes_the_backfill_row_for_that_day(
         "stamping a snapshot must delete the backfill row for that day"
     );
 
-    // And the union has exactly one row for the day.
     let points: i64 = sqlx::query_scalar(
         "select count(*) from holding_point where holding_id = $1 and as_of = $2",
     )

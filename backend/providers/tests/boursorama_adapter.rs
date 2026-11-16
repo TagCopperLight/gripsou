@@ -4,7 +4,6 @@ use gripsou_providers::boursorama::BoursoramaCompositionProvider;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-// A trimmed, recorded excerpt of a real Boursorama composition page.
 const COMPOSITION_FIXTURE: &str = include_str!("fixtures/boursorama/composition_pust.html");
 
 fn iref(symbol: &str) -> InstrumentRef {
@@ -20,7 +19,6 @@ fn iref(symbol: &str) -> InstrumentRef {
 #[tokio::test]
 async fn resolve_symbol_reads_search_redirect_location() {
     let server = MockServer::start().await;
-    // The search 302-redirects an exact ticker to /cours/<symbol>/.
     Mock::given(method("GET"))
         .and(path("/recherche/"))
         .and(query_param("query", "PUST"))
@@ -59,13 +57,11 @@ async fn fetch_composition_extracts_country_and_sector_from_real_page() {
     let p = BoursoramaCompositionProvider::new(server.uri());
     let comp = p.fetch_composition("1rTPUST").await.unwrap();
 
-    // Country (regional) breakdown — values are percentages in the page.
     assert_eq!(comp.countries[0].name, "Etats-Unis");
     assert!((comp.countries[0].weight - 0.9755).abs() < 1e-9);
-    // Sector breakdown.
     assert_eq!(comp.sectors[0].name, "Technologie");
     assert!((comp.sectors[0].weight - 0.5853).abs() < 1e-9);
-    // The "portfolio" (asset-allocation) chart must NOT leak into either field.
+    // The "portfolio" chart must not leak into either field.
     assert!(comp.countries.iter().all(|a| a.name != "Actions"));
     assert!(comp.sectors.iter().all(|a| a.name != "Actions"));
 }

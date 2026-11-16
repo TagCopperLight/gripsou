@@ -1,0 +1,61 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        -- Days are UTC days, as in the transactions list's filter (`budget_transaction_matches`): a breakdown row\n        -- deep-links into that list, so both must bucket days alike.\n        --\n        -- `txn_day()` is not used: the list does not use it, and agreeing with the list is what counts.\n        --\n        -- The list's own rows (`budget_transaction_rows`), cash only: buying a security is not spending. The\n        -- threshold only feeds `needs_review`, unused here.\n        with base as (\n            select r.day,\n                   r.amount,\n                   r.account_currency,\n                   -- An orphaned `pair` row lost its partner, so it counts by its sign like any uncategorised row.\n                   case when r.is_orphan_transfer then null\n                        else r.category_id end as category_id,\n                   case when r.is_orphan_transfer then null\n                        else r.category_kind end as category_kind,\n                   -- Uncategorised rows have no category to net within, so `figures()` reads each row's sign. This is 0 for\n                   -- categorised rows and +1/-1 otherwise, so a mixed-sign uncategorised day stays two rows. It only widens\n                   -- the grouping key.\n                   case when r.category_id is null\n                             or r.is_orphan_transfer then sign(r.amount)\n                        else 0 end as uncategorised_sign\n            from budget_transaction_rows($1, 0) r\n            where r.source = 'cash'\n              and r.day between $2 and $3\n              -- A paired transfer nets to zero, but both halves are dropped rather than left to cancel: a pair\n              -- straddling a month end would leave -x in one month and +x in the next, and cross-currency halves\n              -- convert at different rates.\n              and not r.is_transfer\n              -- A neutral category counts toward nothing, except an orphaned `pair` row: it reads as uncategorised\n              -- above, so it must not be dropped with its old category.\n              and (r.is_orphan_transfer or r.category_kind is distinct from $4)\n        ),\n        grid as materialized (\n            select as_of, currency, rate\n            from fx_grid(array(select distinct day from base))\n        ),\n        reporting as (\n            select (select currency from users where id = $1) as code\n        ),\n        -- Both legs resolve at the transaction's own date, so budget totals and net worth agree on what a euro\n        -- was worth that day.\n        converted as (\n            select b.*, fx_convert(b.amount, afx.rate, rfx.rate) as reporting_amount\n            from base b\n            left join grid afx on afx.as_of = b.day and afx.currency = b.account_currency\n            left join grid rfx on rfx.as_of = b.day\n                              and rfx.currency = (select code from reporting)\n        )\n        select b.day as \"day!\",\n               b.category_id as \"category_id?\",\n               b.category_kind as \"category_kind?: CategoryKind\",\n               coalesce(sum(b.reporting_amount), 0) as \"amount!\",\n               count(*) as \"txn_count!\",\n               coalesce(bool_or(b.reporting_amount is null), false) as \"fx_missing!\"\n        from converted b\n        group by b.day, b.category_id, b.category_kind, b.uncategorised_sign\n        order by b.day, b.category_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day!",
+        "type_info": "Date",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "category_id?",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "category_kind?: CategoryKind",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "txn_count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "fx_missing!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Date",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "d04138133548aa9a34053e355d2a6be9bb235ac75b972f6cf329c22c0bd9639e"
+}

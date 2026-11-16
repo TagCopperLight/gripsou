@@ -9,20 +9,14 @@ use crate::sync::{Trigger, claim};
 use crate::{Deps, enabled_provider};
 
 pub enum WebhookOutcome {
-    /// Unknown, unconfigured or disabled provider.
     NotFound,
-    /// Signature rejected.
     Unauthorized,
-    /// Verified: acted on, ignored, or for an unknown connection.
     Accepted,
     /// The database could not say whether the provider is enabled: the
     /// provider retries.
     Unavailable,
 }
 
-/// Verify an incoming webhook and, if it signals a finished sync, claim the
-/// connection and run the full-fetch. Always returns Accepted on a valid
-/// signature so the provider stops retrying.
 pub async fn handle_webhook(
     db: Db,
     deps: &Arc<Deps>,

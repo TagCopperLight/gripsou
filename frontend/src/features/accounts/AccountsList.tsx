@@ -10,16 +10,13 @@ import { accountTypeLabel, groupByConnection } from "../../lib/accounts";
 import { sharesById } from "../../lib/distribution";
 
 type AccountsListProps = {
-  /** The account under the pointer (null when it leaves), for the chart. */
   onHover?: (accountId: string | null) => void;
   className?: string;
 };
 
-/** The all-accounts summary, then one card per connection. */
 export function AccountsList({ onHover, className = "" }: AccountsListProps) {
   const { t } = useTranslation();
   const { data, isPending, refetch } = useAccounts();
-  // One eye, on the summary card, for every amount of the list.
   const privacy = usePrivacy();
 
   if (isPending) return <AccountsListSkeleton className={className} />;
@@ -32,11 +29,8 @@ export function AccountsList({ onHover, className = "" }: AccountsListProps) {
     );
   }
 
-  // No accounts (nothing connected, a first sync running, or nothing came
-  // in): the chart above already says so and what to do.
   if (data.length === 0) return null;
 
-  // One width for the type tags on every card, so they line up page-wide.
   const tagCh = Math.max(0, ...data.map((a) => accountTypeLabel(t, a.typeKey).length));
   const shares = sharesById(data);
 

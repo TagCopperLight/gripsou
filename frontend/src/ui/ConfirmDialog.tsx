@@ -7,26 +7,17 @@ import { Button, type BusyProps } from "./Button";
 
 type ConfirmDialogProps = BusyProps & {
   title: string;
-  /** What will happen, in a sentence or two. */
   body: ReactNode;
   confirmLabel: string;
-  /** `danger` for a deletion (red icon and button); `warning` for a write
-   *  that is allowed but easy to regret (amber icon, plain button). */
   tone?: "danger" | "warning";
-  /** A field to fill before confirming (a password, the email typed back),
-   *  shown under the body. */
   children?: ReactNode;
-  /** Keeps the action off until `children` is filled in. */
   confirmDisabled?: boolean;
-  /** The large window, for a title or a field with long values in it. */
   large?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 };
 
-/** "Are you sure?" as one component: a sentence, Cancel, and one action.
- *  Cancel takes focus on open, so a stray Enter backs out instead of
- *  confirming; with a field to fill (`children`), the field takes it. */
+/** Cancel takes focus on open so a stray Enter backs out; with `children`, the field takes it. */
 export function ConfirmDialog({
   title, body, confirmLabel, tone = "danger", busy, busyLabel, children, confirmDisabled = false, large = false,
   onConfirm, onClose,

@@ -13,8 +13,7 @@ import { DEFAULT_PREFS } from "./api/wire";
 import { MAIN_SCROLL_SELECTOR, scrollRestorationOptions } from "./lib/scroll";
 import { authValue, signedOut, testUser, renderWithApp, jsonResponse, stubFetch } from "./test/kit";
 
-// The dashboard mounts ECharts cards that don't render in jsdom; for routing
-// tests we only care that we *land* on it, so stub it to a sentinel.
+// ECharts cards don't render in jsdom: stub the dashboard.
 vi.mock("./features/dashboard/Dashboard", () => ({
   Dashboard: () => <div>dashboard-page</div>,
 }));
@@ -70,7 +69,6 @@ describe("public invite/reset routes", () => {
   });
 
   it("renders /invite for an unauthenticated visitor without redirecting to login", async () => {
-    // Token guard fetch: return a valid invite so the page renders its form.
     stubFetch(async () => jsonResponse({ type: "invite", email: null }));
     renderAt("/invite/abc", unauth);
     expect(await screen.findByText("Create your account")).toBeInTheDocument();
@@ -85,8 +83,7 @@ describe("login redirect", () => {
     vi.restoreAllMocks();
   });
 
-  // Regression: a successful login must land on the dashboard, not bounce the
-  // user back to /login because the route guard read a stale auth context.
+  // Regression: a successful login must land on the dashboard despite a stale auth context in the route guard.
   it("sends the user to the dashboard after a successful login", async () => {
     stubFetch(async (url: string) =>
         url.includes("/auth/login")
@@ -120,9 +117,7 @@ describe("scroll reset on navigation", () => {
     stubFetch(async () => jsonResponse([]));
   });
 
-  // Regression: the app scrolls inside <main>, which belongs to the pathless
-  // `app` route and so survives navigation. Without the router's scroll
-  // restoration naming it, the previous page's scrollTop would carry over.
+  // Regression: `<main>` survives navigation, so the router must restore its scrollTop.
   it("scrolls the main container back to the top when navigating to a new page", async () => {
     const router = renderAt("/settings/budget", authedUser);
     await waitFor(() => expect(router.state.location.pathname).toBe("/settings/budget"));
@@ -154,7 +149,6 @@ describe("welcome guard", () => {
   });
 
   it("hands the bank's raw query to the welcome screen", async () => {
-    // The provider's query as the browser has it, which the guard forwards untouched.
     window.history.pushState({}, "", "/connections/callback?state=c42&code=1e3&connection_id=7");
     try {
       const router = renderAt("/connections/callback?state=c42&code=1e3&connection_id=7", newcomer);
@@ -218,7 +212,6 @@ describe("finishing the welcome screen", () => {
     setAuthToken("t");
     vi.restoreAllMocks();
         stubFetch(async (url: string) => {
-        // /auth/me and the prefill's prefs save both answer with the session user.
         if (url === "/api/auth/me" || url === "/api/auth/prefs")
           return jsonResponse({ id: "u1", name: "Ann", email: "a@t.local", role: "user", prefs: DEFAULT_PREFS, welcomeDone: false });
         if (url === "/api/auth/welcome") return new Response(null, { status: 204 });
@@ -227,7 +220,6 @@ describe("finishing the welcome screen", () => {
       });
   });
 
-  // The whole chain: skip -> POST -> updateUser -> App invalidates -> guard leaves /welcome.
   it("leaves /welcome once the user skips the setup", async () => {
     renderWithApp(<App />, { auth: "provider" });
 

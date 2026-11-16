@@ -1,25 +1,15 @@
-//! Pure parsers for Boursorama tracker data. Kept separate from the HTTP
-//! adapter so they unit-test against recorded fixtures without a network.
-//!
 //! Boursorama embeds the composition breakdowns as JSON for its pie charts, e.g.
 //! `"brs":{...,"valueField":"value","id":"regional"}, ... "amChartData":[{"name":..,"value":..}]`
-//! where `value` is already a percentage. `id` is `"regional"` (country) or
-//! `"sector"`. We extract those arrays directly — far more stable than scraping
-//! the visible markup.
-//!
-//! The `id` anchors ("regional"/"sector") and the search→`/cours/<sym>/`
-//! redirect shape are what to recheck if Boursorama changes its pages.
+//! where `value` is already a percentage and `id` is `"regional"` (country) or `"sector"`.
+//! Recheck those `id` anchors and the search redirect shape if Boursorama changes its pages.
 
 use gripsou_core::dto::Allocation;
 use serde::Deserialize;
 
-/// `"PUST.PA" -> "PUST"`. Boursorama search wants the bare ticker.
 pub(crate) fn bare_ticker(symbol: &str) -> String {
     symbol.split('.').next().unwrap_or(symbol).to_string()
 }
 
-/// The search 302-redirects an exact ticker to `/cours/<symbol>/`. Pull the last
-/// path segment as the Boursorama symbol (e.g. `/cours/1rTPUST/` -> `1rTPUST`).
 pub(crate) fn symbol_from_location(location: &str) -> Option<String> {
     location
         .trim_end_matches('/')
@@ -35,14 +25,11 @@ struct AmPoint {
     value: f64,
 }
 
-/// Extract one embedded chart dataset by its `brs.id` ("regional" | "sector").
-/// Returns weights as ratios in 0..1. `Ok(empty)` when the page has no such
-/// chart (not a tracker, or no breakdown). `Err` when the chart's anchor is
-/// there but its data can't be read: the page layout changed, and that must
-/// not be mistaken for "this fund has no composition".
+/// Weights are ratios in 0..1. `Ok(empty)` when the page has no such chart (not a tracker, or no
+/// breakdown). `Err` when the anchor is there but its data can't be read: the layout changed, and
+/// that must not be mistaken for "no composition".
 pub(crate) fn parse_amchart_data(html: &str, id: &str) -> Result<Vec<Allocation>, String> {
-    // Anchor on the full `valueField`+`id` pair so a stray `"id":"sector"`
-    // elsewhere on the page can't match.
+    // Anchor on the full `valueField`+`id` pair: a stray `"id":"sector"` elsewhere must not match.
     let anchor = format!("\"valueField\":\"value\",\"id\":\"{id}\"");
     let Some(start) = html.find(&anchor) else {
         return Ok(Vec::new());
@@ -54,7 +41,6 @@ pub(crate) fn parse_amchart_data(html: &str, id: &str) -> Result<Vec<Allocation>
     let after = start + rel + "\"amChartData\":".len();
     let open = after + html[after..].find('[').ok_or_else(unreadable)?;
 
-    // Find the matching `]` (names contain no brackets, so a depth count is safe).
     let bytes = html.as_bytes();
     let mut depth = 0i32;
     let mut end = None;
@@ -84,13 +70,9 @@ pub(crate) fn parse_amchart_data(html: &str, id: &str) -> Result<Vec<Allocation>
         .collect())
 }
 
-/// Folds lines that share a name into the first one, adding their weights,
-/// and returns the names that were repeated. Boursorama's sector chart has
-/// sent two different sectors under one label (since its 2026 relabelling:
-/// "Biens de consommation cycliques" twice, "Finance" twice), with nothing on
-/// the page to tell them apart. A merged line keeps the total right; two lines
-/// with one name would show twice in a fund and be summed by name across
-/// funds anyway.
+/// Folds lines that share a name into the first, adding weights; returns the repeated names.
+/// Boursorama's sector chart sends two different sectors under one label with nothing to tell them
+/// apart; one line per name keeps the total right and avoids double rows when summing across funds.
 pub(crate) fn merge_same_names(items: Vec<Allocation>) -> (Vec<Allocation>, Vec<String>) {
     let mut merged: Vec<Allocation> = Vec::with_capacity(items.len());
     let mut repeated: Vec<String> = Vec::new();
@@ -112,8 +94,6 @@ pub(crate) fn merge_same_names(items: Vec<Allocation>) -> (Vec<Allocation>, Vec<
 mod tests {
     use super::*;
 
-    // A compact excerpt mirroring Boursorama's real embedded JSON shape, including
-    // a \u escape (decoded by serde) and the unrelated "portfolio" chart.
     const SAMPLE: &str = r#"
       {"amChartConfig":{"brs":{"categoryField":"name","valueField":"value","id":"regional"}},"amChartData":[{"name":"Etats-Unis","value":97.55},{"name":"Pays-Bas","value":0.84}]}
       {"amChartConfig":{"brs":{"categoryField":"name","valueField":"value","id":"portfolio"}},"amChartData":[{"name":"Actions","value":100}]}
@@ -155,13 +135,11 @@ mod tests {
         assert_eq!(a.len(), 2);
         assert_eq!(a[0].name, "Technologie");
         assert!((a[0].weight - 0.5853).abs() < 1e-9);
-        // é decoded to é by serde.
         assert_eq!(a[1].name, "Biens de consommation défensive");
     }
 
     #[test]
     fn merge_same_names_adds_up_a_repeated_sector_once() {
-        // Boursorama's PUST page, October 2026: two sectors under one name.
         let html = r#""valueField":"value","id":"sector"},"amChartData":[{"name":"Technologie","value":60.23},{"name":"Biens de consommation cycliques","value":10.05},{"name":"Biens de consommation cycliques","value":5.55},{"name":"Finance","value":0.19}]"#;
         let (merged, repeated) = merge_same_names(parse_amchart_data(html, "sector").unwrap());
         let names: Vec<&str> = merged.iter().map(|a| a.name.as_str()).collect();

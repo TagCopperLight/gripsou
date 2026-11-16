@@ -46,7 +46,6 @@ export function TagsSurface() {
         ) : data.length === 0 ? (
           <p className="text-sm text-fg-faint">{t("settings.budget.tags.empty")}</p>
         ) : (
-          // Each tag as it looks on a transaction; pressing one opens it.
           <ul className="flex flex-wrap gap-2">
             {data.map((tag) => (
               <li key={tag.id} className="max-w-full">

@@ -70,8 +70,7 @@ describe("SettingsConnections", () => {
   });
 
   it("shows an error state with retry when the fetch fails", async () => {
-    // isLoading is false once a query errors, so the error branch must not be
-    // nested under isLoading — otherwise an API failure shows the empty state.
+    // isLoading is false once a query errors, so the error branch must not sit under isLoading.
     stubFetch(async () => new Response("nope", { status: 500 }));
     renderWithApp(<SettingsConnections />);
     expect(await screen.findByText("Couldn't load this")).toBeInTheDocument();

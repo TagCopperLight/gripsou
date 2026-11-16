@@ -83,7 +83,6 @@ describe("ChangePasswordModal", () => {
     fireEvent.click(update());
     expect(screen.getByText(lengthError)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
-    // Editing the new password clears the error.
     set("New password", "12345678");
     expect(screen.queryByText(lengthError)).not.toBeInTheDocument();
   });

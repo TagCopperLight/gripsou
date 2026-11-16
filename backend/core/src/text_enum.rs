@@ -1,9 +1,7 @@
-//! `text_enum!`: a closed value set stored in a `text` column with a check
-//! constraint. One declaration gives the Rust enum, its spelling on the wire
-//! (serde) and in the database (sqlx), all from the same string per variant.
-//! `core/tests/it/value_sets.rs` pins each set against its migration.
+//! One string per variant gives the Rust enum, its wire spelling (serde) and its database
+//! spelling (sqlx) for a `text` column with a check constraint. `core/tests/it/value_sets.rs`
+//! pins each set against its migration.
 
-/// The value a column held was not one of the enum's spellings.
 #[derive(Debug)]
 pub struct UnknownValue {
     pub set: &'static str,

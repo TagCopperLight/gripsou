@@ -3,10 +3,9 @@ import type { UserPrefs } from "../api/wire";
 import { getPrefs } from "./prefs";
 
 export type DateFormatOptions = {
-  /** Token pattern. Supports YYYY, YY, MM, DD. Defaults to the user's prefs. */
+  /** Tokens YYYY, YY, MM, DD. */
   pattern?: string;
   timeZone?: string;
-  /** The prefs to fall back on. Defaults to the signed-in user's. */
   prefs?: UserPrefs;
 };
 
@@ -26,10 +25,7 @@ export function formatDate(
   return pattern.replace(/YYYY|YY|MM|DD/g, (token) => tokens[token]);
 }
 
-/**
- * Human "time ago" for sync timestamps. null → "Never synced". Past two weeks,
- * falls back to an absolute date via formatDate (so date prefs still apply).
- */
+/** null → "Never synced". Past two weeks, an absolute date. */
 export function formatRelative(
   value: number | null,
   options: DateFormatOptions = {},
@@ -49,7 +45,6 @@ export function formatRelative(
   return formatDate(value, options);
 }
 
-/** Calendar day of a real instant in the user's saved timezone. */
 export function zonedDay(value: Date | number | string = new Date(), timeZone = getPrefs().timeZone): string {
   const d = value instanceof Date ? value : new Date(value);
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -59,8 +54,7 @@ export function zonedDay(value: Date | number | string = new Date(), timeZone = 
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
-/** API calendar dates are encoded as UTC-midnight epoch milliseconds.
- * They are labels, not instants to shift into the viewer's timezone. */
+/** UTC-midnight epoch ms: labels, not instants to shift into the viewer's timezone. */
 export function calendarDay(value: number): string {
   return new Date(value).toISOString().slice(0, 10);
 }

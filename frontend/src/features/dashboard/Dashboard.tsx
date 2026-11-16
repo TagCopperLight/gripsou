@@ -7,8 +7,6 @@ import { useAccounts } from "../../api/accounts";
 
 export function Dashboard() {
   const { t } = useTranslation();
-  // With no accounts the net worth card says why and what to do; the two
-  // cards below would only be an empty ring and a bare table header.
   const noAccounts = useAccounts().data?.length === 0;
   return (
     <div>

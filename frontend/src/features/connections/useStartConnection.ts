@@ -3,9 +3,6 @@ import { useEnabledProviders, useInitConnection } from "../../api/connections";
 import { useErrorToast } from "../../lib/errorToasts";
 import { goTo } from "../../lib/navigate";
 
-/** Adding a bank: straight to the provider when only one is enabled, else
- *  through the picker. The provider's page sends the user back to the
- *  callback; a provider without one goes to `returnTo`. */
 export function useStartConnection({ returnTo, errorMessage }: { returnTo: string; errorMessage: string }) {
   const providers = useEnabledProviders();
   const init = useInitConnection();

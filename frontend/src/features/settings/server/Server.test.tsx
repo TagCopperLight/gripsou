@@ -8,14 +8,12 @@ const PROVIDERS: Provider[] = [
   { key: "powens", displayName: "Powens", description: "Bank aggregation.", enabled: true },
 ];
 
-// The Budget AI blocks read their own settings and usage; every stub answers
-// them the same way.
 const budgetAiRes = (url: string) =>
   jsonResponse(url.endsWith("/usage")
         ? { currency: "USD", models: [], totalCost: "0" }
         : { provider: null, model: null, available: [], defaults: { jev: "j" } });
 
-describe("SettingsServer — data providers", () => {
+describe("SettingsServer: data providers", () => {
   beforeEach(() => {
     stubFetch(async (url: string, init?: RequestInit) => {
         if (url.includes("/settings/budget-ai")) return budgetAiRes(url);

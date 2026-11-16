@@ -15,18 +15,15 @@ import { Bone, TextBone } from "../../ui/Skeleton";
 import { boneWidths } from "../../ui/boneWidths";
 
 const HIDDEN_ON_PHONE = "hidden md:table-cell";
-// The figure columns get a wide left gutter so they don't run together.
+// Wide left gutter so the figure columns don't run together.
 const PAD_TEXT = "px-2 md:px-3";
 const PAD_FIGURE = "pl-4 pr-2 md:pl-10 md:pr-3";
 
 type ReturnsCardProps = {
-  /** Undefined while loading: three rows of bones. */
   data?: InvestmentReturns;
   className?: string;
 };
 
-/** One row per account holding securities: its annualised return and the
- *  money it annualises (put in, received, held, gained). */
 export function ReturnsCard({ data, className = "" }: ReturnsCardProps) {
   const { t } = useTranslation();
   const privacy = usePrivacy();
@@ -80,7 +77,7 @@ function AccountRow({ account: a, today, masked }: { account: ReturnAccount; tod
   const partial = leavesOut(a);
   // Every holding left out: the figures cover nothing, rather than read 0.
   const empty = partial && Number(a.invested) === 0 && Number(a.value) === 0;
-  // A dash, not a guess, when the figure is unknown (a rate is missing).
+  // A dash, not a guess, when a rate is missing.
   const money = (value: string | null, className: string) =>
     empty || value === null ? none : <MaskedMoney masked={masked} value={value} className={className} />;
   const none = <span className="text-sm text-fg-faint">—</span>;
@@ -151,9 +148,6 @@ function AccountRow({ account: a, today, masked }: { account: ReturnAccount; tod
   );
 }
 
-/** Three rows in the table's cells and line heights while the returns load.
- *  A `<tbody>` can't hold a `Skeleton`, so each row pulses on its own and is
- *  hidden from screen readers. */
 function RowsSkeleton() {
   const row = "py-3 border-t border-surface-2";
   const cell = `${row} ${PAD_FIGURE}`;

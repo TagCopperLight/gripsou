@@ -1,7 +1,4 @@
-//! Applies the migrations to `DATABASE_URL` and exits. `ci.sh` runs it on its
-//! throwaway Postgres's `template1` (the reason is there).
-//!
-//!     DATABASE_URL=postgres://.../template1 cargo run --example migrate
+//! Applies the migrations to `DATABASE_URL` and exits (`ci.sh` runs it on `template1`).
 
 use sqlx::PgPool;
 
@@ -11,8 +8,7 @@ async fn main() -> anyhow::Result<()> {
         std::env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
     let pool = PgPool::connect(&url).await?;
     sqlx::migrate!("../migrations").run(&pool).await?;
-    // Close explicitly: Postgres refuses to copy a template that still has a
-    // connection open.
+    // Close explicitly: Postgres refuses to copy a template with an open connection.
     pool.close().await;
     Ok(())
 }

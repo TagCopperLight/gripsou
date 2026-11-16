@@ -12,14 +12,11 @@ import { useAuth } from "../../../auth/context";
 import { useAiStatus } from "../../../api/budget";
 import { BUDGET_AI_THRESHOLD_MAX, BUDGET_AI_THRESHOLD_MIN } from "../../../api/wire";
 
-/** Settings → Budget: the per-user half of AI categorisation: opt-in and threshold. The
- *  provider, model and key are the operator's (Settings → Server). */
+/** The per-user half of AI categorisation. The provider, model and key are the operator's (Settings → Server). */
 export function AiSurface() {
   const { t } = useTranslation();
   const status = useAiStatus();
-  // Until the server answers, whether a provider is set up is unknown: the
-  // controls show, off, rather than a warning that may not apply. Their values
-  // are the user's own prefs, already known.
+  // Until the server answers, whether a provider exists is unknown: show the controls, off, not a warning that may not apply.
   return (
     <SettingsSurface title={t("settings.budget.ai.title")}>
       {status.isError && status.data === undefined ? (
@@ -35,8 +32,6 @@ export function AiSurface() {
   );
 }
 
-/** Nothing in the card works without a provider, so it says only that. An admin
- *  can set one up; anyone else has no way to, so gets no button. */
 function NoProvider() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -64,7 +59,7 @@ function NoProvider() {
 function AiControls() {
   const { t } = useTranslation();
   const { prefs, updatePrefs } = useAuth();
-  // Local while dragging; saved once on release, not on every tick.
+  // Local while dragging; saved on release.
   const [draft, setDraft] = useState<number | null>(null);
   const threshold = draft ?? prefs.budgetAiThreshold;
 

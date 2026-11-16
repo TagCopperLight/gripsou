@@ -67,8 +67,6 @@ async fn welcome_starts_pending_and_finishing_is_idempotent(pool: PgPool) -> any
     Ok(())
 }
 
-/// One admin removed while the only other one is being removed: the second
-/// removal waits for the first, then refuses, so the server keeps an admin.
 #[gripsou_core::testkit::db_test]
 async fn the_last_two_admins_removed_at_once_leave_one(pool: PgPool) -> anyhow::Result<()> {
     use gripsou_core::repo::user::{AdminGuarded, delete_user, set_role};

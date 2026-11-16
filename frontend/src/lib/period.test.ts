@@ -2,7 +2,6 @@ import { beforeEach, afterEach } from "vitest";
 import { DEFAULT_PREFS } from "../api/wire";
 import { setPrefs } from "./prefs";
 
-// These calendar-arithmetic fixtures use local Date constructors.
 beforeEach(() => setPrefs({ ...DEFAULT_PREFS, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
 afterEach(() => setPrefs(DEFAULT_PREFS));
 
@@ -38,8 +37,6 @@ describe("monthLabel", () => {
 
 describe("anchorMonth", () => {
   it("is the month containing `to` in range mode", () => {
-    // A range has no anchor of its own, so the trend anchors on the
-    // month its end date falls in rather than disappearing.
     expect(anchorMonth({ mode: "range", from: "2025-11-04", to: "2026-03-18" })).toBe(
       "2026-03",
     );
@@ -48,8 +45,6 @@ describe("anchorMonth", () => {
 
 describe("periodLabel", () => {
   it("labels a range as two formatted dates", () => {
-    // Uses the user's date-format preference, whose default pattern is
-    // DD/MM/YYYY.
     expect(periodLabel({ mode: "range", from: "2026-03-14", to: "2026-04-02" }, "en")).toBe(
       "14/03/2026 → 02/04/2026",
     );
@@ -57,7 +52,7 @@ describe("periodLabel", () => {
 });
 
 describe("presetRange", () => {
-  const today = new Date(2026, 8, 21); // 21 September 2026, local
+  const today = new Date(2026, 8, 21);
 
   it("makes every 'last N months' a rolling window ending today", () => {
     expect(presetRange("last3Months", today)).toEqual({ from: "2026-06-21", to: "2026-09-21" });

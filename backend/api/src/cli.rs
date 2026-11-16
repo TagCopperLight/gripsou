@@ -1,7 +1,4 @@
-//! Operator commands run by the `gripsou` binary instead of the server.
-
-/// `gripsou reset-2fa <email>`: turn off every second factor of that user and
-/// sign them out everywhere. Returns the process exit code.
+/// Also signs the user out everywhere. Returns the process exit code.
 pub async fn reset_two_factor(db: &sqlx::PgPool, email: Option<String>) -> i32 {
     let Some(email) = email else {
         eprintln!("usage: gripsou reset-2fa <email>");
@@ -49,7 +46,6 @@ mod tests {
 
     use gripsou_core::testkit::seed_user_email;
 
-    /// The `second factors cleared` line is written only when something was.
     #[gripsou_core::testkit::db_test]
     async fn logs_only_when_something_was_cleared(pool: PgPool) {
         let (_g, mut writer) = gripsou_core::logs::capture(100);

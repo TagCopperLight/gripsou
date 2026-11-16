@@ -5,8 +5,6 @@ import { useErrorToast } from "../../lib/errorToasts";
 
 export type BudgetErrorKey = "duplicate" | "gone" | "saveError";
 
-/** The one place that turns a failed budget write into a translation key.
- *  Branches on `ApiError.status`, never on message text. */
 export function budgetErrorKey(err: unknown): BudgetErrorKey {
   if (err instanceof ApiError) {
     if (err.status === 409) return "duplicate";
@@ -15,9 +13,7 @@ export function budgetErrorKey(err: unknown): BudgetErrorKey {
   return "saveError";
 }
 
-/** Shows a failed budget write in the corner, worded from `namespace`'s
- *  `duplicate`/`gone`/`saveError` keys. `inline` is the failure the screen
- *  shows beside its field instead. */
+/** `inline` is the failure the screen shows beside its field instead. */
 export function useBudgetErrorToast(
   failure: BudgetErrorKey | null,
   namespace: string,

@@ -5,13 +5,11 @@ import { CW8 } from "./data/base.ts";
 import { router } from "./routes/index.ts";
 import { createStore } from "./store.ts";
 
-/** Server routes the app never calls, so the mock leaves them out. */
 const NOT_MOCKED: readonly Route[] = [
   // Providers call it, not the app.
   "POST /webhooks/:provider",
 ];
 
-/** A value for each path parameter of a server GET, and the queries it requires. */
 const PARAMS: Record<string, string> = { id: CW8, token: "abc", provider: "jev" };
 const QUERIES: Record<string, Record<string, string>> = {
   "/budget/trend": { anchor: "2026-09" },

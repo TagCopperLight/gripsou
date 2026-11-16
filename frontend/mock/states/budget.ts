@@ -6,13 +6,11 @@ import { queueForReview, summary } from "../views/budget.ts";
 import { addAccount, addRow, queue, security } from "./helpers.ts";
 import type { MockState } from "./pieces.ts";
 
-/** This month's net (income − expenses), as the overview shows it. */
 function monthNet(store: Store): number {
   const month = isoDay(TODAY).slice(0, 7);
   return Number(summary(store, { month }).figures.net.amount);
 }
 
-/** One more expense today, filed under housing. */
 function addExpense(store: Store, description: string, amount: number) {
   addRow(store, "housing", { t: TODAY, type: "card", accountId: CHECKING, description, amount: -amount });
 }

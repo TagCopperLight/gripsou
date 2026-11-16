@@ -1,7 +1,6 @@
-// What the invested money is exposed to, looking through funds: each holding's
-// value is spread over its fund's country and sector weights, then summed.
-// Cash never enters here, and a holding with no composition data is left out
-// of the sector and region breakdowns (but still counts in "by index").
+// Looking through funds: each holding's value is spread over its fund's country
+// and sector weights. Cash never enters; a holding with no composition is left
+// out of sector and region breakdowns but still counts "by index".
 
 import type { Allocation, Composition } from "../api/wire";
 import { countryCode } from "./composition-i18n";
@@ -10,22 +9,18 @@ import { trackedIndex } from "./indices";
 export type ExposureHolding = {
   name: string;
   kind: string;
-  /** Current value, in the reporting currency. */
   value: number;
   composition: Composition | null;
 };
 
-/** The leftover of a fund that lists only its top countries or sectors, and
- *  countries that belong to no known region. */
+/** The unlisted remainder of a fund, and countries in no known region. */
 export const OTHER = "other";
 
-/** Shares held directly, in the by-index breakdown. */
 export const STOCKS = "stocks";
 
 export type Region = "northAmerica" | "europe" | "asiaPacific" | typeof OTHER;
 
-/** Breakdowns keep their largest entries and fold the rest into OTHER, so a
- *  long tail of slivers doesn't crowd the donut and its legend. */
+/** Largest entries kept, the rest folded into OTHER so slivers don't crowd the donut. */
 const TOP_SECTORS = 6;
 const TOP_COUNTRIES_PER_REGION = 5;
 
@@ -33,7 +28,6 @@ export type Slice = {
   key: string;
   /** Raw name (a Boursorama label, an index), or OTHER / STOCKS. */
   name: string;
-  /** Share of the breakdown's total, 0..1. */
   share: number;
 };
 
@@ -46,8 +40,7 @@ export type RegionSlice = Slice & {
 export type Exposure = {
   sectors: Slice[];
   regions: RegionSlice[];
-  /** Funds by the index they track, shares held directly as one STOCKS
-   *  slice, funds of no known index as OTHER. */
+  /** Shares held directly are one STOCKS slice, funds of no known index OTHER. */
   indices: Slice[];
   /** Value of every holding. */
   total: number;
@@ -55,9 +48,8 @@ export type Exposure = {
   covered: number;
 };
 
-// Geographic, so every country has exactly one home. Countries outside this
-// set fall into OTHER rather than being guessed. Latin America and the Middle
-// East & Africa weigh too little in typical funds to earn a region of their own.
+// One home per country; others fall into OTHER. Latin America and Middle East &
+// Africa are too small in typical funds to be regions.
 const REGION_OF: Record<string, Region> = {
   US: "northAmerica", CA: "northAmerica",
   GB: "europe", FR: "europe", DE: "europe", CH: "europe", NL: "europe",
@@ -74,14 +66,12 @@ export function regionOf(country: string): Region {
   return (code && REGION_OF[code]) || OTHER;
 }
 
-// Largest first, with OTHER always last whatever its size.
 function bySize(a: Slice, b: Slice): number {
   if (a.key === OTHER) return 1;
   if (b.key === OTHER) return -1;
   return b.share - a.share;
 }
 
-/** Spread `value` over `weights`, the unlisted remainder going to OTHER. */
 function spread(into: Map<string, number>, weights: Allocation[], value: number) {
   let listed = 0;
   for (const w of weights) {
@@ -100,8 +90,6 @@ function toSlices(sums: Map<string, number>, total: number): Slice[] {
     .sort(bySize);
 }
 
-/** The `n` largest slices, everything else (OTHER included) merged into one
- *  OTHER slice at the end. */
 export function capped(slices: Slice[], n: number): Slice[] {
   const named = slices.filter((s) => s.key !== OTHER);
   if (named.length <= n) return slices;

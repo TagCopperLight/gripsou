@@ -4,8 +4,6 @@ import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { Toggle } from "../../../ui/Toggle";
 import { useAuth } from "../../../auth/context";
 
-/** Settings → Budget: the one per-user display preference the transactions table reads.
- *  Shaped like the General page's privacy setting, auto-saving on change. */
 export function ListPrefsSurface() {
   const { t } = useTranslation();
   const { prefs, updatePrefs } = useAuth();

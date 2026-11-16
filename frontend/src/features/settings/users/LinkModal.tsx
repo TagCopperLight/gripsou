@@ -9,8 +9,7 @@ type LinkModalProps = {
   title: string;
   subtitle: string;
   body: string;
-  link: string | null; // null while the token is still being generated
-  /** The link could not be made. */
+  link: string | null; // null while the token is being generated
   error?: boolean;
   onClose: () => void;
 };

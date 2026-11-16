@@ -55,11 +55,6 @@ function hslToRgb({ h, s, l }: Hsl): Rgb {
   };
 }
 
-/**
- * Drain most of a colour's saturation (and dim it slightly) while keeping its
- * hue, so a "greyed" slice still reads as the same colour, just muted.
- * @param amount fraction of saturation to remove (0 = unchanged, 1 = grey).
- */
 export function desaturate(hex: string, amount = 0.82, darken = 0.12): string {
   const hsl = rgbToHsl(hexToRgb(hex));
   return rgbToHex(
@@ -67,18 +62,12 @@ export function desaturate(hex: string, amount = 0.82, darken = 0.12): string {
   );
 }
 
-/** A hex colour as an `rgba(...)` string at the given alpha (0–1). */
 export function withAlpha(hex: string, alpha: number): string {
   const { r, g, b } = hexToRgb(hex);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/**
- * A tint of `hex` flattened into an opaque colour, as if it were painted at
- * `alpha` over the app surface. Chips use this rather than a translucent fill
- * so that whatever the row behind them happens to be — a hover, a green
- * selection — never bleeds through and shifts their hue.
- */
+/** Opaque, so whatever is behind a chip (a hover, a green selection) never bleeds through and shifts its hue. */
 export function tint(hex: string, alpha: number, base = SURFACE): string {
   const c = hexToRgb(hex);
   const b = hexToRgb(base);
@@ -89,11 +78,7 @@ export function tint(hex: string, alpha: number, base = SURFACE): string {
   });
 }
 
-/**
- * The `index`-th of `count` shades of `hex`, from a little lighter to a little
- * darker, so children of one slice read as one family (e.g. the countries of a
- * region on the outer ring of a donut). A single child keeps the colour as is.
- */
+/** A single child keeps the colour as is. */
 export function shade(hex: string, index: number, count: number, spread = 0.22): string {
   if (count <= 1) return hex;
   const hsl = rgbToHsl(hexToRgb(hex));
@@ -101,7 +86,6 @@ export function shade(hex: string, index: number, count: number, spread = 0.22):
   return rgbToHex(hslToRgb({ ...hsl, l: Math.min(0.85, Math.max(0.25, l)) }));
 }
 
-/** Hue (0–360), saturation and value (0–1): the colour picker's axes. */
 export type Hsv = { h: number; s: number; v: number };
 
 export function hexToHsv(hex: string): Hsv {

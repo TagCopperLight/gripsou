@@ -38,8 +38,7 @@ use gripsou_core::crypto::EncryptionKey;
 pub struct AppState {
     pub db: sqlx::PgPool,
     pub throttles: Arc<Throttles>,
-    /// Encrypts the authenticator secrets (and the provider credentials:
-    /// the same key the jobs hold).
+    /// Also encrypts the provider credentials (the same key the jobs hold).
     pub key: EncryptionKey,
     pub jobs: Arc<gripsou_jobs::Deps>,
     pub passkeys: Passkeys,
@@ -58,7 +57,6 @@ fn member_routes() -> routes::Routes {
         .merge(connections::routes())
 }
 
-/// Every route under `/api`, the admin ones included.
 fn api_routes() -> routes::Routes {
     member_routes().merge(admin::routes())
 }
@@ -88,10 +86,8 @@ pub fn router(
         .fallback(|| async { ApiError::NotFound("no such API route") })
         .with_state(state);
 
-    // Per-request span: every line a handler logs carries request_id, method,
-    // the route pattern (not the raw path, full of ids) and, once the session is
-    // resolved, user_id. 5xx are logged by `ApiError::internal()` with their cause, so the
-    // response line itself is debug.
+    // Every line a handler logs carries request_id, method, the route pattern (not the raw path) and, once resolved, user_id.
+    // 5xx are logged by `ApiError::internal()` with their cause, so the response line itself is debug.
     let trace_layer = TraceLayer::new_for_http()
         .make_span_with(|req: &axum::http::Request<axum::body::Body>| {
             let route = req
@@ -121,9 +117,7 @@ pub fn router(
             },
         );
 
-    // Vite names every file under /assets after a hash of its content, so a
-    // browser may keep one forever: a new build ships new names. Only
-    // successes, or a missing file would stay missing for a year.
+    // Vite names assets after a hash of their content, so browsers may keep one forever. Only successes, or a missing file would stay missing for a year.
     let assets = SetResponseHeader::overriding(
         ServeDir::new(static_dir.join("assets")),
         CACHE_CONTROL,
@@ -133,8 +127,7 @@ pub fn router(
                 .then(|| HeaderValue::from_static("public, max-age=31536000, immutable"))
         },
     );
-    // Compressed here, as nothing in front of the app is assumed to do it:
-    // the JavaScript shrinks to about a third.
+    // Nothing in front of the app is assumed to compress: the JavaScript shrinks to about a third.
     let static_files = Router::new()
         .nest_service("/assets", assets)
         .fallback_service(ServeDir::new(static_dir).not_found_service(ServeFile::new(index_html)))

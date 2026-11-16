@@ -17,9 +17,6 @@ beforeEach(() => {
 });
 
 test("preview updates live (no refresh) when prefs change", async () => {
-  // Bootstrap a logged-in user with a DISTINCT currency (£) so we can confirm
-  // the user is authenticated before interacting (mirrors the real app, where
-  // the settings page is only reached while logged in).
   const user = {
     id: "1",
     name: "A",
@@ -27,20 +24,17 @@ test("preview updates live (no refresh) when prefs change", async () => {
     role: "admin" as const,
     prefs: { ...DEFAULT_PREFS, currency: "GBP" },
   };
-  // PATCH echoes back the sent prefs, like the real backend.
   stubFetch(async (url, init) =>
     jsonResponse(url.endsWith("/auth/prefs") ? { ...user, prefs: JSON.parse(String(init?.body)) } : user),
   );
 
   renderWithApp(<I18nextProvider i18n={i18n}><SettingsGeneral /></I18nextProvider>, { auth: "provider" });
 
-  // Bootstrap applied the user's £ prefs — preview reflects it.
   await screen.findByText("1 234 567,89 £");
 
   fireEvent.click(screen.getByText("GBP (£)"));
   fireEvent.click(screen.getByText("USD ($)"));
 
-  // Preview must reflect the new symbol live, without a remount/refresh.
   await waitFor(() =>
     expect(screen.getByText("1 234 567,89 $")).toBeInTheDocument(),
   );

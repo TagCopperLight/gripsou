@@ -1,6 +1,5 @@
-//! Logging support: the saved-log layer and writer, and helpers every log
-//! site uses. Conventions (fixed messages, shared field names, levels) are in
-//! CLAUDE.md "Logs".
+//! Logging support: the saved-log layer and writer, and shared helpers. Conventions are in CLAUDE.md
+//! "Logs".
 
 mod layer;
 mod terminal;
@@ -9,18 +8,12 @@ mod writer;
 pub use layer::LogLayer;
 pub use writer::{LogWriter, WriterHandle};
 
-/// Lines held in memory while the database is slow or down.
 const QUEUE_CAPACITY: usize = 10_000;
 
-/// Install the process-wide subscriber: the terminal, filtered by `terminal`
-/// (RUST_LOG), and the saved log. Returns the writer to spawn once the
-/// database is migrated.
+/// Returns the writer to spawn once the database is migrated.
 ///
-/// Deliberately not `.init()`: that also installs the `log`-crate bridge, and
-/// with per-layer filters the bridge's "is this enabled?" checks (sqlx asks on
-/// every query) make tracing drop the next line from both outputs. Crates that
-/// log through `log` (sqlx, reqwest, rustls) go unbridged; at info they are
-/// silent anyway.
+/// Not `.init()`: it installs the `log`-crate bridge, whose per-query "is this enabled?" checks make
+/// tracing drop the next line. Crates logging through `log` go unbridged; at info they are silent anyway.
 pub fn install(terminal: tracing_subscriber::EnvFilter) -> LogWriter {
     use tracing_subscriber::{Layer, layer::SubscriberExt};
     let (layer, writer) = channel(QUEUE_CAPACITY);
@@ -32,9 +25,8 @@ pub fn install(terminal: tracing_subscriber::EnvFilter) -> LogWriter {
     writer
 }
 
-/// The layer to install and the writer that drains it. Create both before the
-/// pool exists, so startup lines are queued; spawn the writer once migrations
-/// have run.
+/// Create both before the pool exists so startup lines are queued; spawn the writer once migrations have
+/// run.
 pub fn channel(capacity: usize) -> (LogLayer, LogWriter) {
     let (tx, rx) = tokio::sync::mpsc::channel(capacity);
     let dropped = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -47,12 +39,9 @@ pub fn channel(capacity: usize) -> (LogLayer, LogWriter) {
     )
 }
 
-/// How long saved log rows are kept. The daily sweep deletes older rows.
 pub const RETENTION_DAYS: i32 = 90;
 
-/// An error with its whole `source()` chain, `top: cause: cause`. reqwest's
-/// own `Display` is "error sending request for url (…)" and leaves the reason
-/// (timeout, DNS, TLS) in the chain, so a plain `{e}` loses it.
+/// reqwest's `Display` leaves the reason (timeout, DNS, TLS) in the chain, so a plain `{e}` loses it.
 pub fn error_chain(e: &(dyn std::error::Error + 'static)) -> String {
     let mut out = e.to_string();
     let mut cur = e.source();
@@ -68,7 +57,6 @@ pub fn error_chain(e: &(dyn std::error::Error + 'static)) -> String {
     out
 }
 
-/// One saved log line, as queued by the layer and written by the writer.
 #[derive(Debug, Clone)]
 pub struct LogLine {
     pub at: chrono::DateTime<chrono::Utc>,
@@ -76,18 +64,12 @@ pub struct LogLine {
     pub level: &'static str,
     pub target: String,
     pub message: String,
-    /// A JSON object: event fields over span fields, plus `spans`.
     pub fields: serde_json::Value,
 }
 
-/// Test helper (public because `cfg(test)` does not cross crates): install the
-/// saving layer as this thread's subscriber and return its writer.
-///
-/// Tests run in parallel in one process. With a single live subscriber,
-/// `tracing` computes a call site's interest from the current thread only, so
-/// a parallel test with no subscriber could cache a call site as "never" and
-/// this test would lose the line. A permanently registered "sometimes"
-/// dispatcher keeps every call site's interest at "sometimes".
+/// Public because `cfg(test)` does not cross crates. Installs the saving layer as this thread's subscriber
+/// and returns its writer. A permanently registered "sometimes" dispatcher stops a parallel test with no
+/// subscriber from caching a call site's interest as "never".
 pub fn capture(capacity: usize) -> (tracing::subscriber::DefaultGuard, LogWriter) {
     use tracing_subscriber::layer::SubscriberExt;
     static KEEP: std::sync::OnceLock<tracing::Dispatch> = std::sync::OnceLock::new();

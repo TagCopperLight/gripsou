@@ -2,7 +2,6 @@ import { beforeEach, afterEach } from "vitest";
 import { DEFAULT_PREFS } from "../api/wire";
 import { setPrefs } from "./prefs";
 
-// These calendar-arithmetic fixtures use local Date constructors.
 beforeEach(() => setPrefs({ ...DEFAULT_PREFS, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }));
 afterEach(() => setPrefs(DEFAULT_PREFS));
 
@@ -30,7 +29,7 @@ describe("budgetFilters", () => {
   });
 
   it("turns a preset into a concrete from/to pair", () => {
-    const today = new Date(2026, 8, 21); // 21 September 2026, local time
+    const today = new Date(2026, 8, 21);
     expect(withTimeFrame(EMPTY_FILTERS, "thisMonth", today)).toMatchObject({
       timeFrame: "thisMonth",
       from: "2026-09-01",
@@ -40,7 +39,6 @@ describe("budgetFilters", () => {
       from: "2025-09-21",
       to: "2026-09-21",
     });
-    // Up to today, never into months that have not happened yet.
     expect(withTimeFrame(EMPTY_FILTERS, "thisYear", today)).toMatchObject({
       from: "2026-01-01",
       to: "2026-09-21",
@@ -84,7 +82,6 @@ describe("budgetFilters", () => {
   });
 
   it("asks for internal transfers only when the OTHERS flag is on", () => {
-    // Off is the default and sends nothing: the server hides them already.
     expect(toQuery(EMPTY_FILTERS).includeTransfers).toBeUndefined();
     const on = { ...EMPTY_FILTERS, transfers: true };
     expect(toQuery(on)).toEqual({ includeTransfers: true });
@@ -109,8 +106,8 @@ describe("budgetFilters", () => {
 
   it("clears a stale Overview period when a new time frame is picked", () => {
     // Without this, `activeFilters` hides the time-frame chip (it only shows
-    // when `period` is unset) while the picked range silently applies —
-    // the "Selected period" chip keeps showing the OLD Overview period.
+    // when `period` is unset) while the picked range silently applies, and the
+    // "Selected period" chip keeps showing the OLD Overview period.
     const withPeriod = { ...EMPTY_FILTERS, period: { mode: "month" as const, month: "2026-09" } };
     const next = withTimeFrame(withPeriod, "thisMonth", new Date(2026, 8, 21));
     expect(next.period).toBeUndefined();

@@ -1,8 +1,7 @@
 //! Accounts: the sync's upsert, the user's edits, and the account-type keys.
 //!
-//! On an upsert conflict only provider-derived fields are updated;
-//! user-editable `name`/`color`/`type_key` are left untouched so a re-sync
-//! never clobbers a rename, recolor, or a user's chosen account type.
+//! An upsert conflict updates only provider-derived fields, so a re-sync never clobbers a rename, recolor
+//! or chosen account type.
 
 use std::sync::OnceLock;
 
@@ -11,8 +10,7 @@ use uuid::Uuid;
 use crate::dto::{CanonicalAccount, SyncHealth};
 use crate::error::CoreError;
 
-/// Single source of truth shared with the frontend (`shared/account-palette.json`).
-/// Used to assign a random color to a freshly imported account.
+/// Shared with the frontend (`shared/account-palette.json`).
 fn account_palette() -> &'static [String] {
     static PALETTE: OnceLock<Vec<String>> = OnceLock::new();
     PALETTE.get_or_init(|| {
@@ -54,7 +52,6 @@ pub async fn upsert_account(
     Ok(id)
 }
 
-/// User-editable fields returned after an edit-account save.
 pub struct UpdatedAccount {
     pub id: Uuid,
     pub name: String,
@@ -62,10 +59,8 @@ pub struct UpdatedAccount {
     pub type_key: String,
 }
 
-/// Update the user-editable fields of one account, scoped by `user_id` (via
-/// connection) so a user can only edit their own accounts. Returns `None` when
-/// the `(account_id, user_id)` pair matches no account (wrong owner / unknown
-/// id) or `type_key` is not a known account type — the join then yields no row.
+/// Scoped by `user_id` via connection. Returns `None` when no account matches the pair or `type_key` is
+/// unknown.
 pub async fn update_account(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -98,8 +93,6 @@ pub async fn update_account(
     Ok(row)
 }
 
-/// Every account-type key, for the edit-account dropdown. A new type is a row
-/// in `account_type`.
 pub async fn type_keys(pool: &sqlx::PgPool) -> Result<Vec<String>, CoreError> {
     let keys = sqlx::query_scalar!("select key from account_type order by key")
         .fetch_all(pool)

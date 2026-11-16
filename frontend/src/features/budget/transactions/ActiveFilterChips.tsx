@@ -28,8 +28,6 @@ export function ActiveFilterChips() {
       case "account":
         return accounts.find((x) => x.id === a.id)?.name ?? t("budget.transactions.account");
       case "timeFrame":
-        // A preset says what the user actually picked ("This month"); only the
-        // custom frame has no name of its own and falls back to its dates.
         return filters.timeFrame === "custom"
           ? `${filters.from || "…"} → ${filters.to || "…"}`
           : t(`budget.transactions.timeFrames.${filters.timeFrame}`);
@@ -52,17 +50,12 @@ export function ActiveFilterChips() {
     }
   };
 
-  /** A bucket has no colour of its own to put in a dot — it has an icon, the
-   *  same one the panel draws, in the same colour. So a bucket chip leads with
-   *  that instead of a swatch. */
   const BucketIcon = (a: ActiveFilter) => {
     if (a.kind !== "bucket") return null;
     const { icon: Icon, tint } = typeBucket(a.value);
     return <Icon className={`size-3 shrink-0 ${tint}`} aria-hidden="true" />;
   };
 
-  /** Same reasoning for the two OTHERS flags: they have an icon rather than a
-   *  colour, the one the panel draws, in the same amber. */
   const FlagIcon = (a: ActiveFilter) => {
     if (a.kind !== "uncategorized" && a.kind !== "needsReview" && a.kind !== "transfers")
       return null;
@@ -72,12 +65,6 @@ export function ActiveFilterChips() {
     );
   };
 
-  /** Accounts, categories and tags each carry a colour of their own, so their
-   *  chips lead with it — the same swatch the row shows elsewhere. Every other
-   *  filter kind (a search, a time frame, a bucket) has no colour and gets no
-   *  dot. Category and tag colours go through the same validation and the
-   *  same grey fallback as their chips, so a tag with no colour is grey here
-   *  too rather than a colour of its own. */
   const dot = (a: ActiveFilter): string | null => {
     switch (a.kind) {
       case "account":
@@ -95,15 +82,11 @@ export function ActiveFilterChips() {
     }
   };
 
-  // The id is part of the test id so a chip can be cleared by name, and so two
-  // category chips do not collide.
   const testId = (a: ActiveFilter) =>
     `chip-clear-${a.kind}${"id" in a ? `-${a.id}` : ""}`;
 
   return (
     <div data-testid="active-filters" className="flex flex-wrap items-center gap-2 pr-40">
-      {/* The whole chip is the remove target — the cross is only the affordance
-       *  that says so, which is why it carries no handler of its own. */}
       {chips.map((a) => {
         const color = dot(a);
         return (

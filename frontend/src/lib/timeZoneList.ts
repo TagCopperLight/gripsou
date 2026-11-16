@@ -1,6 +1,4 @@
-/** The main zones: the big cities, about one per offset, and France's
- *  overseas departments and territories. Not every zone the browser knows:
- *  four hundred names, most of them the same hour, would make the list unusable. */
+/** Big cities, about one per offset, plus France's overseas zones: all 400 browser names would make the list unusable. */
 const TIME_ZONES = [
   "Pacific/Honolulu", "America/Anchorage", "America/Los_Angeles", "America/Denver",
   "America/Chicago", "America/Mexico_City", "America/New_York", "America/Toronto",
@@ -15,8 +13,6 @@ const TIME_ZONES = [
   "Pacific/Tahiti",
 ];
 
-/** Cities whose name isn't the zone's own, by language (the zone names are
- *  English, without accents). */
 const CITY_NAMES: Record<string, Record<string, string>> = {
   en: {
     "America/Mexico_City": "Mexico City", "America/Sao_Paulo": "São Paulo", "Indian/Reunion": "Réunion",
@@ -30,12 +26,10 @@ const CITY_NAMES: Record<string, Record<string, string>> = {
   },
 };
 
-/** The city a zone is named after, in the reader's language. */
 function cityName(zone: string, language: string): string {
   return CITY_NAMES[language]?.[zone] ?? zone.split("/").pop()!.replaceAll("_", " ");
 }
 
-/** Minutes ahead of UTC in `zone` at `at`, and how it reads ("UTC+5:30"). */
 function offset(zone: string, at: Date): { minutes: number; label: string } {
   const name = new Intl.DateTimeFormat("en-US", { timeZone: zone, timeZoneName: "shortOffset" })
     .formatToParts(at)
@@ -46,9 +40,7 @@ function offset(zone: string, at: Date): { minutes: number; label: string } {
   return { minutes, label: `UTC${name.slice(3)}` };
 }
 
-/** The time zone picker's options, by offset today then name: "Paris
- *  (UTC+1)". The zone already saved is kept even when it isn't one of the
- *  main ones, so the picker never shows a value it doesn't list. */
+/** The saved zone is kept even if not a main one, so the picker never shows a value it doesn't list. */
 export function timeZoneOptions(current: string, language = "en", at = new Date()): { value: string; label: string }[] {
   return [...new Set([...TIME_ZONES, current])]
     .map((zone) => {

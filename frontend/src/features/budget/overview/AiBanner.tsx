@@ -7,7 +7,6 @@ import { Button } from "../../../ui/Button";
 import { useAiStatus, useRequestCategorize } from "../../../api/budget";
 import { bannerVariant } from "../../../lib/aiBanner";
 
-/** The AI notification surface: only when there is something to do. */
 export function AiBanner() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -17,7 +16,6 @@ export function AiBanner() {
   if (!status || !variant) return null;
 
   if (variant === "failed") {
-    // The error look (`ErrorState`), laid out as a row.
     const error = status.lastRun?.error ?? "";
     return (
       <Surface role="alert" className="flex items-center gap-3 px-5 py-4">
@@ -58,8 +56,7 @@ export function AiBanner() {
   );
 }
 
-/** A run under way: a small pill at the end of the month line, so the page
- *  doesn't move down while the AI works. */
+/** A pill at the end of the month line so the page doesn't move down while the AI works. */
 export function AiRunningPill() {
   const { t } = useTranslation();
   const status = useAiStatus().data;

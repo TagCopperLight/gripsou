@@ -10,9 +10,7 @@ import type { BudgetSummary, Figure } from "../../../api/wire";
 
 type FigureKey = "income" | "expenses" | "net";
 
-/** Colour and comparison behaviour per figure. `format` is fixed
- *  per figure rather than per value: net can be zero or negative,
- *  where a percentage change is unstable, so they always read as an amount. */
+/** `format` is fixed per figure: net can be zero or negative, where a percentage is unstable. */
 const SPEC: Record<FigureKey, { tone: string; format: "percent" | "absolute"; goodWhen: "up" | "down" }> = {
   income: { tone: "text-green", format: "percent", goodWhen: "up" },
   expenses: { tone: "text-red", format: "percent", goodWhen: "down" },
@@ -21,20 +19,13 @@ const SPEC: Record<FigureKey, { tone: string; format: "percent" | "absolute"; go
 
 const ORDER: FigureKey[] = ["income", "expenses", "net"];
 
-// From `sm` up the separator is each cell's own left border, where cells sit
-// side by side (stacked on a phone it would be a stray bar). At `sm` (two
-// columns) only the second cell of a row has a neighbour on its left, so
-// `not-first` would also bar the first cell of the second row; at `lg` (three
-// columns) every cell but the first has one.
+// From `sm` up the separator is each cell's left border. At `sm` (two columns) `not-first` would also bar the first
+// cell of the second row; at `lg` every cell but the first has a left neighbour.
 const CELL = "flex min-w-0 flex-col gap-1 border-fg/10 pr-2 sm:even:border-l sm:even:pl-4 lg:not-first:border-l lg:not-first:pl-4";
 
-// Three across from `lg` up; stacked on a phone, where three columns of money
-// would each be two characters wide. No column gap: the separator is each
-// cell's own border and padding.
+// No column gap: the separator is each cell's own border and padding.
 const GRID = "grid grid-cols-1 gap-y-5 p-5 sm:grid-cols-2 lg:grid-cols-3";
 
-/** A figure's name, then its amount and two comparisons as bones, each in the
- *  line box of the text it stands for. */
 function FigureBones({ name }: { name: FigureKey }) {
   const { t } = useTranslation();
   return (
@@ -97,9 +88,7 @@ function FigureCell({ name, figure, fxMissing, masked, stale }: {
   );
 }
 
-/** `summary` is `undefined` while it loads. `masked`: private mode, the
- *  amounts hidden (the page's eye reveals them). `stale`: the summary is a
- *  previous period's, while this one's loads. */
+/** `masked`: private mode. `stale`: a previous period's summary while this one loads. */
 export function FiguresSurface({ summary, masked = false, stale = false }: {
   summary: BudgetSummary | undefined;
   masked?: boolean;

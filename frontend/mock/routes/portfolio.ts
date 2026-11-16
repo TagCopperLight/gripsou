@@ -17,7 +17,7 @@ export function portfolioRoutes(r: Router<Store>): void {
     Object.assign(account, { name, typeKey, color });
     return { id: account.id, name, color, typeKey };
   });
-  // The labelled types: a backend test pins them to the seeded `account_type` rows.
+  // A backend test pins the labelled types to the seeded `account_type` rows.
   r.route("GET /account-types", () => Object.keys(en.accountTypes));
   r.route("GET /connections", ({ store }) => v.connections(store));
   r.route("POST /sync", ({ store }) => {
@@ -32,8 +32,7 @@ export function portfolioRoutes(r: Router<Store>): void {
     v.syncConnection(store, c.id);
     return reply(202, { id: c.id, status: c.status, lastSyncAt: c.lastSyncAt, lastError: c.lastError });
   });
-  // No provider page here: the new bank shows up at once, syncs for a few
-  // seconds, then is healthy with no account.
+  // No provider page: the new bank syncs for a few seconds, then is healthy with no account.
   r.route("POST /connections/init", ({ store, body: { providerKey } }) => {
     const connectionId = store.ids.next("connection");
     store.connections.push(connectionRow(connectionId, "Banque Populaire", {
@@ -42,7 +41,7 @@ export function portfolioRoutes(r: Router<Store>): void {
     v.syncConnection(store, connectionId);
     return reply(201, { connectionId, redirectUrl: null });
   });
-  // Back from the bank's page: an `error` from the provider fails it.
+  // An `error` from the provider fails it.
   r.route("POST /connections/complete", ({ body }) =>
     body.params.error ? fail(400, "provider error") : reply(204),
   );
@@ -54,7 +53,7 @@ export function portfolioRoutes(r: Router<Store>): void {
     store.txns = store.txns.filter((x) => !gone.has(x.accountId));
     return reply(204);
   });
-  // Powens' management page doesn't exist here: the tab opens on a blank page.
+  // Powens' management page doesn't exist here: the tab opens blank.
   r.route("POST /connections/:id/manage", () => ({ redirectUrl: "about:blank" }));
   r.route("GET /holdings", ({ store }) => v.holdings(store));
   r.route("GET /investments/returns", ({ store }) => v.returns(store));

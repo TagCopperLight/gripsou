@@ -3,10 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../../ui/Button";
 import { formatQuantity } from "../../../lib/money";
 
-/** Shown inside `AssetModal` when the recorded buys and sells do not add up to
- *  the position. It renders in BOTH modes: the warning is about the holding, not
- *  about which tab is open, and the purchases tab is exactly where an incomplete
- *  history is most misleading. */
+/** Shown in both modes: the warning is about the holding, not the open tab. */
 export function IncompleteHistoryStrip({
   unexplainedQty,
   onOpen,
@@ -32,9 +29,7 @@ export function IncompleteHistoryStrip({
           )}
         </span>
       </div>
-      {/* Filled, not bordered: the strip's own background is already amber at
-          0.15, so the button needs a stronger fill of the same hue to lift off
-          it and read as a control rather than as more body text. */}
+      {/* Filled so the button lifts off the strip's amber background and reads as a control. */}
       <Button variant="amber" onClick={onOpen} className="shrink-0">
         {t("dashboard.holdings.gap.open")}
       </Button>

@@ -25,8 +25,7 @@ import {
 import type { PatchResult, Transaction, WriteResult } from "../../../api/wire";
 import type { TransactionFilterQuery } from "../../../api/filter";
 
-/** The queue is all-time and includes internal transfers, which a guess can
- *  land in — the list hides them by default. */
+/** The queue is all-time and includes internal transfers, which a guess can land in. */
 const QUEUE: TransactionFilterQuery = { needsReview: true, includeTransfers: true };
 
 export function ReviewMode() {
@@ -34,7 +33,6 @@ export function ReviewMode() {
   const navigate = useNavigate();
   const status = useAiStatus().data;
   const list = useTransactions(QUEUE);
-  // The next page loads by itself as the queue scrolls, as on Transactions.
   const loadMore = useLoadOnScroll(list.hasNextPage, list.isFetchingNextPage, () => void list.fetchNextPage());
   const categories = useBudgetCategories().data ?? [];
   const accept = useAcceptReview();
@@ -45,16 +43,11 @@ export function ReviewMode() {
   const pending: Transaction[] = useMemo(() => list.data?.pages.flat() ?? [], [list.data]);
   const [state, setState] = useState<ReviewState>(initialReview);
   const [snapshots, setSnapshots] = useState<Record<string, Transaction>>({});
-  // The line whose Correct opened the chooser, by id.
   const chooser = usePopover<string>();
-  // A failed write puts its line back the way it was and says so, as the
-  // transactions list does.
   const writes = useBudgetWrites();
 
-  // Remember every row as first seen: a resolved row leaves the server list,
-  // but its line — and the guess Undo restores — must stay. Adjusted during
-  // render when the server page changes (React's "adjust state on prop
-  // change" pattern), not in an effect.
+  // Remember every row as first seen: a resolved row leaves the server list, but its line and the guess Undo
+  // restores must stay. Adjusted during render (React's "adjust state on prop change"), not in an effect.
   const pendingKey = pending.map((p) => p.id).join(",");
   const [seenKey, setSeenKey] = useState("");
   if (pendingKey !== seenKey) {
@@ -74,14 +67,11 @@ export function ReviewMode() {
   const resolvedCount = Object.keys(state.resolved).length;
   const pendingIds = new Set(pending.map((p) => p.id));
   const lines = state.order.filter((id) => state.resolved[id] || pendingIds.has(id));
-  // The list is paged, so `state.total` only knows the rows loaded so far. The
-  // server's queue size covers the rest: whatever it counts beyond the loaded
-  // rows is still to come. Both refetch together after every write.
+  // The list is paged, so `state.total` only counts loaded rows; the server's queue size covers the rest.
   const unloaded = Math.max(0, (status?.reviewCount ?? 0) - pending.length);
   const total = state.total + unloaded;
 
-  /** Takes back a line resolved ahead of its write, unless something has
-   *  replaced that resolution since (an Undo, say). */
+  /** Takes back a line resolved ahead of its write, unless something replaced that resolution since. */
   const rollBack = (r: Resolution) =>
     setState((s) => (s.resolved[r.tx.id] === r ? unresolve(s, r.tx.id) : s));
 
@@ -124,9 +114,7 @@ export function ReviewMode() {
     chooser.close();
   };
 
-  /** Widens a resolved line's category to the rows sharing its description
-   *  that are still in review — never one the user already settled. Nothing
-   *  on screen changes until it lands. */
+  /** Widens a resolved line's category to rows sharing its description still in review, never one the user already settled. */
   const runApplyToOthers = (anchorId: string, categoryId: string) => {
     writes.write<WriteResult>(
       (confirm, callbacks) =>
@@ -145,7 +133,6 @@ export function ReviewMode() {
       { id, categoryId: tx.categoryId, confidence: tx.categoryConfidence },
       {
         onError: (err) => {
-          // The row still holds what the line said; put the line back.
           if (r) setState((s) => (s.resolved[id] ? s : resolve(s, r)));
           writes.fail(err);
         },
@@ -165,7 +152,6 @@ export function ReviewMode() {
   }
 
   if (lines.length === 0) {
-    // The error look's shape, in green.
     return (
       <Surface className="flex h-55 flex-col items-center justify-center gap-2.5 text-center">
         <span className="flex size-10 items-center justify-center rounded-xl bg-green-soft text-green">

@@ -1,22 +1,17 @@
-//! Second-factor helpers: TOTP codes, the QR for enrolment, and recovery codes.
-
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use totp_rs::{Builder, Secret};
 
 pub const TOTP_STEP_SECS: u64 = 30;
-/// The length of a TOTP code: totp-rs's default, and what the otpauth URI announces.
 pub const TOTP_DIGITS: usize = 6;
 pub const RECOVERY_CODE_COUNT: usize = 10;
 const RECOVERY_ALPHABET: &[u8] = b"abcdefghjkmnpqrstuvwxyz23456789";
 
-/// 20 random bytes (160 bits), the size RFC 4226 recommends.
 pub fn new_totp_secret() -> Vec<u8> {
     let mut bytes = vec![0u8; 20];
     OsRng.fill_bytes(&mut bytes);
     bytes
 }
 
-/// RFC 4648 base32 without padding: what a user types into an authenticator app.
 pub fn base32_secret(secret: &[u8]) -> String {
     Secret::from(secret.to_vec())
         .to_base32()
@@ -35,7 +30,6 @@ pub fn otpauth_uri(secret: &[u8], email: &str) -> String {
     )
 }
 
-/// An SVG document of the QR code. Fails only when the data is too long to encode.
 pub fn qr_svg(data: &str) -> Result<String, qrcode::types::QrError> {
     Ok(qrcode::QrCode::new(data)?
         .render::<qrcode::render::svg::Color>()
@@ -47,7 +41,6 @@ pub fn current_step(unix_secs: u64) -> u64 {
     unix_secs / TOTP_STEP_SECS
 }
 
-/// The [`TOTP_DIGITS`]-digit code for a step (HMAC-SHA1, RFC 6238).
 pub fn totp_code(secret: &[u8], step: u64) -> String {
     let totp = Builder::new()
         .with_secret(secret.to_vec())
@@ -55,7 +48,6 @@ pub fn totp_code(secret: &[u8], step: u64) -> String {
     totp.generate(step * TOTP_STEP_SECS).to_string()
 }
 
-/// The step `code` matches for this encrypted secret, at the current time.
 pub fn check_totp(
     key: &gripsou_core::crypto::EncryptionKey,
     secret_enc: &str,
@@ -66,7 +58,6 @@ pub fn check_totp(
     Ok(match_totp(&secret, code, now))
 }
 
-/// The step the code matches among the previous, current and next step.
 /// Every candidate is compared, without early exit.
 pub fn match_totp(secret: &[u8], code: &str, now_unix: u64) -> Option<u64> {
     let code: String = code.chars().filter(|c| *c != ' ').collect();
@@ -83,7 +74,6 @@ pub fn match_totp(secret: &[u8], code: &str, now_unix: u64) -> Option<u64> {
     found
 }
 
-/// A fresh set of backup codes: shown to the user once, stored as hashes.
 pub struct RecoveryCodes {
     pub plain: Vec<String>,
     pub hashes: Vec<Vec<u8>>,
@@ -95,7 +85,6 @@ pub fn new_recovery_codes() -> RecoveryCodes {
     RecoveryCodes { plain, hashes }
 }
 
-/// Ten codes shaped `xxxxx-xxxxx`, from OS randomness.
 fn recovery_code_strings() -> Vec<String> {
     let mut codes = Vec::with_capacity(RECOVERY_CODE_COUNT);
     while codes.len() < RECOVERY_CODE_COUNT {

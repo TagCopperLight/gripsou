@@ -1,6 +1,3 @@
-//! Passkeys: the `PUBLIC_URL` they are bound to, adding and managing them in
-//! Settings, and signing in with one without a password.
-
 use crate::error::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -21,14 +18,11 @@ use crate::auth::throttle::Throttles;
 use crate::auth::{AuthUser, session as sessions};
 use crate::error::ApiError;
 
-/// The `Webauthn` built from `PUBLIC_URL`. Always present: the server refuses
-/// to start without a usable address. Every saved passkey is bound to its
-/// host, so changing `PUBLIC_URL` makes them all stop working.
+/// Every saved passkey is bound to the host of `PUBLIC_URL`: changing it breaks them all.
 #[derive(Clone)]
 pub struct Passkeys(pub Arc<Webauthn>, Arc<str>);
 
 impl Passkeys {
-    /// Check the raw `PUBLIC_URL` once, at startup.
     pub fn parse(raw: Option<&str>) -> Result<Passkeys, String> {
         let raw = raw
             .map(str::trim)
@@ -66,8 +60,6 @@ impl Passkeys {
         Ok(Passkeys(Arc::new(webauthn), public_url.into()))
     }
 
-    /// The address gripsou is opened at, as an origin (no trailing slash):
-    /// what links sent to users start with.
     pub fn public_url(&self) -> &str {
         &self.1
     }
@@ -79,7 +71,6 @@ fn not_accepted() -> ApiError {
     ApiError::bad_request("passkey not accepted")
 }
 
-/// "Firefox on Linux", from the browser adding the passkey.
 fn default_name(client: &Client) -> String {
     client
         .browser()
@@ -89,9 +80,7 @@ fn default_name(client: &Client) -> String {
         .collect()
 }
 
-/// Start adding a passkey. Needs a fresh reauth token (outside the welcome
-/// flow), checked but not spent, so a cancelled browser prompt can be retried
-/// without the password.
+/// The reauth token is checked but not spent, so a cancelled browser prompt can be retried without the password.
 pub async fn register_options(
     State(pool): State<PgPool>,
     State(pk): State<Passkeys>,
@@ -111,8 +100,7 @@ pub async fn register_options(
         .collect();
     let (mut ccr, reg) =
         pk.0.start_passkey_registration(user_id, &profile.email, &profile.name, Some(exclude))?;
-    // Passwordless sign-in finds the passkey without an email: ask for one
-    // the device can offer by itself (webauthn-rs leaves it optional).
+    // Passwordless sign-in finds the passkey without an email: ask for a discoverable one (webauthn-rs leaves it optional).
     if let Some(sel) = ccr.public_key.authenticator_selection.as_mut() {
         sel.resident_key = Some(ResidentKeyRequirement::Required);
         sel.require_resident_key = true;
@@ -124,9 +112,6 @@ pub async fn register_options(
     }))
 }
 
-/// Finish adding a passkey: spends the reauth token and the ceremony in one
-/// transaction (a refused credential rolls both back), then signs out the
-/// user's other sessions.
 pub async fn register(
     State(pool): State<PgPool>,
     State(pk): State<Passkeys>,
@@ -197,10 +182,7 @@ pub async fn remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Start a passwordless sign-in: the browser offers the passkeys it has for
-/// this site, no email asked. Each call stores a challenge, so it is what
-/// counts per IP: it reserves one failure, given back when the sign-in
-/// succeeds ([`sign_in`]).
+/// Each call stores a challenge, so it reserves one failure per IP, given back when the sign-in succeeds ([`sign_in`]).
 pub async fn sign_in_options(
     State(pool): State<PgPool>,
     State(pk): State<Passkeys>,
@@ -218,10 +200,8 @@ pub async fn sign_in_options(
     }))
 }
 
-/// Finish a passwordless sign-in. The passkey's own unlock (PIN or biometric,
-/// required) is the second factor, so this is a full sign-in even with
-/// two-factor on. Any attempt spends the challenge. The failure its options
-/// call reserved on the IP stays unless the passkey proves right.
+/// The passkey's own unlock (PIN or biometric) is the second factor, so this is a full sign-in even with two-factor on.
+/// The failure the options call reserved on the IP stays unless the passkey proves right.
 pub async fn sign_in(
     State(pool): State<PgPool>,
     State(pk): State<Passkeys>,
@@ -291,7 +271,6 @@ mod config_tests {
     }
 }
 
-/// A software passkey for tests, and the `Passkeys` it matches.
 #[cfg(test)]
 pub(crate) mod soft {
     use super::Passkeys;
@@ -320,7 +299,6 @@ pub(crate) mod soft {
             Soft(WebauthnAuthenticator::new(SoftPasskey::new(true)))
         }
 
-        /// Answer the creation options the server sent (its `options` field).
         pub(crate) fn register(
             &mut self,
             options: &serde_json::Value,
@@ -340,10 +318,8 @@ pub(crate) mod soft {
                 .unwrap()
         }
 
-        /// Answer request options. The software key can't pick a credential
-        /// by itself or send a user handle, which a real passkey does on a
-        /// passwordless sign-in: `allow` names the credential and
-        /// `user_handle` fills it in (it isn't covered by the signature).
+        /// The software key can't pick a credential or send a user handle as a real passkey does on a passwordless sign-in:
+        /// `allow` names the credential and `user_handle` fills it in (not covered by the signature).
         pub(crate) fn sign(
             &mut self,
             options: &serde_json::Value,
@@ -432,7 +408,6 @@ mod tests {
         .map(|j| j.0)
     }
 
-    /// Add a passkey to `a` with a fresh password check; returns it and its credential id.
     pub(crate) async fn add_passkey(
         pool: &PgPool,
         a: &AuthUser,
@@ -469,7 +444,6 @@ mod tests {
         assert!(!st.totp, "a passkey doesn't turn two-factor on");
     }
 
-    /// The welcome flow offers it without the password; afterwards it's asked.
     #[gripsou_core::testkit::db_test]
     async fn adding_needs_no_reauth_until_the_welcome_is_done(pool: PgPool) {
         let u = seed_user(&pool, "a@t.local").await;
@@ -518,7 +492,6 @@ mod tests {
             options(&pool, &a, &theirs).await.err().unwrap().status(),
             StatusCode::FORBIDDEN
         );
-        // Options don't spend the token; finishing does.
         let reauth = reauth_token(&pool, &a, "hunter22").await;
         let o = options(&pool, &a, &reauth).await.unwrap();
         let o2 = options(&pool, &a, &reauth).await.unwrap();
@@ -542,7 +515,6 @@ mod tests {
         let o = options(&pool, &a, &reauth).await.unwrap();
         let o_other = options(&pool, &a, &reauth).await.unwrap();
         let mut soft = Soft::new();
-        // Answer to the other ceremony's challenge: refused, nothing spent.
         let wrong = soft.register(&o_other.options);
         let err = register(
             State(pool.clone()),
@@ -669,7 +641,6 @@ mod tests {
         .err()
         .unwrap();
         assert_eq!(err.status(), StatusCode::CONFLICT);
-        // The transaction rolled back: the token and the ceremony are intact.
         check_reauth(&pool, u, &reauth).await.expect("token kept");
         assert_eq!(repo::list(&pool, u).await.unwrap().len(), 0);
     }
@@ -729,7 +700,6 @@ mod tests {
             .unwrap()
             .0;
         assert!(st.passkeys[0].last_used_at.is_some());
-        // Works again: the stored sign counter was updated, not left behind.
         passwordless(&pool, &t, &mut soft, &cred, u)
             .await
             .expect("second sign-in");
@@ -745,7 +715,6 @@ mod tests {
         let mut soft = Soft::new();
         let (info, cred) = add_passkey(&pool, &a, &mut soft).await;
         let t = throttles();
-        // Claims to be another user: that user has no such passkey.
         let e = passwordless(&pool, &t, &mut soft, &cred, v)
             .await
             .err()
@@ -754,7 +723,6 @@ mod tests {
             (e.status(), e.message()),
             (StatusCode::BAD_REQUEST, "passkey not accepted")
         );
-        // A challenge is spent by any attempt.
         let o = start_passwordless(&pool, &t).await.unwrap();
         let c1 = soft.sign(&o.options, Some(&cred), Some(u));
         let c2 = soft.sign(&o.options, Some(&cred), Some(u));
@@ -808,8 +776,6 @@ mod tests {
         let mut soft = Soft::new();
         let (_, cred) = add_passkey(&pool, &a, &mut soft).await;
         let t = throttles();
-        // The IP policy's free failures (30): each is let through and refused.
-        // The options call counted it; the refusal adds nothing.
         for _ in 0..crate::auth::throttle::IP.free_failures {
             let e = passwordless(&pool, &t, &mut soft, &cred, v)
                 .await
@@ -836,7 +802,6 @@ mod tests {
             matches!(e, ApiError::TooMany { retry_after } if retry_after > 0),
             "says how long to wait"
         );
-        // Refused before storing anything: no challenge row for it.
         let stored: i64 =
             sqlx::query_scalar("select count(*) from login_challenge where kind = $1")
                 .bind(ChallengeKind::PasskeyLogin)
@@ -860,7 +825,6 @@ mod tests {
         passwordless(&pool, &t, &mut soft, &cred, u)
             .await
             .expect("signed in");
-        // Without the refund the IP would now be waiting.
         passwordless(&pool, &t, &mut soft, &cred, u)
             .await
             .expect("not throttled");
@@ -871,8 +835,7 @@ mod tests {
         base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
     }
 
-    /// A registration answer as `@simplewebauthn/browser` v14 posts it
-    /// (`RegistrationResponseJSON`), extra fields included.
+    /// As `@simplewebauthn/browser` v14 posts it, extra fields included.
     fn browser_registration(
         c: &webauthn_rs::prelude::RegisterPublicKeyCredential,
     ) -> serde_json::Value {
@@ -893,8 +856,7 @@ mod tests {
         })
     }
 
-    /// A sign-in answer as `@simplewebauthn/browser` v14 posts it
-    /// (`AuthenticationResponseJSON`).
+    /// As `@simplewebauthn/browser` v14 posts it.
     fn browser_authentication(c: &webauthn_rs::prelude::PublicKeyCredential) -> serde_json::Value {
         serde_json::json!({
             "id": c.id,
@@ -958,8 +920,6 @@ mod tests {
         assert_eq!(resp.user.email, "a@t.local");
     }
 
-    /// A passkey is not a second factor: without the authenticator, the
-    /// password alone signs in; with it, the code is still asked.
     #[gripsou_core::testkit::db_test]
     async fn a_passkey_never_turns_two_factor_on(pool: PgPool) {
         use crate::testkit::{enable_totp, login_outcome};

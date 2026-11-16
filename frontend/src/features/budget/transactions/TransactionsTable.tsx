@@ -15,11 +15,9 @@ import { Bone, BoneRows, TextBone } from "../../../ui/Skeleton";
 type TransactionsTableProps = {
   rows: Transaction[];
   showChecked: boolean;
-  /** undefined while the counts are still loading. */
   counts?: TransactionCounts;
   filtered: boolean;
   loading: boolean;
-  /** The rows shown are a previous filter's, while this one's load. */
   stale: boolean;
   error: boolean;
   onRetry: () => void;
@@ -27,16 +25,11 @@ type TransactionsTableProps = {
   fetchingNextPage: boolean;
   onLoadMore: () => void;
   onClearFilters: () => void;
-  /** Where "Connect a bank" goes, on an empty ledger. */
   onConnect: () => void;
-  /** Draws one row (a `TransactionRow`, keyed by its id). */
   renderRow: (tx: Transaction) => ReactNode;
 };
 
-/** Nothing shifts when a filter changes the content: the column tracks
- *  live in `transactionsGrid`, and none of them is content-derived except the
- *  amount, which is allowed to widen for a genuinely bigger number. Overflow is
- *  handled inside each cell, never by the column. */
+/** No column tracks content except the amount, so a filter change shifts nothing. Overflow is handled inside each cell. */
 
 export function TransactionsTable(props: TransactionsTableProps) {
   const { t } = useTranslation();
@@ -44,8 +37,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
     rows, showChecked, counts, filtered, loading, stale, error, onRetry,
     hasNextPage, fetchingNextPage, onLoadMore, onClearFilters, onConnect, renderRow,
   } = props;
-  // Infinite scroll. The button below stays as the accessible fallback
-  // and is what most tests drive, since jsdom has no IntersectionObserver.
+  // Infinite scroll; the button stays as the accessible fallback.
   const sentinel = useLoadOnScroll(hasNextPage, fetchingNextPage, onLoadMore);
 
   if (error) {
@@ -89,7 +81,6 @@ export function TransactionsTable(props: TransactionsTableProps) {
   );
 
   if (loading) {
-    // `TransactionRow`'s cells, in grey: the 32px avatar sets the height.
     return (
       <GridTable busy tracks={gridTracks(showChecked)} head={head}>
         <BoneRows rows={4} className={ROW_CELLS}>
@@ -111,7 +102,6 @@ export function TransactionsTable(props: TransactionsTableProps) {
                 </span>
               </td>
               <td role="cell" className={`py-2.25 ${COL_PAD.category}`}>
-                {/* A category chip: a text-xs line in py-1. */}
                 <Bone className="h-6 rounded-xl" style={{ width: w * 2 }} />
               </td>
               <td role="cell" className={`py-2.25 ${COL_PAD.tags}`} />
@@ -127,10 +117,7 @@ export function TransactionsTable(props: TransactionsTableProps) {
   }
 
   if (rows.length === 0) {
-    // The counts are the authority on whether the ledger is empty; `filtered`
-    // only stands in while they load. Reading it first would let a transient
-    // empty page (the two queries settle independently) claim a full ledger
-    // is empty.
+    // The counts decide whether the ledger is empty: `filtered` can be a transient empty page while the two queries settle.
     const nothingAtAll = counts ? counts.total === 0 : !filtered;
     return (
       <div className={staleClass(stale)}>
@@ -163,10 +150,8 @@ export function TransactionsTable(props: TransactionsTableProps) {
 
   return (
     <div className="flex flex-col">
-      {/* The tracks have floors, so a narrow viewport scrolls the table rather
-          than crushing a column. The sentinel below stays outside it:
-          `overflow-x` would make it the sentinel's scroll parent and quietly
-          undo the preloading margin. */}
+      {/* The tracks have floors, so a narrow viewport scrolls the table.
+          The sentinel stays outside it: `overflow-x` would make it the sentinel's scroll parent and undo the preloading margin. */}
       <GridTable tracks={gridTracks(showChecked)} head={head} stale={stale}>
         {rows.map(renderRow)}
       </GridTable>

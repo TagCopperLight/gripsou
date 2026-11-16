@@ -1,7 +1,3 @@
-//! Conventions every feature's JSON follows: dates go out as epoch
-//! milliseconds at UTC midnight, ratios as decimal strings, chart windows as
-//! one of a few named ranges.
-
 use chrono::{Datelike, Duration, NaiveDate};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -23,7 +19,6 @@ pub fn ratio(part: Decimal, whole: Decimal) -> Decimal {
     }
 }
 
-/// A chart's window, as the range selector names it.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq, ts_rs::TS)]
 pub enum Range {
     #[serde(rename = "7d")]
@@ -42,7 +37,6 @@ pub enum Range {
 }
 
 impl Range {
-    /// In the order the range selector lists them.
     pub const ALL: [Self; 6] = [
         Self::Week,
         Self::Month,
@@ -52,8 +46,6 @@ impl Range {
         Self::Max,
     ];
 
-    /// How many days before today the window starts; `None` for the one
-    /// that starts on January 1st.
     pub const fn days_back(self) -> Option<i64> {
         match self {
             Range::Week => Some(7),
@@ -65,7 +57,6 @@ impl Range {
         }
     }
 
-    /// Inclusive calendar days ending on `today`.
     pub fn window(self, today: NaiveDate) -> (NaiveDate, NaiveDate) {
         let from = match self.days_back() {
             Some(days) => today - Duration::days(days),
@@ -75,7 +66,6 @@ impl Range {
     }
 }
 
-/// A chart's query: an absent range is `Range::default()`.
 #[derive(Deserialize, ts_rs::TS)]
 pub struct RangeParams {
     #[serde(default)]
@@ -84,7 +74,6 @@ pub struct RangeParams {
 }
 
 impl RangeParams {
-    /// The window ending on the user's today, in their saved timezone.
     pub async fn window(
         &self,
         pool: &PgPool,

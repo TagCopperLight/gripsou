@@ -7,12 +7,10 @@ import { CodeInput } from "../../../ui/CodeInput";
 import { FieldError } from "../../../ui/FieldError";
 import type { TotpEnrolment } from "./useTotpEnrolment";
 
-/** The setup key in groups of four, easier to type into an app by hand. */
 function groups(secret: string) {
   return secret.replace(/(.{4})/g, "$1 ").trim();
 }
 
-/** The QR code to scan, and the key to type in when it can't be. */
 export function TotpScan({ setup }: { setup: TotpSetup }) {
   const { t } = useTranslation();
   const { copied, copy } = useCopy();
@@ -40,7 +38,6 @@ export function TotpScan({ setup }: { setup: TotpSetup }) {
   );
 }
 
-/** The app's first code, sent at the sixth digit. */
 export function TotpCode({ enrolment }: { enrolment: TotpEnrolment }) {
   const { t } = useTranslation();
   return (

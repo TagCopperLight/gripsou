@@ -44,7 +44,6 @@ describe("groupByConnection", () => {
 describe("legendAccounts", () => {
   const series = (n: number) => ({
     accounts: Array.from({ length: n }, (_, i) => ({ id: `a${i}`, name: `A${i}`, color: "#fff" })),
-    // A value that grows with the index: the last accounts are the biggest.
     points: [{ t: 0, values: Object.fromEntries(Array.from({ length: n }, (_, i) => [`a${i}`, String((i + 1) * 10)])) }],
   });
 

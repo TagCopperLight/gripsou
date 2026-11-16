@@ -17,10 +17,7 @@ type Props = {
   onCorrect: (anchor: HTMLElement) => void;
 };
 
-/** One pending guess in the review queue. A "no guess" row (the model abstained) can only
- *  be corrected. A confident guess into a neutral category is here because it
- *  hides money from every total; the category's name says where the money
- *  goes, so the line adds no warning (user's call). */
+/** A "no guess" row (the model abstained) can only be corrected. */
 export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
   const { t } = useTranslation();
   const category = categoryOfTransaction(tx);
@@ -48,8 +45,7 @@ export function ReviewLine({ tx, busy, onAccept, onCorrect }: Props) {
       <span className={`${CONFIDENCE_COL} text-right font-mono text-sm text-fg-dim`}>
         {confidence === null ? "—" : `${confidence}%`}
       </span>
-      {/* A "no guess" row has nothing to accept: keep the button's slot, hidden,
-          so Correct stays in the same column as on every other line. */}
+      {/* A "no guess" row has nothing to accept: the hidden button keeps Correct in the same column. */}
       <Button
         variant="ghostStrong"
         disabled={busy || category === null}

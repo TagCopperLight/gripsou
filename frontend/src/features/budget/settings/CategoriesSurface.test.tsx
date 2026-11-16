@@ -28,9 +28,7 @@ function renderSurface() {
   return renderWithApp(<CategoriesSurface />);
 }
 
-/** Waits for the write itself AND the cache-invalidation refetch it kicks off
- *  to both finish, so no state update from either lands after the test body
- *  returns (which is what causes a leaked act() warning in the *next* test). */
+/** Waits for the write and its invalidation refetch, so no state update lands after the test returns (a leaked act() warning in the next test). */
 async function waitForFullSettle(client: QueryClient) {
   await waitFor(() => expect(client.isFetching()).toBe(0));
   await waitFor(() => expect(client.isMutating()).toBe(0));
@@ -68,7 +66,6 @@ describe("CategoriesSurface", () => {
       cat({ id: "sal", name: "Salary", kind: "income" }),
     ];
 
-    /** The list, then a 204 for the PUT, then the list again for the refetch. */
     function mockRows(rows: BudgetCategory[]) {
       stubFetch(async (_url: string, init?: RequestInit) =>
           init?.method === "PUT" ? new Response(null, { status: 204 }) : jsonResponse(rows));
@@ -90,7 +87,7 @@ describe("CategoriesSurface", () => {
     });
 
     it("moves the row on screen before the server answers", async () => {
-      // The PUT hangs, so what is on screen can only be the optimistic order.
+            // The PUT hangs, so the screen can only show the optimistic order.
       let answer: (r: Response) => void = () => {};
       stubFetch(async (_url: string, init?: RequestInit) =>
           init?.method === "PUT"
@@ -130,8 +127,7 @@ describe("CategoriesSurface", () => {
       expect(screen.getByRole("button", { name: "Move Gamma down" })).toBeDisabled();
       expect(screen.getByRole("button", { name: "Move Beta up" })).toBeEnabled();
       expect(screen.getByRole("button", { name: "Move Beta down" })).toBeEnabled();
-      // Salary is alone in its kind, so it cannot move in either direction —
-      // a row never crosses into another kind's block.
+            // Salary is alone in its kind, so it cannot move: a row never crosses into another kind's block.
       expect(screen.getByRole("button", { name: "Move Salary up" })).toBeDisabled();
       expect(screen.getByRole("button", { name: "Move Salary down" })).toBeDisabled();
     });
@@ -173,7 +169,6 @@ describe("CategoriesSurface", () => {
     expect(screen.queryByText("Old category")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show archived (1)" }));
     expect(screen.getByText("Old category")).toBeVisible();
-    // Archived rows can't be moved: the order only ranks the active ones.
     expect(screen.queryByRole("button", { name: "Move Old category up" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Modify Old category" }));
@@ -213,10 +208,7 @@ describe("CategoriesSurface", () => {
 
   describe("in French, where the displayed label diverges from the stored name", () => {
     afterEach(async () => {
-      // The surface is still mounted at this point (this hook runs before
-      // testing-library's own unmount, which is registered as an outer
-      // afterEach) — reverting the language re-renders it, so that has to be
-      // inside act() or it warns as an update outside a test.
+            // The surface is still mounted (this hook runs before testing-library's unmount), so reverting the language must be inside act().
       await act(async () => {
         await i18n.changeLanguage("en");
       });

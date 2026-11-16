@@ -1,5 +1,3 @@
-//! What every [`db_test`](super::db_test) runs: a fresh database for the test.
-
 use std::future::Future;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::pin::Pin;
@@ -11,7 +9,6 @@ use sqlx::{AssertSqlSafe, Connection, Executor, PgConnection, PgPool};
 
 use super::MIGRATOR;
 
-/// A test's return value: `()`, or a `Result` that fails it when `Err`.
 pub trait Outcome {
     fn passed(&self) -> bool;
 }
@@ -28,9 +25,7 @@ impl<T, E> Outcome for Result<T, E> {
     }
 }
 
-/// Runs `test` on its own database, copied from `DATABASE_URL`'s `template1`
-/// and migrated by [`MIGRATOR`], on a current-thread runtime. The database is
-/// dropped when the test passes and kept for a look when it fails, until the
+/// The database is dropped when the test passes and kept for a look when it fails, until the
 /// test runs again.
 #[doc(hidden)]
 pub fn run_db_test<R: Outcome>(
@@ -53,8 +48,8 @@ pub fn run_db_test<R: Outcome>(
                 )))
                 .await
                 .expect("drop the test's earlier database");
-            // FILE_COPY copies template1's files where the default strategy
-            // writes every page to the WAL: about twice as fast here.
+            // FILE_COPY copies template1's files instead of writing every page to the WAL: about
+            // twice as fast.
             admin
                 .execute(AssertSqlSafe(format!(
                     "create database {name} strategy file_copy"
@@ -65,8 +60,7 @@ pub fn run_db_test<R: Outcome>(
             let options = PgConnectOptions::from_str(&url)
                 .expect("parse DATABASE_URL")
                 .database(&name);
-            // On a connection of its own, so the test starts with no session
-            // state from the migrations.
+            // A connection of its own, so the test starts with no session state from the migrations.
             let mut conn = PgConnection::connect_with(&options)
                 .await
                 .expect("connect to the test database");
@@ -98,7 +92,6 @@ pub fn run_db_test<R: Outcome>(
         })
 }
 
-/// One name per test, so a rerun replaces the database a failure left.
 fn db_name(path: &str) -> String {
     let mut hasher = DefaultHasher::new();
     path.hash(&mut hasher);

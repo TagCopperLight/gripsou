@@ -1,6 +1,5 @@
-//! Upsert a transaction, deduplicated on (account_id, external_id).
-//! Not append-only: Powens corrects rows after the fact, so the provider wins
-//! on the fields it owns.
+//! Not append-only: Powens corrects rows after the fact, so the provider wins on the fields it
+//! owns.
 
 use uuid::Uuid;
 
@@ -18,8 +17,7 @@ pub async fn upsert_transaction(
     account_id: Uuid,
     txn: &CanonicalTransaction,
 ) -> Result<TxnWrite, CoreError> {
-    // `xmax = 0` is true only for a freshly inserted tuple, so one round trip
-    // distinguishes an insert from an update.
+    // `xmax = 0` only for a fresh insert: one round trip tells insert from update.
     let inserted = sqlx::query_scalar!(
         r#"
         insert into transaction

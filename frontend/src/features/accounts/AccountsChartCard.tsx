@@ -21,7 +21,6 @@ import { bySize, legendAccounts } from "../../lib/accounts";
 import { numberOrNull } from "../../lib/valueChart";
 
 type AccountsChartCardProps = {
-  /** The account hovered here or in the list below: its band comes forward. */
   highlight?: string | null;
   onHover?: (accountId: string | null) => void;
   className?: string;
@@ -29,7 +28,6 @@ type AccountsChartCardProps = {
 
 export function AccountsChartCard({ highlight = null, onHover, className = "" }: AccountsChartCardProps) {
   const { t } = useTranslation();
-  // One eye for the headline and the gain; the percentage is never masked.
   const privacy = usePrivacy();
   const [range, setRange] = useState<Range>(DEFAULT_RANGE);
   const nw = useNetWorth(range);
@@ -38,10 +36,8 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
   const ready = nw.data !== undefined && series.data !== undefined;
   const loading = nw.isPending || series.isPending;
   const isError = !ready && !loading;
-  // A new range keeps the last one's figures on screen, dimmed, until its own arrive.
   const stale = staleClass(nw.isPlaceholderData || series.isPlaceholderData);
-  // No accounts: the same stand-in as the dashboard's chart, rather than a
-  // 0 € headline and a gain pill that would only look like data.
+  // No accounts: the dashboard chart's stand-in, not a 0 € headline.
   const empty = ready && nw.data.points.length === 0;
 
   const accounts = series.data ? bySize(series.data) : [];
@@ -50,11 +46,9 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
     key: a.id,
     name: a.name,
     color: a.color,
-    // Absent: nothing held that day. Null: no rate that day, a gap.
+    // Absent: nothing held that day. Null: no rate that day.
     data: points.map((p) => [p.t, numberOrNull(p.values[a.id] ?? "0")] as [number, number | null]),
   }));
-  // The biggest accounts by name, then "+N others": with many accounts a full
-  // legend would take over the header. The list below names them all.
   const legend = legendAccounts(series.data ?? { accounts: [], points: [] });
   const legendItems = [
     ...legend.shown.map((a) => ({ key: a.id, label: a.name, color: a.color })),
@@ -82,9 +76,7 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
               <div className="hidden md:block">
                 <RangeSelector value={range} onChange={setRange} />
               </div>
-              {/* Phone: one swipeable row instead of three wrapped ones. */}
               {series.data === undefined ? (
-                // The accounts' names: three of them, as many as most legends show.
                 <Skeleton className="flex items-center gap-4 md:mt-3">
                   {[80, 64, 96].map((w) => (
                     <span key={w} className="flex items-center gap-2">

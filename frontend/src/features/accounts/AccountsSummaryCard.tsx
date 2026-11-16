@@ -11,7 +11,6 @@ import type { Privacy } from "../../auth/usePrivacy";
 
 type AccountsSummaryCardProps = {
   accounts: Account[];
-  /** Shared with the bank cards below: this card's eye reveals them all. */
   privacy: Privacy;
   onHover?: (accountId: string | null) => void;
   className?: string;
@@ -20,14 +19,11 @@ type AccountsSummaryCardProps = {
 /** `x` is the pointer's position across the bar, from 0 (left) to 1 (right). */
 type Hover = { account: Account; x: number };
 
-/** A bar split by each account's share of the total. Hovering a segment shows
- * a tooltip styled like the charts' (see chartTheme's tooltipRow). */
 export function AccountsSummaryCard({ accounts, privacy, onHover, className = "" }: AccountsSummaryCardProps) {
   const { t } = useTranslation();
   const [hover, setHover] = useState<Hover | null>(null);
   const total = accounts.reduce((sum, a) => sum + Number(a.value), 0);
-  // Too thin to see (1 % or less of what's owned): left out of the bar, whose
-  // other segments fill the space; the list below still shows them.
+  // 1 % or less is too thin to see: left out of the bar.
   const shares = sharesById(accounts);
   const shown = accounts.filter((a) => isDrawn(shares.get(a.id) ?? null));
 
@@ -68,8 +64,6 @@ export function AccountsSummaryCard({ accounts, privacy, onHover, className = ""
             <div
               role="tooltip"
               className="pointer-events-none absolute bottom-full z-10 mb-2 flex items-center gap-2 whitespace-nowrap rounded-xl bg-surface-3 px-3 py-2 font-mono text-xs"
-              // Slides under the pointer from left-aligned at the bar's left end to
-              // right-aligned at its right end, so it never leaves the card.
               style={{ left: `${hover.x * 100}%`, transform: `translateX(${-hover.x * 100}%)` }}
             >
               <span className="flex items-center gap-2">

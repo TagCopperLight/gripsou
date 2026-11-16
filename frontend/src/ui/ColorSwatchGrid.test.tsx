@@ -6,7 +6,6 @@ import userEvent from "@testing-library/user-event";
 import { ColorSwatchGrid } from "./ColorSwatchGrid";
 
 beforeAll(() => {
-  // jsdom draws nothing; the colour area just has no picture.
   HTMLCanvasElement.prototype.getContext = (() => null) as never;
 });
 

@@ -1,8 +1,5 @@
-//! Per-connection ETF-composition pass. Runs after `price_sync`. Reads the
-//! provider's cached symbol from `meta` (resolving on first sight), scrapes the
-//! composition, and stores it. Best-effort: every per-instrument error is
-//! logged and the pass continues. Composition changes slowly, so the
-//! eligibility query already excludes rows fresher than 30 days.
+//! Per-connection ETF-composition pass, after `price_sync`. Best-effort: a per-instrument error is
+//! logged and the pass continues.
 
 use uuid::Uuid;
 
@@ -15,7 +12,6 @@ pub struct CompositionSyncSummary {
     pub resolved: usize,
     pub fetched: usize,
     pub unresolved: usize,
-    /// Listings whose composition fetch failed.
     pub failed: usize,
 }
 
@@ -58,9 +54,8 @@ pub async fn fetch_composition_for_connection(
         };
 
         match provider.fetch_composition(&symbol).await {
-            // A resolved symbol whose page has no breakdown (an equity, or a
-            // tracker that reports none) is marked `none`, never stored as an
-            // empty composition, so it leaves future passes.
+            // A symbol whose page has no breakdown is marked `none`, never stored as an empty composition, so it
+            // leaves future passes.
             Ok(comp) if comp.countries.is_empty() && comp.sectors.is_empty() => {
                 mark_composition_none(&mut conn, row.id).await?;
                 summary.unresolved += 1;
@@ -69,9 +64,8 @@ pub async fn fetch_composition_for_connection(
                 set_composition(&mut conn, row.id, &comp).await?;
                 summary.fetched += 1;
             }
-            // A cached symbol that errors on fetch every sync is retried forever
-            // (one request per sync), like price_sync's transient errors. A
-            // `meta.composition_attempted_at` backoff would bound it.
+            // A cached symbol that errors every sync is retried forever, like price_sync's transient errors.
+            // A `meta.composition_attempted_at` backoff would bound it.
             Err(e) => {
                 tracing::warn!(
                     provider = provider.key(),
@@ -87,8 +81,6 @@ pub async fn fetch_composition_for_connection(
     Ok(summary)
 }
 
-/// Instruments worth a composition scrape: non-cash, holds a symbol/isin, not
-/// already marked "none", and composition missing or older than 30 days.
 pub async fn composition_eligible_instruments_for_connection(
     pool: &sqlx::PgPool,
     connection_id: Uuid,

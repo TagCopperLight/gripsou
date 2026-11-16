@@ -1,9 +1,6 @@
 import type { ComponentPropsWithoutRef } from "react";
 
-/** A row's action: a faint icon that lights up when hovered, red when it
- *  destroys something. Give it an `aria-label`: the icon is all it shows.
- *  Disabled, it fades and lets the pointer through to the row under it, so a
- *  clickable row still answers a click there. */
+/** Disabled, it lets the pointer through to the row under it, so a clickable row still answers. */
 export function IconButton({
   danger = false,
   className = "",

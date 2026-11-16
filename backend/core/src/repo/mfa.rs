@@ -1,23 +1,18 @@
-//! Second factors: TOTP secret, recovery codes and passkey counts.
-
 use uuid::Uuid;
 
 use crate::error::CoreError;
 
-/// How long an unconfirmed setup can still be confirmed. Past it the row is
-/// dead (and swept): a stolen session can't keep guessing codes against a
-/// setup the owner abandoned.
+/// Past it the row is dead and swept, so a stolen session can't keep guessing codes against an
+/// abandoned setup.
 pub const SETUP_TTL_MINUTES: i32 = 10;
 
 pub struct TotpRow {
     pub secret_enc: String,
     pub confirmed: bool,
     pub last_used_step: Option<i64>,
-    /// Unconfirmed and started less than [`SETUP_TTL_MINUTES`] ago.
     pub pending: bool,
 }
 
-/// The user's TOTP row, confirmed or not.
 pub async fn totp(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Option<TotpRow>, CoreError> {
     let row = sqlx::query_as!(
         TotpRow,
@@ -33,7 +28,6 @@ pub async fn totp(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Option<TotpRow>,
     Ok(row)
 }
 
-/// Start (or restart) TOTP setup: inserts, or replaces an unconfirmed row.
 /// Returns `false` and writes nothing when a confirmed row exists.
 pub async fn upsert_unconfirmed_totp(
     pool: &sqlx::PgPool,
@@ -55,11 +49,8 @@ pub async fn upsert_unconfirmed_totp(
     Ok(res.rows_affected() == 1)
 }
 
-/// Finish TOTP setup in one transaction: confirms the unconfirmed row (stamping
-/// the accepted `step`) and replaces the recovery codes. Only the row still
-/// holding `secret_enc` (the secret the code was checked against) and started
-/// less than [`SETUP_TTL_MINUTES`] ago is confirmed; `false`, with nothing
-/// written, when there is no such unconfirmed row.
+/// Only the row still holding `secret_enc` (the secret the code was checked against) and within
+/// [`SETUP_TTL_MINUTES`] is confirmed; `false` otherwise.
 pub async fn confirm_totp(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -87,7 +78,6 @@ pub async fn confirm_totp(
     Ok(true)
 }
 
-/// Delete all of the user's recovery codes and insert `code_hashes`.
 async fn write_codes(
     conn: &mut sqlx::PgConnection,
     user_id: Uuid,
@@ -110,7 +100,6 @@ async fn write_codes(
     Ok(())
 }
 
-/// Housekeeping: drop unconfirmed setups too old to be confirmed.
 pub async fn delete_stale_setups(pool: &sqlx::PgPool) -> Result<u64, CoreError> {
     let res = sqlx::query!(
         r#"delete from user_totp
@@ -123,8 +112,7 @@ pub async fn delete_stale_setups(pool: &sqlx::PgPool) -> Result<u64, CoreError> 
     Ok(res.rows_affected())
 }
 
-/// Accept a TOTP step at most once: a single atomic update that only moves
-/// `last_used_step` forward on a confirmed row. `true` when this call won.
+/// A single atomic update, so a step is accepted at most once.
 pub async fn use_totp_step(
     db: impl sqlx::PgExecutor<'_>,
     user_id: Uuid,
@@ -142,9 +130,8 @@ pub async fn use_totp_step(
     Ok(res.rows_affected() == 1)
 }
 
-/// Remove TOTP and every recovery code in one transaction. `true` only when a
-/// confirmed TOTP existed; a pending (unconfirmed) setup is discarded too but
-/// reports `false`.
+/// `true` only when a confirmed TOTP existed; a pending setup is discarded too but reports
+/// `false`.
 pub async fn delete_totp(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, CoreError> {
     let mut tx = pool.begin().await?;
     sqlx::query!(
@@ -164,8 +151,6 @@ pub async fn delete_totp(pool: &sqlx::PgPool, user_id: Uuid) -> Result<bool, Cor
     Ok(confirmed == Some(true))
 }
 
-/// Replace the user's recovery codes (used or not) with `code_hashes`, in one
-/// transaction.
 pub async fn replace_recovery_codes(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -177,10 +162,8 @@ pub async fn replace_recovery_codes(
     Ok(())
 }
 
-/// Spend an unused recovery code: one atomic mark-used, so a code works once
-/// even under concurrent requests. `Some(remaining unused)` on success, `None`
-/// when no unused code matches. Takes a connection so the caller can make it
-/// part of its own transaction (login spends the challenge in the same one).
+/// One atomic mark-used: a code works once even under concurrent requests. Takes a connection
+/// so login can spend the challenge in the same transaction.
 pub async fn use_recovery_code(
     conn: &mut sqlx::PgConnection,
     user_id: Uuid,
@@ -216,7 +199,7 @@ pub struct Status {
     pub passkeys: i64,
 }
 
-/// What the user has set up. `totp` counts only a confirmed row.
+/// `totp` counts only a confirmed row.
 pub async fn status(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Status, CoreError> {
     let row = sqlx::query_as!(
         Status,
@@ -233,8 +216,6 @@ pub async fn status(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Status, CoreEr
     Ok(row)
 }
 
-/// Two-factor is on when a confirmed authenticator exists. Passkeys are a way
-/// to sign in, not a second step: they never turn it on.
 pub fn has_second_factor(s: &Status) -> bool {
     s.totp
 }
@@ -251,9 +232,6 @@ impl Cleared {
     }
 }
 
-/// Delete every second factor of the user and report how many rows went from
-/// each table. Takes a connection so a caller can run it inside its own
-/// transaction (password reset, CLI).
 pub async fn clear_all(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<Cleared, CoreError> {
     let totp = sqlx::query!(r#"delete from user_totp where user_id = $1"#, user_id)
         .execute(&mut *conn)
@@ -277,9 +255,7 @@ pub async fn clear_all(conn: &mut sqlx::PgConnection, user_id: Uuid) -> Result<C
     })
 }
 
-/// Operator escape hatch: turn off every second factor of the user with this
-/// email and sign them out everywhere, in one transaction. `None` when no such
-/// user exists; otherwise what was removed and how many sessions ended.
+/// Operator escape hatch. `None` when no such user exists.
 pub async fn reset_for_email(
     pool: &sqlx::PgPool,
     email: &str,
@@ -336,7 +312,6 @@ mod tests {
         age_setup(&pool, u, 11).await;
         assert!(!totp(&pool, u).await.unwrap().unwrap().pending);
         assert!(!confirm_totp(&pool, u, "s", 1, &codes(3)).await.unwrap());
-        // Starting again resets the clock.
         upsert_unconfirmed_totp(&pool, u, "s").await.unwrap();
         assert!(totp(&pool, u).await.unwrap().unwrap().pending);
         assert!(confirm_totp(&pool, u, "s", 1, &codes(3)).await.unwrap());

@@ -1,5 +1,3 @@
-//! What the admin endpoints send and accept.
-
 use gripsou_providers::registry::{AccountKind, Context, Keyed, Providers};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -65,8 +63,6 @@ pub struct SetProviderReq {
     pub enabled: bool,
 }
 
-/// What a provider's keys are for: the first-run server setup shows one
-/// section per group.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub enum KeyGroup {
@@ -75,23 +71,19 @@ pub enum KeyGroup {
     Logos,
 }
 
-/// One provider's keys for Settings → Server. A secret's value never leaves
-/// the server: only whether it is set.
+/// A secret's value is never sent, only whether it is set.
 #[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiKeyProvider {
     pub key: String,
     pub display_name: String,
     pub group: KeyGroup,
-    /// Whether the saved keys are enough for what the group enables.
     pub ready: bool,
-    /// For a bank provider, the address its console must allow, as the server
-    /// sends it: the browser's own address can differ.
+    /// The address the bank console must allow, as the server sends it: the browser's can differ.
     pub return_address: Option<String>,
     pub fields: Vec<ApiKeyField>,
 }
 
-/// `secret` tells the frontend which of the two shapes it is.
 #[derive(Debug, Serialize, PartialEq, Eq, TS)]
 #[serde(untagged)]
 pub enum ApiKeyField {
@@ -196,7 +188,6 @@ pub struct SetBudgetAiSettingsReq {
     pub model: Option<String>,
 }
 
-/// AI spend for Settings → Server. Token counts are numbers; money is strings.
 #[derive(Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(rename = "BudgetAiUsage")]
@@ -221,8 +212,6 @@ pub struct BudgetAiModelUsageDto {
     pub cost: Option<String>,
 }
 
-/// One entry of the `PUT /settings/budget-ai/prices` map, USD per million
-/// tokens as decimal strings. Parsed by the handler so bad values are a 400.
 #[derive(Deserialize, TS)]
 pub struct BudgetAiPriceReq {
     #[serde(rename = "in")]

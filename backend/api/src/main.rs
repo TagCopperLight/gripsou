@@ -5,8 +5,7 @@ use tracing_subscriber::EnvFilter;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
-    // Two independent outputs: the terminal (filtered by RUST_LOG, default info)
-    // and the saved log (gripsou's info+ lines, whatever RUST_LOG says).
+    // The terminal follows RUST_LOG (default info); the saved log takes gripsou's info+ lines whatever RUST_LOG says.
     let log_writer = gripsou_core::logs::install(
         EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
     );
@@ -25,7 +24,6 @@ async fn main() -> anyhow::Result<()> {
     let db = gripsou_core::db::connect(&database_url).await?;
 
     sqlx::migrate!("../migrations").run(&db).await?;
-    // The log table exists from here; lines queued since startup are written too.
     let log_handle = log_writer.spawn(db.clone());
     tracing::info!("migrations applied");
 
@@ -44,8 +42,6 @@ async fn main() -> anyhow::Result<()> {
     let jobs = std::sync::Arc::new(jobs);
     tokio::spawn(gripsou_jobs::run_scheduler(db.clone(), jobs.clone()));
 
-    // After the migrations, before listening: the banner sits just above the
-    // `listening` line.
     let setup = gripsou_api::setup::start(&db).await?;
     let static_dir = env::var("STATIC_DIR").unwrap_or_else(|_| "frontend/dist".into());
     let app = gripsou_api::router(
@@ -77,8 +73,7 @@ enum Command {
     ResetTwoFactor(Option<String>),
 }
 
-/// What serving needs from the environment, checked before touching the
-/// database. The key is never printed.
+/// The key is never printed.
 fn serve_config() -> anyhow::Result<(EncryptionKey, gripsou_api::Passkeys)> {
     let key = EncryptionKey::parse(env::var("ENCRYPTION_KEY").ok().as_deref())
         .map_err(anyhow::Error::msg)?;
@@ -87,7 +82,6 @@ fn serve_config() -> anyhow::Result<(EncryptionKey, gripsou_api::Passkeys)> {
     Ok((key, passkeys))
 }
 
-/// Ctrl-C locally, SIGTERM from `docker stop`.
 async fn shutdown_signal() {
     let ctrl_c = async {
         let _ = tokio::signal::ctrl_c().await;

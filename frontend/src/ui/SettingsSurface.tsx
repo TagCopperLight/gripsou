@@ -2,8 +2,6 @@ import type { ReactNode } from "react";
 
 import { Surface } from "./Surface";
 
-/** A settings section: its title, an optional line under it, and an optional
- *  action on the title's right. */
 export function SettingsSurface({ title, hint, action, className = "", children }: {
   title: ReactNode;
   hint?: ReactNode;

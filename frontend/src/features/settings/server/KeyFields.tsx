@@ -9,9 +9,7 @@ import { showDone } from "../../../lib/errorToasts";
 import type { ApiKeyField } from "../../../api/wire";
 import type { SaveKey } from "./useSaveKey";
 
-// A plain text field drawn as dots, rather than a password field: password
-// managers offer to save anything typed in one, and draw its placeholder in
-// another font.
+// A text field drawn as dots, not a password field: password managers offer to save anything typed in one and draw its placeholder in another font.
 const MASKED = "[-webkit-text-security:disc] text-base tracking-[0.2em]";
 // Asks the usual password managers to leave a field alone.
 const NO_PASSWORD_MANAGER = {
@@ -22,11 +20,8 @@ const NO_PASSWORD_MANAGER = {
   "data-form-type": "other",
 };
 
-/** Saves the field; `onSaved` runs once the server took it. Settles when the
- *  request is over. */
 type Save = (value: string | null, onSaved?: () => void) => Promise<void>;
 
-/** A provider's fields: the plain ones side by side, then each secret. */
 export function KeyFieldList({ fields, save }: { fields: ApiKeyField[]; save: SaveKey }) {
   const plain = fields.filter((f) => !f.secret);
   const secrets = fields.filter((f) => f.secret);
@@ -46,12 +41,9 @@ export function KeyFieldList({ fields, save }: { fields: ApiKeyField[]; save: Sa
   );
 }
 
-/** A value shown as it is: typing edits it, Enter or leaving saves it,
- *  Escape puts the saved one back, emptying it removes it. */
 function PlainField({ label, value, save }: { label: string; value: string | null; save: Save }) {
   const id = useId();
-  // The draft is tied to the saved value it started from: once a save lands
-  // and the value moves, the field shows the server again.
+  // Draft tied to the saved value it started from: once a save moves the value, the field shows the server again.
   const [draft, setDraft] = useState<{ base: string | null; text: string } | null>(null);
   const typed = draft && draft.base === value ? draft.text : null;
 
@@ -84,16 +76,12 @@ function PlainField({ label, value, save }: { label: string; value: string | nul
   );
 }
 
-/** A secret: dots once saved, with Replace and a bin. Replacing opens an
- *  empty field with a Save button inside; only Save or Enter sends it, and
- *  Escape gives up. A field with nothing saved is the same empty field. */
 function SecretField({ label, isSet, save }: { label: string; isSet: boolean; save: Save }) {
   const { t } = useTranslation();
   const id = useId();
   const [replacing, setReplacing] = useState(false);
   const [text, setText] = useState("");
-  // Which request is running, for that button alone: two fields' saves share
-  // one mutation, so its `isPending` can't tell them apart.
+  // Two fields' saves share one mutation, so its `isPending` can't tell their buttons apart.
   const [running, setRunning] = useState<"save" | "remove" | null>(null);
   const run = (kind: "save" | "remove", value: string | null, onSaved: () => void) => {
     setRunning(kind);
@@ -111,14 +99,12 @@ function SecretField({ label, isSet, save }: { label: string; isSet: boolean; sa
       showDone(t("settings.server.apiKeys.savedToast"));
       close();
     });
-    // On failure the error toast shows and the field stays open to try again.
   };
   const remove = () => run("remove", null, () => showDone(t("settings.server.apiKeys.removedToast")));
 
   if (isSet && !replacing) {
     return (
-      // Keyed apart from the editing field: React would otherwise reuse its
-      // input for the dots, and the focus would stay on it after a save.
+      // Keyed apart from the editing field: React would reuse its input for the dots and focus would stay on it.
       <Field key="saved" label={label}>
         <div className="flex items-center gap-1">
           <TextInput

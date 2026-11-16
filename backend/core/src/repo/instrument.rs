@@ -1,13 +1,8 @@
-//! Resolve a canonical `InstrumentRef` to a global `instrument` row id,
-//! creating it if absent, and record what the market-data passes learn about
-//! it. Instruments are shared across all users.
-
 use uuid::Uuid;
 
 use crate::dto::{Composition, InstrumentRef};
 use crate::error::CoreError;
 
-/// An instrument a market-data pass works on.
 pub struct InstrumentRow {
     pub id: Uuid,
     pub kind: String,
@@ -18,18 +13,15 @@ pub struct InstrumentRow {
     pub meta: serde_json::Value,
 }
 
-/// What a market-data provider learns of an instrument is kept in its `meta`
-/// under the provider's key: `{key}_symbol` for the symbol it resolved,
+/// A provider's findings live in `meta` under its key: `{key}_symbol`, or
 /// `{key}_resolution = "unresolved"` when it found none.
 impl InstrumentRow {
-    /// The symbol `provider_key` resolved this instrument to.
     pub fn provider_symbol(&self, provider_key: &str) -> Option<&str> {
         self.meta
             .get(format!("{provider_key}_symbol"))
             .and_then(|v| v.as_str())
     }
 
-    /// Whether `provider_key` found no symbol for it.
     pub fn unresolved_by(&self, provider_key: &str) -> bool {
         self.meta
             .get(format!("{provider_key}_resolution"))
@@ -48,18 +40,12 @@ impl InstrumentRow {
     }
 }
 
-/// On conflict, the provider-supplied `name` is written (provider-authoritative;
-/// instrument names are not user-editable, unlike `account.name`).
-///
-/// Known limitation (deferred): the same real security reported with an ISIN in
-/// one sync and symbol-only in another resolves via two different natural keys
-/// and can produce two `instrument` rows. Cross-key dedup is intentionally left
-/// for when real provider payloads inform the rule.
+/// Known limitation: the same security reported with an ISIN in one sync and symbol-only
+/// in another gets two rows.
 pub async fn resolve_instrument(
     conn: &mut sqlx::PgConnection,
     ins: &InstrumentRef,
 ) -> Result<Uuid, CoreError> {
-    // The provider's name for the currency replaces the one stored.
     if ins.kind == "cash" {
         let id = sqlx::query_scalar!(
             r#"
@@ -78,11 +64,8 @@ pub async fn resolve_instrument(
     }
 
     if let Some(isin) = &ins.isin {
-        // ISIN is the identity for this path, so `symbol` is deliberately stored
-        // as null. Ticker symbols are not globally unique (the same ticker maps to
-        // different ISINs across exchanges), so persisting it here would collide on
-        // the `(kind, symbol)` partial unique index. `symbol` is populated only on
-        // the symbol-only path below, where no ISIN is available to identify the row.
+        // `symbol` stays null here: tickers repeat across exchanges and would collide on the
+        // `(kind, symbol)` partial unique index.
         let id = sqlx::query_scalar!(
             r#"
             insert into instrument (kind, symbol, isin, name, currency)
@@ -125,8 +108,6 @@ pub async fn resolve_instrument(
     })
 }
 
-/// The cash instrument of `currency` (an FX rate is its price), created
-/// named after the currency when absent.
 pub async fn ensure_cash(
     conn: &mut sqlx::PgConnection,
     currency: &str,
@@ -154,14 +135,8 @@ pub async fn ensure_cash(
     Ok(row)
 }
 
-/// Caches the symbol `provider_key` resolved the instrument to.
-///
-/// Writes to `meta` only. `symbol` and `kind` are half of the natural key the
-/// next sync re-resolves this row by (`instrument_kind_symbol_uq`), so nothing
-/// after the initial insert may touch them: rewriting `symbol` to a provider's
-/// ticker makes the next `resolve_instrument` miss, insert a duplicate
-/// instrument and a duplicate holding, and lets ingest's close loop zero the
-/// original, losing that position's history.
+/// Writes to `meta` only. `symbol` and `kind` are the natural key the next sync re-resolves
+/// by: rewriting them would insert a duplicate instrument and holding and zero the original.
 pub async fn set_symbol(
     conn: &mut sqlx::PgConnection,
     instrument_id: Uuid,
@@ -183,8 +158,6 @@ pub async fn set_symbol(
     Ok(())
 }
 
-/// Records that `provider_key` has no symbol for the instrument, so it is
-/// not asked again.
 pub async fn mark_unresolved(
     conn: &mut sqlx::PgConnection,
     instrument_id: Uuid,

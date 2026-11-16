@@ -1,14 +1,11 @@
-//! ISIN → Yahoo symbol selection. Yahoo's search ranks the primary/home-market
-//! listing first, so the top EQUITY/ETF candidate is taken, whatever its
-//! currency.
+//! Yahoo's search ranks the primary/home-market listing first, so the top EQUITY/ETF candidate is
+//! taken, whatever its currency.
 
-/// One result row distilled from Yahoo's search response.
 pub(crate) struct Candidate {
     pub symbol: String,
     pub quote_type: String,
 }
 
-/// Pick the first equity/ETF candidate, preserving Yahoo's ranking.
 pub(crate) fn select_symbol(candidates: &[Candidate]) -> Option<String> {
     candidates
         .iter()

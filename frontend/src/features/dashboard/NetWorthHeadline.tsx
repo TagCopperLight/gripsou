@@ -9,10 +9,7 @@ import type { Range } from "../../api/wire";
 
 const FIGURE = "text-[32px] md:text-[40px]";
 
-/** The net worth in large, its gain over the range in a pill, and the range
- *  in words. Asterisked when it leaves holdings out for want of a rate: its
- *  card's footnote says how many. Without a `summary` (still loading), bones
- *  where the figures go; the range in words is known already. */
+/** Asterisked when holdings are left out for want of a rate; the card's footnote says how many. Without a `summary`, bones where the figures go. */
 export function NetWorthHeadline({ summary, range, masked }: { summary?: NetWorthSummary; range: Range; masked: boolean }) {
   const { t } = useTranslation();
   const over = <p className="text-fg-faint text-sm">{t(`range.over.${range}`)}</p>;

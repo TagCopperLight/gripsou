@@ -5,17 +5,12 @@ on:
   push:
     branches: [main]
 
-# A newer push to the same PR makes the older run pointless: cancel it. Every
-# run on main gets a group of its own, because GitHub drops a *queued* run when
-# a newer one joins its group even without cancel-in-progress, and each commit
-# on main needs its result.
+# Cancel the older run of a PR. Runs on main get their own group: GitHub drops a queued run when a newer one joins its group, and each main commit needs its result.
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
-# The checks themselves live in ci.sh, so a local run is the same as this one.
-# A Rust cache is saved only under a new key: ci.sh's hash in it renews the
-# cache when a job starts building something else.
+# The checks live in ci.sh, so a local run matches. The Rust cache is saved only under a new key, which ci.sh's hash renews.
 jobs:
   backend:
     strategy:

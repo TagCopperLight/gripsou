@@ -18,13 +18,10 @@ use crate::sync::{Trigger, claim};
 
 const AWAITING_TIMEOUT_MINS: i32 = 5;
 const PENDING_TIMEOUT_MINS: i32 = 10;
-/// A connection is due for its daily sync this long after its last one: a
-/// little under a day, so the hourly check does not drift it later each day.
+/// A little under a day, so the hourly check doesn't drift it later each day.
 const DAILY_SYNC_AFTER_HOURS: i32 = 23;
 
-/// One cleanup pass: logs `sweep finished` with the count when it changed
-/// something, `sweep failed` (error: whatever it cleans stays stuck) when
-/// it could not run.
+/// `sweep failed` is an error: whatever it cleans stays stuck.
 async fn sweep<F>(name: &'static str, run: F)
 where
     F: std::future::Future<Output = Result<u64, CoreError>>,
@@ -40,11 +37,8 @@ where
     .await
 }
 
-/// In-process scheduler: hourly cleanup of expired auth sessions, and daily sync.
 pub async fn run_scheduler(db: Db, deps: Arc<Deps>) {
-    // Boot sweep: every 'syncing' row predates this process, so whatever held
-    // the lock is gone. The scheduler runs in the API process and the app is
-    // single-instance, so there is no sibling whose live claim this could steal.
+    // Boot sweep: every 'syncing' row predates this process. The app is single-instance, so no live claim is stolen.
     sweep("boot_sync_locks", connection::clear_syncing(&db)).await;
     sweep(
         "boot_ai_runs",

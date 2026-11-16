@@ -1,5 +1,3 @@
-//! Holdings, their prices and returns, and the lots recorded against them.
-
 pub mod dto;
 
 use crate::error::Json;
@@ -36,9 +34,7 @@ pub async fn investment_returns(
     let accounts = gripsou_core::repo::valuation::accounts(&pool, user_id).await?;
     let r = gripsou_core::returns::returns(&inputs.positions, &inputs.flows, inputs.today);
 
-    // `valuation::accounts` lists every account it can value from snapshots, which
-    // every synced account has, so the lookup only fails for an account never
-    // synced.
+    // Fails only for an account never synced.
     let rows = r
         .accounts
         .iter()
@@ -90,9 +86,7 @@ pub async fn holding_prices(
     ))
 }
 
-/// Parse a batch of lot adds, shared by `save_lots` and `preview_lots` so the
-/// number shown while editing and the number accepted on save reject the same
-/// inputs.
+/// Shared by `save_lots` and `preview_lots` so both reject the same inputs.
 fn parse_lot_adds(adds: &[dto::LotEntry]) -> Result<Vec<NewLot>, ApiError> {
     adds.iter()
         .map(|a| {
@@ -102,7 +96,6 @@ fn parse_lot_adds(adds: &[dto::LotEntry]) -> Result<Vec<NewLot>, ApiError> {
         .collect()
 }
 
-/// Apply a batch of manual lot adds and deletes atomically.
 pub async fn save_lots(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -123,8 +116,6 @@ pub async fn holding_lots(
     Ok(Json(rows.into_iter().map(dto::Lot::from_row).collect()))
 }
 
-/// Lots the form can pre-fill: quantity changes matched to their one
-/// transaction. Read-only; the user saves them through `save_lots`.
 pub async fn lot_suggestions(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -138,7 +129,6 @@ pub async fn lot_suggestions(
     ))
 }
 
-/// What the figures would be if `rows` were the holding's manual lots.
 pub async fn preview_lots(
     State(pool): State<PgPool>,
     AuthUser { user_id, .. }: AuthUser,
@@ -215,7 +205,6 @@ mod tests {
         )
         .await;
 
-        // `accounts` values from snapshots, as after any real sync.
         sqlx::query(
             "insert into holding_snapshot (holding_id, as_of, quantity, value) \
              values ($1, current_date, 2, 220)",
@@ -336,8 +325,6 @@ mod tests {
         assert_eq!(left, 0);
     }
 
-    /// The whole point of the batch: a delete that cannot be honoured must take
-    /// the adds down with it, or the user sees "saved" over a half-applied edit.
     #[gripsou_core::testkit::db_test]
     async fn a_bad_delete_rolls_back_the_adds(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
@@ -363,8 +350,6 @@ mod tests {
         assert_eq!(written, 0, "the add must not survive the failed delete");
     }
 
-    /// A provider row resyncs, so deleting it is meaningless — and letting the
-    /// request through would report success for a change that silently reverts.
     #[gripsou_core::testkit::db_test]
     async fn a_provider_row_cannot_be_deleted(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
@@ -398,9 +383,6 @@ mod tests {
         assert_eq!(alive, 1);
     }
 
-    /// Seed a SECOND holding under the SAME connection/user as `seed_holding`
-    /// produced, so a test can prove that a row's own-holding correlation is
-    /// enforced even when the caller legitimately owns both holdings.
     async fn seed_second_holding(pool: &PgPool, user_id: Uuid) -> Uuid {
         use gripsou_core::dto::{CanonicalAccount, CanonicalHolding, InstrumentRef};
         use gripsou_core::repo::account::upsert_account;
@@ -444,10 +426,6 @@ mod tests {
             .unwrap()
     }
 
-    /// The caller owns BOTH holdings: the row belongs to holding A, and the
-    /// delete is aimed at holding B. It must be refused, or a user could delete
-    /// their own manual lot through the wrong holding's endpoint and silently
-    /// corrupt that holding's cost basis.
     #[gripsou_core::testkit::db_test]
     async fn a_row_from_another_holding_of_the_same_user_cannot_be_deleted(pool: PgPool) {
         let (user_id, holding_a) = seed_holding(&pool, "owner@t.local").await;
@@ -534,7 +512,6 @@ mod tests {
         )
         .await
         .expect_err("cross-user delete must fail");
-        // 404, not 403: the endpoint must not confirm that this holding exists.
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
 
         let alive: i64 = sqlx::query_scalar("select count(*) from lot where id = $1")
@@ -545,8 +522,6 @@ mod tests {
         assert_eq!(alive, 1);
     }
 
-    /// A malformed row must be caught BEFORE anything is written, so a rejected
-    /// batch leaves no trace at all.
     #[gripsou_core::testkit::db_test]
     async fn a_malformed_add_writes_nothing(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
@@ -575,8 +550,6 @@ mod tests {
         assert_eq!(written, 0);
     }
 
-    /// Manual entry is the main path for securities, so the derived history
-    /// must move now — and ONCE, not per row.
     #[gripsou_core::testkit::db_test]
     async fn save_lots_rebuilds_the_derived_history(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
@@ -626,8 +599,6 @@ mod tests {
         assert!(derived_after > 0, "the lot must rebuild the history now");
     }
 
-    /// The frontend disables Save in this state; rejecting it too would be a
-    /// second rule for the same thing.
     #[gripsou_core::testkit::db_test]
     async fn an_empty_batch_is_a_no_op(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
@@ -645,7 +616,6 @@ mod tests {
         assert_eq!(status, StatusCode::NO_CONTENT);
     }
 
-    /// Another user's holding is a 404, as on the other lot endpoints.
     #[gripsou_core::testkit::db_test]
     async fn holding_lots_refuse_another_users_holding(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
@@ -675,7 +645,6 @@ mod tests {
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
-    /// Another user's holding is a 404, as on the lot endpoints.
     #[gripsou_core::testkit::db_test]
     async fn holding_prices_refuse_another_users_holding(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
@@ -718,8 +687,6 @@ mod tests {
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
-    /// Suggestions on another user's holding are a 404, never an empty list:
-    /// the endpoint must not confirm the existence of ids the caller can't see.
     #[gripsou_core::testkit::db_test]
     async fn lot_suggestions_refuse_another_users_holding(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
@@ -738,9 +705,6 @@ mod tests {
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
-    /// Previewing lots on another user's holding is a 404 (the preview writes
-    /// and rolls back on that holding, so it must never get that far) and
-    /// leaves the owner's lots intact.
     #[gripsou_core::testkit::db_test]
     async fn preview_lots_refuses_another_users_holding(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
@@ -778,7 +742,6 @@ mod tests {
         assert_eq!(lots, 1);
     }
 
-    /// The owner's preview computes the basis of the given rows without saving them.
     #[gripsou_core::testkit::db_test]
     async fn preview_lots_computes_without_writing(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;
@@ -794,9 +757,7 @@ mod tests {
         .await
         .expect("owner may preview")
         .0;
-        // The mean price is the given rows' own; `invested` would also carry
-        // the part of the 100-unit position the 10 previewed units leave
-        // unexplained, which is `lot_basis`'s business, not this endpoint's.
+        // `invested` would also carry the part of the position the previewed units leave unexplained: `lot_basis`'s business.
         assert_eq!(
             preview.account.mean_price.parse::<Decimal>().unwrap(),
             Decimal::new(15, 0)
@@ -810,9 +771,6 @@ mod tests {
         assert_eq!(lots, 0, "a preview must not persist its rows");
     }
 
-    /// A USD listing in a EUR account: the preview values the shares in euros
-    /// before comparing them with what was paid, or the exchange rate reads as
-    /// gain.
     #[gripsou_core::testkit::db_test]
     async fn preview_lots_values_a_foreign_listing_in_the_account_currency(pool: PgPool) {
         use gripsou_core::testkit::{rate_on, seed_cash_instrument};
@@ -857,8 +815,6 @@ mod tests {
         assert_eq!(invested + unrealised, Decimal::new(150, 0));
     }
 
-    /// Before the listing's rate is known the preview has no unrealised
-    /// figure, rather than valuing the shares at zero (a total loss).
     #[gripsou_core::testkit::db_test]
     async fn preview_lots_leaves_unrealised_unknown_without_a_rate(pool: PgPool) {
         let (user_id, holding_id) = seed_holding(&pool, "owner@t.local").await;
@@ -897,8 +853,6 @@ mod tests {
         assert_eq!(preview.account.unrealised, None);
     }
 
-    /// The figures also come in the reader's currency, converted from the
-    /// account's, and are absent while that rate is unknown.
     #[gripsou_core::testkit::db_test]
     async fn preview_lots_also_gives_the_figures_in_the_readers_currency(pool: PgPool) {
         use gripsou_core::testkit::{rate_on, seed_cash_instrument};
@@ -963,7 +917,6 @@ mod tests {
         assert!(p.reporting.is_none());
     }
 
-    /// The holdings list shows only the caller's holdings.
     #[gripsou_core::testkit::db_test]
     async fn holdings_lists_only_own(pool: PgPool) {
         let alice = seed_owned(&pool, "alice@t.local", "alice-txn").await;

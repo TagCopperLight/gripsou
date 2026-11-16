@@ -1,12 +1,10 @@
 const SIZE = 128;
 
-// Largest centered square of a source image (center-cover crop).
 export function coverCrop(srcW: number, srcH: number): { sx: number; sy: number; side: number } {
   const side = Math.min(srcW, srcH);
   return { sx: (srcW - side) / 2, sy: (srcH - side) / 2, side };
 }
 
-// Load a user-picked image, center-crop to a square, downscale to 128px webp.
 export function fileToAvatarDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);

@@ -6,8 +6,7 @@ import { AuthPage } from "../../ui/AuthPage";
 import { Button } from "../../ui/Button";
 import { useFinishConnection } from "./useFinishConnection";
 
-/** Where the bank provider sends the user back to. Mid-setup the router hands
- *  the visit to the welcome screen instead, which finishes the connection. */
+/** Mid-setup the router sends this visit to the welcome screen, which finishes the connection. */
 export function ConnectionCallback() {
   const { t } = useTranslation();
   const navigate = useNavigate();

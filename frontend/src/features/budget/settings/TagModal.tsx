@@ -16,7 +16,6 @@ import { budgetErrorKey, useBudgetErrorToast } from "../budgetErrors";
 type TagModalProps = {
   tag?: BudgetTag;
   onClose: () => void;
-  /** Asks to delete the tag: the caller confirms first. */
   onDelete: (tag: BudgetTag) => void;
 };
 

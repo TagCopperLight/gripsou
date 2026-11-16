@@ -50,8 +50,7 @@ async fn ingest_backfill_and_valuation_use_the_owners_day(pool: PgPool) -> anyho
     };
     use rust_decimal::Decimal;
     let (user, connection) = testkit::seed_user_and_connection(&pool).await;
-    // At every UTC hour at least one of these zones has a different day.
-    // Select it in SQL so this regression runs at any time of day.
+    // At every UTC hour some zone is on a different day. Selected in SQL so this runs at any time of day.
     let zone: String = sqlx::query_scalar(
         "select zone from unnest(array['Pacific/Kiritimati', 'Etc/GMT+12']) zone \
          where (now() at time zone zone)::date <> (now() at time zone 'UTC')::date limit 1",

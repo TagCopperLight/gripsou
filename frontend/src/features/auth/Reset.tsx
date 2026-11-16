@@ -27,7 +27,6 @@ export function Reset() {
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  // What was refused, and which field it's about (none: the form as a whole).
   const [error, setError] = useState<{ text: string; field: "password" | "confirm" | null } | null>(null);
   const [pending, setPending] = useState(false);
 
@@ -48,8 +47,7 @@ export function Reset() {
       adoptSession(res.token, res.user);
       void navigate({ to: "/" });
     } catch (err) {
-      // 404: the link expired or was used meanwhile. Anything else failed on
-      // the server's side, and mustn't blame the link.
+      // 404: the link expired or was used. Anything else must not blame the link.
       if (err instanceof ApiError && err.status === 404) setError({ text: t("auth.resetLinkInvalid"), field: null });
       else showError(t("auth.resetFailed"));
     } finally {
@@ -63,13 +61,11 @@ export function Reset() {
     <AuthPage>
       <form
         onSubmit={submit}
-        // Typing again: the refused value is being fixed.
         onInput={() => setError(null)}
         className="flex flex-col gap-4 rounded-3xl bg-surface p-6"
       >
         <div className="pb-1 text-lg font-semibold text-fg">{t("auth.resetPassword")}</div>
-        {/* Whose password it is; the hidden copy tells a password manager
-            which saved login to update. */}
+        {/* The hidden copy tells a password manager which saved login to update. */}
         <div className="truncate rounded-xl bg-surface-2 px-4 py-2.5 text-sm text-fg-dim">
           {guard.status === "valid" ? (
             email
@@ -80,7 +76,6 @@ export function Reset() {
           )}
         </div>
         <input type="email" autoComplete="username" value={email} readOnly hidden />
-        {/* Off until the link is known to be valid; else the guard leaves. */}
         <LoadingFrame loading={guard.status !== "valid"}>
           <Field
             label={t("auth.newPassword")}

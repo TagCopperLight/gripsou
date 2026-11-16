@@ -26,7 +26,6 @@ describe("useBudgetSummary", () => {
     renderHook(() => useBudgetSummary({ mode: "month", month: "2026-09" }), appWrapper());
     await waitFor(() => expect(calls).toHaveLength(1));
     expect(calls[0]).toContain("month=2026-09");
-    // Either `month` or `from`+`to`, never both — both is a 400.
     expect(calls[0]).not.toContain("from=");
     expect(calls[0]).not.toContain("to=");
   });

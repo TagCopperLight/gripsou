@@ -1,5 +1,3 @@
-//! Read + sync-state helpers for connections — the sync modal's data source.
-
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -9,14 +7,11 @@ use crate::error::CoreError;
 use crate::text_enum::text_enum;
 
 text_enum! {
-    /// `connection.status`. `syncing` is the per-connection sync lock.
     pub enum ConnectionStatus {
-        /// Created, its provider round-trip not done yet.
         Pending = "pending",
         Ok = "ok",
         Syncing = "syncing",
         Error = "error",
-        /// A refresh was asked of the provider; its webhook has not come.
         Awaiting = "awaiting",
     }
 }
@@ -33,8 +28,7 @@ pub struct ConnectionListRow {
     pub health: Option<SyncHealth>,
 }
 
-/// All of a user's connections, ordered so that connections of the same
-/// provider are adjacent (the API groups on that).
+/// Connections of one provider are adjacent: the API groups on that.
 pub async fn list_connections(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -86,9 +80,6 @@ pub struct ConnectionAccountRow {
     pub last_sync_at: Option<DateTime<Utc>>,
 }
 
-/// Every account under a user's connections, valued today in the reader's
-/// currency like the accounts grid (`account_values_today`), with the parent
-/// connection's last sync time. Zero when it has nothing valued yet.
 pub async fn list_connection_accounts(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -135,22 +126,14 @@ pub struct ConnectionState {
     pub last_error: Option<String>,
 }
 
-/// Outcome of attempting to claim a connection for syncing.
 pub enum BeginSync {
-    /// Claimed: status flipped to `syncing`. Carries the new state.
     Started(ConnectionState),
-    /// Owned by the user but already syncing — caller should 409.
     AlreadySyncing,
-    /// Not owned by the user / does not exist — caller should 404.
     NotFound,
 }
 
-/// Atomically claim a connection for syncing: flip status to `syncing` only if it
-/// is owned by `user_id`, set up (not `pending`) and not already syncing. This
-/// is the per-connection lock that prevents double runs. A sync always
-/// releases it: it ends, fails, panics or hits its time limit, and a restart
-/// clears it at boot. A `pending` connection has no credentials yet, and its
-/// callback only finishes it while it is still `pending`.
+/// The per-connection sync lock. A `pending` connection has no credentials yet, so it
+/// cannot be claimed.
 pub async fn begin_sync(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -177,9 +160,7 @@ pub async fn begin_sync(
     claim_outcome(pool, user_id, id, claimed).await
 }
 
-/// A claim's outcome. No claimed row means either "already busy" or "not
-/// owned" (a `pending` connection counts as not there yet); only then is it
-/// worth a second query to tell them apart.
+/// A `pending` connection counts as not there.
 async fn claim_outcome(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -206,9 +187,7 @@ async fn claim_outcome(
     })
 }
 
-/// Release a sync's lock as a success. Only a `syncing` connection is
-/// touched: the lock is the sync's, and a write from a sync that no longer
-/// holds it must not release a lock another sync has since taken.
+/// A sync that lost the lock must not release one another sync has taken.
 pub async fn mark_synced_ok(pool: &sqlx::PgPool, id: Uuid) -> Result<(), CoreError> {
     sqlx::query!(
         "update connection
@@ -223,15 +202,11 @@ pub async fn mark_synced_ok(pool: &sqlx::PgPool, id: Uuid) -> Result<(), CoreErr
     Ok(())
 }
 
-/// Release a sync's lock as a failure, recording the message. Only a
-/// `syncing` connection is touched, as in [`mark_synced_ok`].
 pub async fn mark_synced_error(pool: &sqlx::PgPool, id: Uuid, msg: &str) -> Result<(), CoreError> {
     release_with_error(pool, id, ConnectionStatus::Syncing, msg).await
 }
 
-/// Release an `awaiting` claim whose refresh request failed, recording the
-/// message. A connection the awaiting-timeout fallback has meanwhile claimed
-/// for syncing is left to that sync.
+/// A connection the awaiting-timeout fallback already claimed is left to that sync.
 pub async fn mark_refresh_failed(
     pool: &sqlx::PgPool,
     id: Uuid,
@@ -258,9 +233,8 @@ async fn release_with_error(
     Ok(())
 }
 
-/// The provider of `user_id`'s connection `id` while it waits for its
-/// callback. `None` once it is active or when it isn't the user's: a replayed
-/// or foreign callback never reaches the provider.
+/// `None` once active or not the user's: a replayed or foreign callback never reaches
+/// the provider.
 pub async fn pending_provider_key(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -277,7 +251,6 @@ pub async fn pending_provider_key(
     Ok(key)
 }
 
-/// Who owns a connection. `None` for an unknown id.
 pub async fn user_id(db: impl sqlx::PgExecutor<'_>, id: Uuid) -> Result<Option<Uuid>, CoreError> {
     let row = sqlx::query_scalar!("select user_id from connection where id = $1", id)
         .fetch_optional(db)
@@ -285,8 +258,6 @@ pub async fn user_id(db: impl sqlx::PgExecutor<'_>, id: Uuid) -> Result<Option<U
     Ok(row)
 }
 
-/// Records the connection's health as of this sync, beside its native ids
-/// in `provider_meta`.
 pub async fn set_health(
     db: impl sqlx::PgExecutor<'_>,
     id: Uuid,
@@ -318,8 +289,6 @@ pub async fn set_institution(
     Ok(())
 }
 
-/// What a sync reads of its connection: the provider and the sealed
-/// credentials.
 pub struct SyncSource {
     pub provider_key: String,
     pub credentials: serde_json::Value,
@@ -336,8 +305,7 @@ pub async fn sync_source(pool: &sqlx::PgPool, id: Uuid) -> Result<Option<SyncSou
     Ok(row)
 }
 
-/// The user's set-up connections, for "Sync all": a `pending` one is still
-/// on the provider's page.
+/// A `pending` connection is still on the provider's page.
 pub async fn ids_for_user(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Vec<Uuid>, CoreError> {
     let ids = sqlx::query_scalar!(
         r#"select id as "id!" from connection where user_id = $1 and status <> $2"#,
@@ -354,7 +322,6 @@ pub struct ActiveConnection {
     pub user_id: Uuid,
 }
 
-/// Connections not synced in the last `hours` (for the daily sync job).
 pub async fn connections_needing_sync(
     pool: &sqlx::PgPool,
     hours: i32,
@@ -376,8 +343,6 @@ pub async fn connections_needing_sync(
     Ok(rows)
 }
 
-/// `awaiting` connections whose force-refresh has not produced a webhook within
-/// `minutes` — candidates for the direct-fetch fallback.
 pub async fn connections_awaiting_timeout(
     pool: &sqlx::PgPool,
     minutes: i32,
@@ -398,10 +363,7 @@ pub async fn connections_awaiting_timeout(
     Ok(rows)
 }
 
-/// Boot sweep: release every sync lock. The process that claimed them is
-/// gone, so the syncs behind them will never finish or report. They are marked
-/// `error` rather than `ok`: a user looking at the connection must see that
-/// the sync did not complete. Returns the number of rows released.
+/// Marked `error`, not `ok`: the claiming process is gone and the sync did not complete.
 pub async fn clear_syncing(pool: &sqlx::PgPool) -> Result<u64, CoreError> {
     let res = sqlx::query!(
         "update connection
@@ -416,9 +378,6 @@ pub async fn clear_syncing(pool: &sqlx::PgPool) -> Result<u64, CoreError> {
     Ok(res.rows_affected())
 }
 
-/// Delete `pending` connections older than `minutes` — webview flows the user
-/// abandoned (closed the tab) so the callback never ran to clean them up.
-/// Returns the number of rows deleted.
 pub async fn delete_stale_pending(pool: &sqlx::PgPool, minutes: i32) -> Result<u64, CoreError> {
     let res = sqlx::query!(
         "delete from connection
@@ -431,8 +390,6 @@ pub async fn delete_stale_pending(pool: &sqlx::PgPool, minutes: i32) -> Result<u
     Ok(res.rows_affected())
 }
 
-/// Insert a new connection in `pending` state (OAuth round-trip not yet done).
-/// Returns the new connection id.
 pub async fn insert_pending(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -455,9 +412,8 @@ pub async fn insert_pending(
     Ok(id)
 }
 
-/// Store credentials and flip a pending connection to `ok`. False when the
-/// connection isn't `user_id`'s or isn't pending: a replayed callback never
-/// touches an active connection.
+/// False when not the user's or not pending: a replayed callback never touches an active
+/// connection.
 pub async fn finish_connect(
     pool: &sqlx::PgPool,
     id: Uuid,
@@ -490,7 +446,6 @@ pub struct ConnForSync {
     pub provider_meta: serde_json::Value,
 }
 
-/// Read an owned connection's provider info (no mutation). None => not found/owned.
 pub async fn connection_for_sync(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -512,9 +467,6 @@ pub async fn connection_for_sync(
     }))
 }
 
-/// Atomically transition an owned connection to `awaiting` (force-refresh
-/// requested). Only from `ok` or `error`: rejects one already `syncing` or
-/// `awaiting`, and a `pending` one, which is not set up yet.
 pub async fn begin_await(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -539,7 +491,6 @@ pub async fn begin_await(
     claim_outcome(pool, user_id, id, claimed).await
 }
 
-/// Find a connection by provider + native connection id stored in provider_meta.
 pub async fn find_by_external_connection_id(
     pool: &sqlx::PgPool,
     provider_key: &str,
@@ -558,8 +509,6 @@ pub async fn find_by_external_connection_id(
     Ok(row.map(|r| (r.id, r.user_id)))
 }
 
-/// Delete `user_id`'s connection `id` if it is still `pending`: a connect
-/// that failed or was cancelled. An active connection is never touched.
 pub async fn delete_pending(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -577,8 +526,6 @@ pub async fn delete_pending(
     Ok(n > 0)
 }
 
-/// Delete a connection and all its cascade-deleted data.
-/// Returns true if a row was deleted, false if not found or not owned by `user_id`.
 pub async fn delete_connection(
     pool: &sqlx::PgPool,
     user_id: Uuid,

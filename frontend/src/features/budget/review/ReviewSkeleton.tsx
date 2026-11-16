@@ -6,12 +6,8 @@ import { Bone, Skeleton, TextBone } from "../../../ui/Skeleton";
 import { AMOUNT_COL, CHIP_COL, CONFIDENCE_COL, REVIEW_ROW } from "./reviewColumns";
 import { boneWidths } from "../../../ui/boneWidths";
 
-/** The review queue while its rows load: the progress line's count and up to
- *  four lines in `ReviewLine`'s columns as bones, under the real title and
- *  bar. `queued` is the server's queue size when already known (it drives the
- *  Review tab): an empty queue is drawn as the empty state's card instead.
- *  Only its value on the first draw counts: a size arriving later would
- *  redraw the skeleton in a second shape, which reads as a second load. */
+/** `queued` is the server's queue size when known: an empty queue draws the empty state's card instead.
+ *  Only its first-draw value counts: a later size would redraw the skeleton in another shape and read as a second load. */
 export function ReviewSkeleton({ queued: queuedNow }: { queued?: number }) {
   const { t } = useTranslation();
   const [queued] = useState(queuedNow);
@@ -32,7 +28,6 @@ export function ReviewSkeleton({ queued: queuedNow }: { queued?: number }) {
       </Surface>
     );
   }
-  // An unknown queue shows as many rows as a long list.
   const widths = boneWidths(queued ?? 4);
   return (
     <div className="flex flex-col gap-4">

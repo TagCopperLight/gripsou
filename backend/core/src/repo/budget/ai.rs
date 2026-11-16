@@ -10,7 +10,6 @@ use crate::budget::vocab::{AiRunOutcome, CategoryKind, CategorySource};
 use crate::categorize::{CategoryOption, Example, Usage};
 use crate::error::CoreError;
 
-/// Same-description evidence per item, then trigram neighbours.
 const SAME_DESCRIPTION: i64 = 20;
 const NEIGHBOURS: i64 = 5;
 
@@ -56,9 +55,7 @@ pub async fn active_categories(
     .await?)
 }
 
-/// What gets written for one answered transaction. `category_id: None` is an
-/// abstention, which lands in the review queue as "no guess" and
-/// is never sent again.
+/// `category_id: None` is an abstention: it lands in review as "no guess" and is never sent again.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Decision {
     pub txn_id: Uuid,
@@ -75,8 +72,7 @@ pub struct WorkRow {
     pub day: NaiveDate,
 }
 
-/// The next chunk: the rows still the AI's to look at, newest first, minus the
-/// ones this run already sent (`skip`).
+/// Minus the ones this run already sent (`skip`).
 pub async fn work_chunk(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -103,7 +99,6 @@ pub async fn work_chunk(
     .await?)
 }
 
-/// How many rows the next runs still have to send — the banner's "N left".
 pub async fn remaining(pool: &sqlx::PgPool, user_id: Uuid) -> Result<i64, CoreError> {
     Ok(sqlx::query_scalar!(
         r#"
@@ -117,12 +112,9 @@ pub async fn remaining(pool: &sqlx::PgPool, user_id: Uuid) -> Result<i64, CoreEr
     .await?)
 }
 
-/// Evidence per item: up to 20 confirmed rows with the same normalised
-/// description (most recent first), then up to 5 confirmed rows with the
-/// most similar other descriptions. "Confirmed" = the user chose it
-/// (`budget_user_chose`). One statement for the whole chunk; both lookups go
-/// through the indexes on `description_norm`. Items not owned by `user_id`
-/// get no evidence.
+/// Up to 20 confirmed rows with the same normalised description (newest first), then up to 5 with the most
+/// similar descriptions. Confirmed means the user chose it (`budget_user_chose`). Items not owned by
+/// `user_id` get no evidence.
 pub async fn examples_for(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -186,7 +178,6 @@ pub async fn examples_for(
     Ok(map)
 }
 
-/// The most recent reviews and corrections, shared by every item of a request.
 pub async fn recent_corrections(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -222,11 +213,9 @@ pub async fn recent_corrections(
         .collect())
 }
 
-/// Writes one chunk's answers in one statement, after the network call
-/// returned. Guarded so an answer never overwrites a row someone categorised
-/// in the meantime, and never touches a row or a category of another user; a
-/// category deleted meanwhile degrades to an abstention rather than failing
-/// the chunk on the foreign key. Returns rows written.
+/// Guarded: never overwrites a row someone categorised meanwhile or touches another user's rows; a category
+/// deleted meanwhile becomes an abstention instead of failing the chunk on the foreign key. Returns rows
+/// written.
 pub async fn write_decisions(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -264,7 +253,6 @@ pub async fn write_decisions(
     Ok(written)
 }
 
-/// Opens the run's log row, marked `running`, at the real start of the run.
 pub async fn start_run(pool: &sqlx::PgPool, user_id: Uuid, model: &str) -> Result<Uuid, CoreError> {
     Ok(sqlx::query_scalar!(
         "insert into budget_ai_run (user_id, model) values ($1, $2) returning id",
@@ -275,7 +263,6 @@ pub async fn start_run(pool: &sqlx::PgPool, user_id: Uuid, model: &str) -> Resul
     .await?)
 }
 
-/// Adds one call's tokens to the run.
 pub async fn record_usage(
     pool: &sqlx::PgPool,
     run_id: Uuid,
@@ -322,7 +309,6 @@ pub struct LastRun {
     pub started_at: DateTime<Utc>,
 }
 
-/// The latest finished run.
 pub async fn last_run(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Option<LastRun>, CoreError> {
     Ok(sqlx::query_as!(
         LastRun,
@@ -340,20 +326,17 @@ pub async fn last_run(pool: &sqlx::PgPool, user_id: Uuid) -> Result<Option<LastR
     .await?)
 }
 
-/// Token totals for one model across every user's runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelUsage {
     pub model: String,
     pub runs: i64,
-    /// Runs with at least one call whose provider did not report its token
-    /// counts: their tokens are included but under-count the bill.
+    /// Runs with a call whose provider reported no token counts: included but under-counted.
     pub runs_without_usage: i64,
     pub tokens_in: i64,
     pub tokens_out: i64,
 }
 
-/// Per-model totals over all users, ordered by model key. A run still going
-/// counts with the tokens spent so far.
+/// A run still going counts with the tokens spent so far.
 pub async fn usage_by_model(pool: &sqlx::PgPool) -> Result<Vec<ModelUsage>, CoreError> {
     Ok(sqlx::query_as!(
         ModelUsage,

@@ -11,17 +11,13 @@ import { FxAsterisk } from "../../../ui/FxNote";
 import { usePopover } from "../../../ui/usePopover";
 
 type SelectionBarProps = {
-  /** The server's `selectable` count — what "all shown" actually covers:
-   *  the cash rows shown, never a buy or sale. */
+  /** The server's `selectable` count: the cash rows shown, never a buy or sale. */
   matching: number;
-  /** The selection's value in the reporting currency. "all shown" is the
-   *  server's `matchingTotal`; an explicit id selection is summed from the
-   *  loaded rows, which always contain it. */
+  /** In the reporting currency. "All shown" is the server's `matchingTotal`; an id selection is summed from loaded rows. */
   total: string;
   /** Some selected row has no exchange rate, so `total` leaves it out. */
   fxMissing?: boolean;
   showChecked: boolean;
-  /** Private mode: the total hidden. */
   masked?: boolean;
   busy: boolean;
   onAssignCategory: (categoryId: string | null) => void;
@@ -34,7 +30,6 @@ type IconActionProps = ComponentPropsWithoutRef<"button"> & {
   label: string;
 };
 
-/** A square icon button whose only label is its tooltip / accessible name. */
 function IconAction({ icon: Icon, label, ...props }: IconActionProps) {
   return (
     <Button
@@ -50,21 +45,18 @@ function IconAction({ icon: Icon, label, ...props }: IconActionProps) {
   );
 }
 
-/** The bulk-action bar: floats over the surface, stuck to the bottom of the page column. */
 export function SelectionBar({
   matching, total, fxMissing = false, showChecked, masked = false, busy, onAssignCategory, onAddTags, onMarkChecked,
 }: SelectionBarProps) {
   const { t } = useTranslation();
   const { selection, anySelected, clearSelection } = useBudget();
   const [pendingTags, setPendingTags] = useState<string[]>([]);
-  // Closing the tag chooser, by any way, abandons what was ticked: a bulk tag
-  // write can touch the whole ledger, so it happens on Save and nowhere else.
+  // Closing the tag chooser abandons what was ticked: a bulk tag write can touch the whole ledger, so only Save writes.
   const chooser = usePopover<"categories" | "tags">(() => setPendingTags([]));
 
   if (!anySelected) return null;
 
-  // "All shown" has no id list to count, by design — the server's `matching`
-  // is the honest number, and with no filter set that is the whole ledger.
+  // "All shown" has no id list: the server's `matching` count is the number.
   const count = selection.mode === "allShown" ? matching : selection.ids.size;
 
   const saveTags = () => {
@@ -73,10 +65,7 @@ export function SelectionBar({
   };
 
   return (
-    // Sticky rather than fixed: fixed centres on the viewport, which puts the
-    // bar off-centre under the sidebar. Sticking inside the page column
-    // centres it on the transactions surface. The wrapper is zero-height and
-    // lifts its content out of flow, so showing the bar adds no layout.
+    // Sticky, not fixed: fixed centres on the viewport, which is off-centre under the sidebar.
     <div className="pointer-events-none sticky bottom-5 z-30 -mt-4 flex h-0 items-end justify-center">
       <div
         data-testid="selection-bar"
@@ -96,8 +85,6 @@ export function SelectionBar({
           </span>
         </span>
         <span className="mx-1 h-5 w-px bg-fg/12" />
-        {/* Icon-only: the labels live in `title`/`aria-label`, so the actions
-            stay reachable by name for assistive tech and on hover. */}
         <IconAction
           icon={Folder}
           label={t("budget.transactions.assignCategory")}
@@ -139,11 +126,7 @@ export function SelectionBar({
           <CategoryChooser
             mode="pick"
             selectedIds={[]}
-            // Bulk-clearing the category on a whole selection — potentially the
-            // entire ledger, with "all shown" and no filters — has no
-            // legitimate one-click path: the far smaller per-row
-            // correction gets a confirmation dialog, so this one-click line
-            // must not exist at all here.
+            // Deliberately no bulk clear: on "all shown" it could wipe the whole ledger in one click.
             allowNone={false}
             onPick={(id) => onAssignCategory(id)}
             onClose={chooser.close}
@@ -164,8 +147,6 @@ export function SelectionBar({
               <Button
                 data-testid="chooser-save"
                 padded={false}
-                // Sized off `TagChip`, so the footer button sits at the same
-                // scale as the rows it confirms.
                 className="rounded-md px-2.25 py-1 text-[12.5px]"
                 disabled={!pendingTags.length || busy}
                 onClick={saveTags}

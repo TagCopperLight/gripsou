@@ -8,7 +8,6 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
 }));
 
-/** Land on the callback page with the query string Powens redirected to. */
 function landWith(search: string) {
   window.history.pushState({}, "", `/connections/callback${search}`);
 }

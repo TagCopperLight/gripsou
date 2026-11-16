@@ -10,7 +10,6 @@ import { renderWithApp, jsonResponse, stubFetch } from "../../test/kit";
 
 vi.mock("../../ui/EChart", () => ({ default: () => <div data-testid="chart" /> }));
 
-/** Answers each endpoint the cards read. */
 function stubApi(routes: Record<string, unknown>) {
   stubFetch(async (url: string) => {
       const path = Object.keys(routes).find((p) => url.includes(p));
@@ -23,7 +22,6 @@ const netWorth = (fxMissing: boolean): NetWorthResponse => ({
   summary: { netWorth: "1000", invested: "900", gainAbs: "100", gainPct: "0.1", fxMissing },
 });
 
-/** An ETF quoted in dollars, with no dollar rate: worth zero in the totals. */
 const unconverted = (id: string, name: string): Holding => ({
   id, ticker: id, name, kind: "etf", logo: null,
   accountId: "a1", accountName: "PEA", accountColor: "#6ea8fe", accountType: "pea",

@@ -1,5 +1,4 @@
-// The review panel: bottom-left, collapsible. A dev tool, so English only and
-// styled on its own (inline styles), apart from the app's design.
+// A dev tool: English only, styled on its own (inline styles).
 
 import { Fragment, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { getAuthToken, setAuthToken } from "../../src/api/client.ts";
@@ -28,8 +27,7 @@ async function patchPrefs(patch: Record<string, unknown>): Promise<void> {
   });
 }
 
-/** Every change goes through a reload: React Query's cache would otherwise
- *  keep showing the data from before. */
+/** Every change reloads: React Query's cache would keep showing the data from before. */
 const reload = () => location.reload();
 
 const s = {
@@ -67,9 +65,7 @@ function Segmented({ options, value, onChange, titles, wrap = false }: {
   options: [string, string][];
   value: string;
   onChange: (v: string) => void;
-  /** Hover text per option, for labels shortened to fit. */
   titles?: Record<string, string>;
-  /** Separate chips that wrap onto more lines, for a long list of options. */
   wrap?: boolean;
 }) {
   return (
@@ -123,7 +119,6 @@ export function Panel() {
   const focus = info?.focus ?? null;
   const shown = (st: ControlInfo["states"][number]) => focus !== null && st.pieces.includes(focus);
   const here = info?.states.filter(shown) ?? [];
-  // States sharing a group can't be on together: one segmented control each.
   const groups: [string, typeof here][] = [];
   for (const st of here) {
     if (!st.group) continue;
@@ -152,7 +147,6 @@ export function Panel() {
               <div style={{ display: "grid", rowGap: 4, marginBottom: 6 }}>
                 {groups.map(([name, members]) => (
                   <Fragment key={name}>
-                    {/* Full width, name above: a group can hold more options than fit beside a label. */}
                     <span style={s.label}>{name}</span>
                     <Segmented
                       options={[["", "Base"], ...members.map((st): [string, string] => [st.id, st.option ?? st.label])]}
@@ -224,7 +218,6 @@ export function Panel() {
             {info && (
               <div style={{ ...s.grid, marginBottom: 6 }}>
                 <span style={s.label}>Delay</span>
-                {/* No reload: it applies from the next request on. */}
                 <Segmented
                   options={[["off", "None"], ["on", `${info.slow.ms} ms each`]]}
                   value={info.slow.on ? "on" : "off"}

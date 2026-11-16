@@ -5,12 +5,10 @@ import { Check, Search } from "lucide-react";
 import { Popover } from "../../ui/Popover";
 import { HEAD_TEXT } from "../../ui/gridTable";
 
-/** One line of an `EntityChooser`. `label` is what the search box matches and
- *  what the keyboard reads; `render` is what the line draws (a chip). */
+/** `label` is matched by the search and read by the keyboard; `render` draws the line. */
 export type ChooserItem = {
   id: string;
   label: string;
-  /** A group heading key, or undefined for a flat list. */
   group?: string;
   render: ReactNode;
 };
@@ -18,15 +16,11 @@ export type ChooserItem = {
 type ChooserBase = {
   title: string;
   items: ChooserItem[];
-  /** Group keys in display order; omit for a flat list. */
   groups?: { key: string; label: string }[];
   selectedIds: string[];
   onClose: () => void;
-  /** The control that opened the chooser — the panel hangs under it. */
   anchor?: HTMLElement | null;
-  /** An optional band below the list, mirroring the search header: it stays
-   *  put while the middle scrolls. Used by callers whose toggles are pending
-   *  until confirmed (the bulk tag chooser and its Save button). */
+  /** A band below the list that stays put while the middle scrolls, for toggles pending until confirmed (bulk tag Save). */
   footer?: ReactNode;
 };
 
@@ -36,7 +30,6 @@ export type ChooserMode =
   | {
       mode: "pick";
       onPick: (id: string | null) => void;
-      /** The label of the line that clears the value; omit for no such line. */
       noneLabel?: string;
     };
 
@@ -47,15 +40,11 @@ export function EntityChooser(props: EntityChooserProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const search = useRef<HTMLInputElement>(null);
-  // `active` is where Enter would land — it is 0 from the start so a bare
-  // Enter applies the first line. `navigated` is whether the user has *aimed*
-  // at anything yet (an arrow key, or the pointer over a line): until then
-  // nothing is painted, so no line looks hovered under a motionless cursor.
+  // `active` is where Enter lands, 0 from the start so a bare Enter applies the first line. Nothing is painted
+  // until `navigated` (arrow key or pointer), so no line looks hovered under a still cursor.
   const [active, setActive] = useState(0);
   const [navigated, setNavigated] = useState(false);
-  // Option ids, so the search field can point assistive tech at the line
-  // Enter would apply (`aria-activedescendant`): focus stays in the field
-  // while the arrows move, and without this a screen reader hears nothing.
+  // Option ids for `aria-activedescendant`: focus stays in the field while the arrows move.
   const baseId = useId();
   const listId = `${baseId}-list`;
   const optionId = (sequenceIndex: number) => `${baseId}-opt-${sequenceIndex}`;
@@ -75,10 +64,7 @@ export function EntityChooser(props: EntityChooserProps) {
     if (id !== null) props.onToggle(id);
   };
 
-  // The "no category" line (pick mode only) is a real, keyboard-reachable
-  // option, not a mouse-only extra: it occupies sequence index 0 and every
-  // visible item is offset by one behind it. A search filters it like any
-  // other line, so a bare Enter after typing lands on the first match.
+  // The "no category" line is a keyboard-reachable option at sequence index 0; visible items are offset by one.
   const noneLabel = props.mode === "pick" ? props.noneLabel : undefined;
   const hasNone = !!noneLabel && (!needle || noneLabel.toLowerCase().includes(needle));
   const offset = hasNone ? 1 : 0;
@@ -140,9 +126,7 @@ export function EntityChooser(props: EntityChooserProps) {
   return (
     <Popover title={title} anchor={anchor} onClose={onClose} initialFocus={search}>
       <div className="flex flex-col">
-        {/* Set into the top of the panel rather than floating on it: the field
-         *  carries no surface of its own, its top edge *is* the panel's, and
-         *  the rule under it is its only boundary. */}
+        {/* The field carries no surface: its top edge is the panel's. */}
         <label className="relative block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-fg-faint" />
           <input

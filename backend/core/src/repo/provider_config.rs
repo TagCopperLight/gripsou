@@ -1,6 +1,3 @@
-//! `app_settings.provider_config`: each provider's fields as one encrypted
-//! JSON object, so adding a provider needs no migration.
-
 use std::collections::BTreeMap;
 
 use sqlx::types::Json;
@@ -13,8 +10,7 @@ type Stored = BTreeMap<String, String>;
 
 pub struct Loaded {
     pub config: ProviderConfig,
-    /// Providers whose bundle could not be decrypted (`ENCRYPTION_KEY`
-    /// changed): treated as not set up.
+    /// Bundles that could not be decrypted (`ENCRYPTION_KEY` changed): treated as not set up.
     pub unreadable: Vec<String>,
 }
 
@@ -43,8 +39,7 @@ pub async fn load(pool: &sqlx::PgPool, key: &EncryptionKey) -> Result<Loaded, Co
     Ok(decode_all(key, &stored.0))
 }
 
-/// Sets (or, with `None`, removes) one field and returns every provider's
-/// values as now stored. A bundle that can't be decrypted starts afresh.
+/// A bundle that can't be decrypted starts afresh.
 pub async fn set_field(
     pool: &sqlx::PgPool,
     key: &EncryptionKey,

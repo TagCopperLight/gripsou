@@ -14,8 +14,6 @@ export function useHoldings() {
   });
 }
 
-/** How many holdings (of `accountIds`, else all) the converted totals leave
- *  out for want of a rate; 0 until the holdings have loaded. */
 export function useFxExcludedCount(accountIds?: ReadonlySet<string>): number {
   const { data } = useHoldings();
   return fxExcludedCount((data ?? []).filter((h) => !accountIds || accountIds.has(h.accountId)));
@@ -63,7 +61,7 @@ export function useHoldingLots(id: string) {
 export function useLotSuggestions(id: string) {
   return useQuery({
     queryKey: keys.holdingLotSuggestions(id),
-    retry: false, // suggestions are optional: fall back to the empty form fast
+    retry: false, // optional suggestions: fall back to the empty form fast
     queryFn: ({ signal }) => api("GET /holdings/:id/lots/suggestions", { params: { id }, signal }),
   });
 }

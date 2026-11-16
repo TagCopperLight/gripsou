@@ -1,5 +1,3 @@
-//! What the transactions list sends.
-
 use gripsou_providers::brandfetch::Logos;
 use serde::Serialize;
 use ts_rs::TS;
@@ -10,50 +8,35 @@ use crate::wire::day_to_millis;
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub id: String,
-    /// Epoch milliseconds at UTC midnight of the day, like every other date
-    /// in this API.
     pub t: i64,
     #[serde(rename = "type")]
     pub kind: String,
     pub description: Option<String>,
-    /// Decimal string in `currency` — never a float.
     pub amount: String,
-    /// The same movement in the reader's currency at the transaction's own
-    /// date. Decimal string, never a float; null when no rate applies.
     pub amount_reporting: Option<String>,
     pub currency: String,
     pub account_id: String,
     pub account_name: String,
     pub account_color: String,
-    /// `"cash"` for a `transaction` row, `"lot"` for a purchase/sale. The
-    /// frontend picks its rendering (and i18n) off this discriminator.
     pub source: gripsou_core::budget::vocab::RowSource,
     pub ticker: Option<String>,
-    /// The instrument's logo on a lot row; null on a cash row.
     pub logo: Option<String>,
-    /// Decimal string, never a float.
     pub quantity: Option<String>,
-    /// Decimal string, never a float.
     pub unit_price: Option<String>,
-    /// Decimal string, never a float.
     pub fee: Option<String>,
 
     pub category_id: Option<String>,
     pub category_name: Option<String>,
-    /// Translate this when present; fall back to `category_name`.
     pub category_default_key: Option<String>,
     pub category_color: Option<String>,
     pub category_icon: Option<String>,
     pub category_kind: Option<gripsou_core::budget::vocab::CategoryKind>,
     pub category_source: Option<gripsou_core::budget::vocab::CategorySource>,
-    /// Decimal string, never a float.
     pub category_confidence: Option<String>,
     pub needs_review: bool,
     pub checked: bool,
-    /// One half of an auto-paired internal transfer.
     pub is_transfer: bool,
-    /// The pairing pass categorised this row but its link is gone — a user
-    /// corrected the other half, so this one nets against nothing.
+    /// Categorised by the pairing pass but its link is gone: the user corrected the other half.
     pub is_orphan_transfer: bool,
     pub tags: Vec<TransactionTag>,
 }
@@ -126,12 +109,8 @@ pub struct CountsDto {
     pub matching: i64,
     pub total: i64,
     pub uncategorized: i64,
-    /// The cash rows among `matching`: what "select all shown" selects.
     pub selectable: i64,
-    /// The `selectable` rows' sum, a decimal string.
     pub matching_total: String,
-    /// At least one matching row's account leg could not be valued, so
-    /// `matchingTotal` is understated by whatever that row was worth. Same
-    /// convention as `SummaryDto.fxMissing`.
+    /// A matching row's account leg could not be valued: `matchingTotal` is understated.
     pub fx_missing: bool,
 }

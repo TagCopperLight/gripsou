@@ -37,8 +37,7 @@ services:
       - web
 
 networks:
-  # Shared with the central caddy (see /home/ubuntu/caddy); caddy reverse-proxies
-  # gripsou.example.com -> backend:8080 over this network.
+  # Shared with the central caddy (see /home/ubuntu/caddy), which proxies to backend:8080.
   web:
     external: true
 

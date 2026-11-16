@@ -2,7 +2,7 @@
 
 gripsou: a self-hosted personal finance dashboard (bank/broker providers → accounts, holdings, transactions → net worth, distribution, budget over time). One maintainer, one instance, real data: the Powens domain `gripsou-sandbox` holds the user's real bank connections.
 
-The code is the reference for *what* exists. This file records what it can't tell you: principles, invariants, and decisions that look like mistakes but aren't.
+The code is the reference for *what* exists. This file records what it can't tell you: principles, invariants, and decisions that look like mistakes but aren't. What the product does on purpose, and why, is in `docs/DESIGN.md`: read it before changing behaviour a user sees.
 
 ## Workflow
 
@@ -110,13 +110,10 @@ Categories are per user (`budget_category`, seeded by a trigger on `users` inser
 - For investment accounts, Powens `balance` lags. The `XX-liquidity` investment line is the real cash.
 - Loans and cards are skipped (wrong sign for net worth). `real_estate` deliberately falls through to `brokerage`.
 
-## Product decisions
-
-- No merchant logos, merchant notes or clickable descriptions: they were built and removed on purpose.
-
 ## Conventions
 
-- **Write about what is, never what was.** Comments, docs, config examples and UI text describe the current state. No pointers to where something used to live, no "moved to", "no longer", "now", "previously". Git history records the past. (Product decisions above are the exception: they exist to stop a removed thing from being rebuilt.)
+- **Write about what is, never what was.** Comments, docs, config examples and UI text describe the current state. No pointers to where something used to live, no "moved to", "no longer", "now", "previously". Git history records the past. (The removed features in `docs/DESIGN.md` are the exception: they exist to stop a removed thing from being rebuilt.)
+- **Comments are rare.** Write one only for what the code can't say: a non-obvious reason, a trap, or an outside fact (provider quirk, library bug, lint rule). Keep it to one or two lines in plain words. Never restate the code, the name or the test name; no banners, no em dashes. A product decision (what gripsou does for its users, and why) goes in `docs/DESIGN.md`, not in a comment.
 - **Money is `rust_decimal::Decimal` ↔ `NUMERIC`, never floats.** The API sends decimals as strings. The frontend formats them with the user's prefs through `Intl`.
 - **Config:** secrets and infra in env (`.env.example`), admin-tunable values and provider keys in `app_settings` (keys in `provider_config`), per-user choices on `users` (columns for what the server reads, `prefs` for display-only ones). Provider credentials are AES-GCM encrypted with `ENCRYPTION_KEY`.
 - **Wire types are generated.** Every type a handler sends or accepts derives `ts_rs::TS` (closed value sets through `text_enum!`). Every route is added through `api/src/routes.rs`, which reads each handler's JSON body (its last argument), query (its `Query<Q>` argument) and answer (its return type) off its signature: a new extractor or return shape needs an `Arg` or `Reply` impl there. `cd backend && cargo run -p gripsou-api --example wire-types` writes those types and everything they use to `frontend/src/api/wire.ts` (with the limits and defaults the frontend shares, listed in `api/src/wire_ts.rs`), and the route list with each route's body, query and answer (`Api`) to `frontend/src/api/routes.ts`. Both are checked in and never edited by hand; `./ci.sh backend` fails when they are stale. The frontend imports API shapes from them and keeps only its own view types.

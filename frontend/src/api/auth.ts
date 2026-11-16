@@ -21,8 +21,6 @@ import { useAuth } from "../auth/context";
 
 export type SecondFactor = Omit<LoginVerifyReq, "challenge">;
 
-/** The session calls, made by the auth state and the sign-in pages outside
- *  any query: what they return becomes the signed-in user. */
 export const authApi = {
   me: () => api("GET /auth/me"),
   login: (email: string, password: string, remember: boolean) =>
@@ -51,7 +49,7 @@ export function useUpdateProfile() {
       api("PATCH /auth/me", { body: { name, email } }),
     onSuccess: (updated) => {
       updateUser(updated);
-      // The admin user list shows the current user's name/email too.
+      // The admin user list shows the current user's name and email too.
       void afterUserChange(qc);
     },
   });
@@ -63,8 +61,7 @@ export function useChangePassword() {
     mutationFn: ({ currentPassword, newPassword }: ChangePasswordReq) =>
       api("POST /auth/change-password", { body: { currentPassword, newPassword } }),
     onSuccess: () => {
-      // Changing the password revokes all other sessions server-side; refresh
-      // the sessions list so stale entries disappear immediately.
+      // Other sessions are revoked server-side.
       afterSessionChange(qc);
     },
   });
@@ -72,8 +69,6 @@ export function useChangePassword() {
 
 export function useDeleteAccount() {
   return useMutation({
-    // The password is checked server-side (throttled like login) before the
-    // account and all its data are permanently deleted.
     mutationFn: (password: string) => api("DELETE /auth/account", { body: { password } }),
   });
 }
@@ -115,8 +110,7 @@ export function useReauth() {
   });
 }
 
-/** Starts setting up an authenticator. No password check (`reauth`) during
- *  the welcome flow. */
+/** No password check (`reauth`) during the welcome flow. */
 export function useTotpSetup() {
   return useMutation({
     mutationFn: (reauth: string | undefined) =>
@@ -151,9 +145,7 @@ export function useRegenerateRecovery() {
   });
 }
 
-/** Starts adding a passkey: the browser's creation options for a fresh
- *  password check (the token is checked, not spent, so a cancelled browser
- *  window can be retried), or for none during the welcome flow. */
+/** The token is checked, not spent, so a cancelled browser window can be retried. No password check during the welcome flow. */
 export function usePasskeyRegisterOptions() {
   return useMutation({
     mutationFn: (reauth: string | undefined) =>

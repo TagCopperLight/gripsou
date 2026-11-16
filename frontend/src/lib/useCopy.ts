@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 
-/** Copies text to the clipboard; `copied` stays true for a moment after, for
- *  the button's tick. */
 export function useCopy() {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);

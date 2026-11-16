@@ -1,9 +1,4 @@
-//! Lots: purchases and sales as first-class records, separate from the cash
-//! ledger in `transaction`.
-//!
-//! The basis rule itself lives in the `lot_basis` SQL function and NOWHERE
-//! else — not here, not in the frontend. Everything in this module either
-//! writes lot rows or asks that function a question.
+//! Cost basis lives only in the `lot_basis` SQL function; nothing here restates it.
 
 use std::collections::BTreeSet;
 
@@ -23,18 +18,14 @@ text_enum! {
 }
 
 text_enum! {
-    /// Who recorded a lot. Users may delete only their own (`manual`) ones;
-    /// a provider's come back at the next sync.
     pub enum LotSource {
         Manual = "manual",
         Provider = "provider",
     }
 }
 
-/// Decimal places a lot's quantity, unit price and fee may carry.
 pub const LOT_DECIMAL_PLACES: u32 = 8;
 
-/// A lot's quantity, unit price and fee are below 10^`LOT_MAX_INTEGER_DIGITS`.
 pub const LOT_MAX_INTEGER_DIGITS: u32 = 12;
 
 pub struct LotRow {
@@ -44,8 +35,6 @@ pub struct LotRow {
     pub quantity: Decimal,
     pub unit_price: Decimal,
     pub fee: Decimal,
-    /// A row the user entered, the only kind the record-lots modal may
-    /// delete.
     pub manual: bool,
 }
 
@@ -72,7 +61,6 @@ pub async fn list_lots(
     Ok(rows)
 }
 
-/// A lot the user enters, checked so every read of its holding can value it.
 pub struct NewLot {
     side: LotSide,
     acquired_on: NaiveDate,
@@ -81,12 +69,9 @@ pub struct NewLot {
     fee: Decimal,
 }
 
-/// Why a lot is refused; the message is what the API answers with. The
-/// frontend's `validateLot` and these rules are checked against the same
-/// cases (`shared/lot-cases.json`).
+/// Checked against the same cases as the frontend's `validateLot` (`shared/lot-cases.json`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum InvalidLot {
-    /// Names the field.
     #[error("{0} is not a decimal")]
     NotADecimal(&'static str),
     #[error("quantity must be positive and unitPrice must not be negative")]
@@ -102,7 +87,6 @@ pub enum InvalidLot {
 }
 
 impl NewLot {
-    /// A lot from the decimal strings the API receives; an absent fee is zero.
     pub fn parse(
         side: LotSide,
         acquired_on: NaiveDate,
@@ -157,8 +141,7 @@ impl NewLot {
     }
 }
 
-/// Digits with an optional sign and decimal point, as the lot form takes
-/// them: `Decimal`'s parser also reads exponents and `_` separators.
+/// `Decimal`'s parser also reads exponents and `_` separators, which the lot form rejects.
 fn is_plain_decimal(value: &str) -> bool {
     let unsigned = value.strip_prefix(['+', '-']).unwrap_or(value);
     let (int, frac) = unsigned.split_once('.').unwrap_or((unsigned, ""));
@@ -166,8 +149,6 @@ fn is_plain_decimal(value: &str) -> bool {
         && int.bytes().chain(frac.bytes()).all(|b| b.is_ascii_digit())
 }
 
-/// An edit of a holding's user-entered (`manual`) lots. Provider lots are
-/// never touched: they come back at the next sync.
 pub struct LotChanges {
     adds: Vec<NewLot>,
     removes: Removes,
@@ -179,8 +160,7 @@ enum Removes {
 }
 
 impl LotChanges {
-    /// Delete these manual lots and add these. Every id must name a manual lot
-    /// of the holding, or nothing is written.
+    /// Every id must name a manual lot of the holding, or nothing is written.
     pub fn edit(adds: Vec<NewLot>, deletes: impl IntoIterator<Item = Uuid>) -> Self {
         LotChanges {
             adds,
@@ -188,7 +168,6 @@ impl LotChanges {
         }
     }
 
-    /// Make `rows` the holding's whole set of manual lots.
     pub fn replace_manual(rows: Vec<NewLot>) -> Self {
         LotChanges {
             adds: rows,
@@ -262,9 +241,8 @@ async fn apply(
     Ok(())
 }
 
-/// Apply `changes` to the caller's holding, all or nothing, and rebuild the
-/// derived history: manual entry is the main path for securities, so the
-/// chart must move now, not at the next sync.
+/// Manual entry is the main path for securities, so the rebuilt history must move the chart now,
+/// not at the next sync.
 pub async fn save(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -282,8 +260,7 @@ pub async fn save(
     Ok(())
 }
 
-/// Figures in one currency. `unrealised` is `None` while today's price or
-/// rate is unknown: no figure, not a total loss.
+/// `unrealised` is `None` while today's price or rate is unknown: no figure, not a total loss.
 pub struct BasisFigures {
     pub mean_price: Decimal,
     pub invested: Decimal,
@@ -293,19 +270,12 @@ pub struct BasisFigures {
 
 pub struct BasisPreview {
     pub explained_qty: Decimal,
-    /// In the account's currency, the one lots are recorded in.
     pub account: BasisFigures,
-    /// In the reader's currency; `None` while today's rate is unknown.
     pub reporting: Option<BasisFigures>,
 }
 
-/// What the figures WOULD be after saving `changes`.
-///
-/// Computed by applying them and rolling back, rather than by reimplementing
-/// the rule against an in-memory list: a second implementation would drift
-/// from the first and the screens would disagree, and the rollback means the
-/// modal's live preview and the number the user gets after saving come from
-/// the same function over the same rows.
+/// Applies `changes` and rolls back, so the modal's preview and the figure after saving come
+/// from the same SQL function over the same rows.
 pub async fn basis_preview(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -345,7 +315,6 @@ pub async fn basis_preview(
     .fetch_one(&mut *tx)
     .await?;
 
-    // Never commit: this was a question, not a change.
     tx.rollback().await?;
 
     let reporting = match (f.rep_mean_price, f.rep_basis, f.rep_realised) {

@@ -62,7 +62,6 @@ async fn a_bundle_under_another_key_is_reported_not_fatal(pool: PgPool) {
     let loaded = load(&pool, &other).await.unwrap();
     assert_eq!(loaded.config.provider("jev"), None);
     assert_eq!(loaded.unreadable, vec!["jev".to_string()]);
-    // Saving under the new key starts that provider afresh.
     let c = set_field(&pool, &other, "jev", "api_key", Some("k2"))
         .await
         .unwrap();

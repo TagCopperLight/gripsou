@@ -21,8 +21,6 @@ import { EMPTY_ACCOUNT, newAccountProblem, type FieldProblem, type NewAccountFie
 
 type SetupField = NewAccountField | "code";
 
-/** The first account, made with the code the server printed when it started
- *  on an empty database. It is the administrator. */
 export function Setup() {
   const { t } = useTranslation();
   const id = useId();
@@ -48,7 +46,6 @@ export function Setup() {
       </AuthPage>
     );
   }
-  // Set up already: on the way to the sign-in page.
   if (closed) return null;
 
   const submit = async (e: React.FormEvent) => {
@@ -85,7 +82,6 @@ export function Setup() {
     <AuthPage>
       <form
         onSubmit={submit}
-        // Typing again: the refused value is being fixed.
         onInput={() => setError(null)}
         className="flex flex-col gap-4 rounded-3xl bg-surface p-6"
       >

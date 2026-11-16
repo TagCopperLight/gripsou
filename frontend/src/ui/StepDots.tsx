@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next";
 
-/** Where a multi-step flow is: one bar per step, filled up to the current one. */
 export function StepDots({ current, total }: { current: number; total: number }) {
   const { t } = useTranslation();
   return (

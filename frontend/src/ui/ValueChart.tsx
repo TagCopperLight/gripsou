@@ -20,27 +20,15 @@ type ValueChartProps = {
   series: ChartSeries[];
   height?: number;
   className?: string;
-  /**
-   * Background the chart sits on; painted into the hollow line-symbol centers so
-   * they read as cut-out. Defaults to surface-2; pass the host surface's color.
-   */
+  /** Painted into the hollow line-symbol centres so they read as cut-out. Defaults to surface-2. */
   surfaceColor?: string;
-  /**
-   * "value" plots raw amounts (money axis); "percent" plots each series' change
-   * relative to its first point in the range (percent axis). Defaults to value.
-   */
   unit?: ChartUnit;
-  /**
-   * ISO code to format money values in (e.g. a native unit-price series).
-   * Defaults to the user's reporting currency. Has no effect in percent mode.
-   */
+  /** Has no effect in percent mode. */
   currency?: string;
-  /** Series name shown in percent mode when a baseline turns it into a return. */
   percentLabel?: string;
 };
 
-// To draw cleanly on top, area/solid lines should come last; callers pass them
-// in the order they want stacked (e.g. dashed invested first, value second).
+// Callers pass area/solid lines last so they draw on top.
 export function ValueChart({
   series,
   height = 320,
@@ -61,11 +49,9 @@ export function ValueChart({
     grid: AXIS_GRID,
     tooltip: chartTooltip("axis", (params) => {
       const items = params as unknown as TooltipParam[];
-      // The series itemStyle color is the (hollow) symbol center, i.e. the
-      // surface — use the real line color from the series for the marker.
+      // The series itemStyle colour is the hollow centre, i.e. the surface: use the line colour.
       const colorByName = new Map(plotted.map((s) => [s.name, lineColor(s)]));
-      // Callers pass the dashed invested line first for z-order; the tooltip
-      // reads better with the bigger value line on top.
+      // Callers pass the dashed line first for z-order; the tooltip reads better with the value line on top.
       const rows = [...items]
         .reverse()
         .map((it) =>

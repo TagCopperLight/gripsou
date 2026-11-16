@@ -9,7 +9,6 @@ use rust_decimal::Decimal;
 use sqlx::PgPool;
 use uuid::Uuid;
 
-/// Seeds four AI-guessed rows and returns (user, ids by label).
 async fn seed(pool: &PgPool) -> anyhow::Result<(Uuid, Vec<(&'static str, Uuid)>)> {
     let (user_id, conn_id) = seed_user_and_connection(pool).await;
     let mut conn = pool.acquire().await?;
@@ -93,7 +92,6 @@ async fn the_queue_is_low_confidence_no_guess_and_neutral_whatever_its_confidenc
     got.sort();
     assert_eq!(got, expected);
 
-    // The three sites agree.
     let mut bulk =
         matching_transaction_ids(&pool, user_id, &review_filter(Decimal::new(80, 2))).await?;
     bulk.sort();

@@ -29,18 +29,12 @@ import { ConnectionGuide } from "../connections/ConnectionGuide";
 import { WelcomeFooter, WelcomeSkip } from "./WelcomeFooter";
 import { groupState, realtimeSet, serverGroups, serverParts, type ServerPart } from "./serverSetup";
 
-/** The flow's parts, one step dot each: a part can take several screens. */
 type Section = "profile" | "security" | "server" | "bank" | "ai";
 
 type Screen = { section: "server"; group: KeyGroup; part: ServerPart } | { section: Exclude<Section, "server"> };
 
-/** The server's keys, for an admin's server screens. */
 type Server = { keys: ApiKeyProvider[]; providers: Provider[] };
 
-/** After an invite or the first admin's setup: one screen at a time, shown
- *  until the user finishes or skips it (`welcomeDone`); the router sends them
- *  here. An admin (in practice the first account) also sets up the server's
- *  keys, before their own bank. */
 export function Welcome() {
   const { user } = useAuth();
   return user?.role === "admin" ? <AdminWelcome /> : <WelcomeFlow server={null} />;
@@ -66,10 +60,7 @@ function AdminWelcome() {
   return <AdminWelcomeLoading />;
 }
 
-/** The screen the flow will open on, off, while the server's keys load: they
- *  decide its other screens. The bank screen can't be shown yet (it finishes
- *  a connection once), so its shape stands for it: back from a bank, the
- *  bank's row; else the guide, as BankScreen guesses. */
+/** While the server's keys load, the first screen shows off. The bank screen can't render yet (it finishes a connection once), so its shape stands in: the bank's row if back from a bank, else the guide. */
 function AdminWelcomeLoading() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -108,7 +99,6 @@ function AdminWelcomeLoading() {
   );
 }
 
-/** The step dots while their number is unknown. */
 function DotsBone() {
   return (
     <Skeleton>
@@ -117,7 +107,6 @@ function DotsBone() {
   );
 }
 
-/** Where the flow is and the screen's title, with a tag beside it. */
 function WelcomeHeader({ dots, title, tag }: { dots: ReactNode; title: string; tag?: ReactNode }) {
   return (
     <div className="flex flex-col gap-3">
@@ -150,7 +139,6 @@ function WelcomeFlow({ server }: { server: Server | null }) {
   const search = route.useSearch();
   const aiStatus = useAiStatus();
   usePrefillFromBrowser(search.step !== "bank");
-  // Until the status is known (or failed), whether the AI screen exists is undecided.
   const aiKnown = aiStatus.data !== undefined || aiStatus.isError;
 
   const screens: Screen[] = [
@@ -179,7 +167,6 @@ function WelcomeFlow({ server }: { server: Server | null }) {
     setFinishError(false);
     try {
       await authApi.finishWelcome();
-      // The router guard re-runs on this change and leaves /welcome.
       updateUser({ ...user, welcomeDone: true });
     } catch {
       setFinishError(true);
@@ -188,7 +175,6 @@ function WelcomeFlow({ server }: { server: Server | null }) {
     }
   };
   const last = index === screens.length - 1;
-  // Past the bank, the flow either finishes or goes on to the AI screen.
   const afterBank = !aiKnown || finishing ? undefined : last ? () => void finish() : next;
 
   let title;
@@ -197,7 +183,6 @@ function WelcomeFlow({ server }: { server: Server | null }) {
   if (screen.section === "server" && server) {
     const { group, part } = screen;
     const state = groupState(group, server.keys, server.providers);
-    // Past this group's screens.
     const skipGroup = () => {
       const after = screens.findIndex((s, i) => i > index && !(s.section === "server" && s.group === group));
       setIndex(after);
@@ -217,7 +202,6 @@ function WelcomeFlow({ server }: { server: Server | null }) {
               {state === "notSetUp" && (
                 <WelcomeSkip onClick={skipGroup} />
               )}
-              {/* A bank provider turned off has nothing more to set up. */}
               <Button onClick={state === "off" ? skipGroup : next} disabled={state === "notSetUp"}>
                 {t("common.next")}
               </Button>
@@ -260,7 +244,6 @@ function WelcomeFlow({ server }: { server: Server | null }) {
   return (
     <WelcomeShell
       below={
-        // An admin goes through every step: they are the one setting the server up.
         server === null && (
           <button
             type="button"
@@ -274,7 +257,6 @@ function WelcomeFlow({ server }: { server: Server | null }) {
       }
     >
       <WelcomeHeader
-        // Whether an AI screen comes last is the AI status's to say.
         dots={
           aiKnown ? (
             <StepDots current={sections.indexOf(screen.section)} total={sections.length} />
@@ -290,9 +272,7 @@ function WelcomeFlow({ server }: { server: Server | null }) {
   );
 }
 
-/** A failed save is rolled back by AuthProvider (the control shows the old
- *  value again), and the user can retry here or later in Settings, so the
- *  rejection is swallowed. */
+/** A failed save is rolled back by AuthProvider, so the rejection is swallowed. */
 function useSavePrefs() {
   const { updatePrefs } = useAuth();
   return (patch: PrefsPatch) => {
@@ -300,9 +280,7 @@ function useSavePrefs() {
   };
 }
 
-/** Fills language and time zone from the browser once, when the flow starts
- *  (not when coming back from the bank's page): a value the user picks
- *  afterwards stays, even back on the profile screen. */
+/** Fills language and time zone from the browser once, when the flow starts, so a later pick stays. */
 function usePrefillFromBrowser(starting: boolean) {
   const { prefs } = useAuth();
   const save = useSavePrefs();
@@ -325,8 +303,6 @@ function PrefsScreen({ onNext }: { onNext: () => void }) {
 
   return (
     <>
-      {/* Only invitees are told the owner can see their data: an admin
-          reaching this page is the one who installed the server. */}
       {user?.role !== "admin" && (
         <div className="flex items-center gap-3 rounded-2xl bg-blue-soft px-4 py-3 text-[13px] leading-relaxed text-blue-light">
           <Lock className="size-4 shrink-0" />

@@ -10,7 +10,6 @@ type Reply = { status: number; body?: unknown; headers?: Record<string, string> 
 const json = ({ status, body, headers }: Reply) =>
   body === undefined ? new Response(null, { status, headers }) : jsonResponse(body, status, headers);
 
-/** Answers per path; a path given a list answers its items in turn. */
 function stubApi(routes: Record<string, Reply | Reply[]>) {
   const fetchMock = stubFetch(async (url) => {
     const path = url.replace(/^\/api/, "");
@@ -25,7 +24,6 @@ function stubApi(routes: Record<string, Reply | Reply[]>) {
 const calls = (fetchMock: ReturnType<typeof stubApi>, path: string) =>
   fetchMock.mock.calls.filter(([url]) => url === `/api${path}`);
 
-/** The JSON body of the first call to `path`. */
 const sent = (fetchMock: ReturnType<typeof stubApi>, path: string) =>
   JSON.parse(calls(fetchMock, path)[0][1]!.body as string);
 
@@ -112,7 +110,6 @@ describe("TotpSetupModal", () => {
     await user.type(field, "000000");
     expect(await screen.findByText("That code didn't work. Try again.")).toBeInTheDocument();
     expect(field).toHaveValue("");
-    // Typing again clears the message.
     await user.type(field, "1");
     expect(screen.queryByText("That code didn't work. Try again.")).not.toBeInTheDocument();
   });

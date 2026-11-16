@@ -9,7 +9,6 @@ import { passwordError } from "../../../auth/throttle";
 
 type DeleteAccountModalProps = {
   onClose: () => void;
-  /** Called once the account has been deleted server-side. */
   onDeleted: () => void;
 };
 

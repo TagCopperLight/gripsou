@@ -1,6 +1,3 @@
-//! Invite and reset links: minting one, reading it, and redeeming it for a
-//! password.
-
 use crate::error::Json;
 use axum::extract::{Path, State};
 use sqlx::PgPool;
@@ -12,8 +9,7 @@ use crate::auth::{self, password, session};
 use crate::error::ApiError;
 use gripsou_core::repo::invite_token::{self, TokenKind};
 
-/// Store a new link and return its token, for the URL. `user_id` names the
-/// account a reset is for; an invitee creates their own.
+/// `user_id` names the account a reset is for; an invitee creates their own.
 pub async fn mint(
     pool: &PgPool,
     kind: TokenKind,
@@ -32,8 +28,7 @@ pub async fn mint(
     Ok(token)
 }
 
-/// Public: validate a token on page load so the frontend can redirect away from
-/// `/invite` or `/reset` when it's invalid. 404 = unknown/expired/used.
+/// Public. 404: unknown, expired or used.
 pub async fn token_info(
     State(pool): State<PgPool>,
     Path(token): Path<String>,
@@ -48,8 +43,6 @@ pub async fn token_info(
     }))
 }
 
-/// What someone creating their own account typed, checked: the email and
-/// name trimmed and required, the password within the rules.
 pub fn new_account_fields<'a>(
     email: &'a str,
     name: &'a str,
@@ -63,7 +56,6 @@ pub fn new_account_fields<'a>(
     Ok((email, name))
 }
 
-/// Public: redeem an invite — create the account and auto-log-in.
 pub async fn redeem_invite(
     State(pool): State<PgPool>,
     client: Client,
@@ -84,7 +76,6 @@ pub async fn redeem_invite(
     Ok(Json(resp))
 }
 
-/// Public: redeem a reset — set the new password, revoke old sessions, auto-log-in.
 pub async fn redeem_reset(
     State(pool): State<PgPool>,
     client: Client,
@@ -154,7 +145,6 @@ mod tests {
         assert!(!resp.0.token.is_empty());
         assert_eq!(resp.0.user.email, "new@t.local");
         assert_eq!(resp.0.user.role, Role::User);
-        // Token consumed.
         assert!(!still_valid(&pool, &raw).await);
     }
 
@@ -189,14 +179,13 @@ mod tests {
 
     #[gripsou_core::testkit::db_test]
     async fn redeem_invite_endpoint_conflicts_on_existing_email(pool: PgPool) {
-        let admin = seed_admin(&pool, "a@t.local").await; // creates a@t.local
+        let admin = seed_admin(&pool, "a@t.local").await;
         let raw = invite(&pool, admin).await;
 
         let err = redeem(&pool, &raw, "a@t.local", "hunter2-long")
             .await
             .unwrap_err();
         assert_eq!(err.status(), StatusCode::CONFLICT);
-        // Token left unconsumed.
         assert!(still_valid(&pool, &raw).await);
     }
 
@@ -208,8 +197,6 @@ mod tests {
         assert_eq!(err.status(), StatusCode::NOT_FOUND);
     }
 
-    /// A reset link for `user`, issued by a fresh admin whose unique address
-    /// can't collide with a test's own users.
     async fn mint_reset(pool: &PgPool, user: Uuid) -> String {
         let issuer = format!("issuer-{}@t.local", Uuid::new_v4());
         let admin = seed_user_with_password(pool, &issuer, PASSWORD, Role::Admin).await;
@@ -234,8 +221,6 @@ mod tests {
         .await
     }
 
-    /// A valid reset link sets the new password, kills the old one, signs out
-    /// every old session and logs the user in.
     #[gripsou_core::testkit::db_test]
     async fn redeem_reset_sets_password_and_revokes_sessions(pool: PgPool) {
         let user = seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
@@ -259,8 +244,6 @@ mod tests {
         assert!(!session_alive(&pool, old_session.session_id).await);
     }
 
-    /// A reset link works once: replaying it is a 404 and cannot overwrite the
-    /// password chosen with it.
     #[gripsou_core::testkit::db_test]
     async fn redeem_reset_token_is_single_use(pool: PgPool) {
         let user = seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
@@ -278,7 +261,6 @@ mod tests {
         assert!(!can_login(&pool, "t@t.local", "second-pw").await);
     }
 
-    /// An unknown reset token is a 404 and changes no password.
     #[gripsou_core::testkit::db_test]
     async fn redeem_reset_unknown_token_is_404(pool: PgPool) {
         seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
@@ -289,7 +271,6 @@ mod tests {
         assert!(can_login(&pool, "t@t.local", "old-pw").await);
     }
 
-    /// An expired reset link is a 404 and changes no password.
     #[gripsou_core::testkit::db_test]
     async fn redeem_reset_expired_token_is_404(pool: PgPool) {
         let user = seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;
@@ -315,7 +296,6 @@ mod tests {
         let raw = mint_reset(&pool, user).await;
         let err = call_redeem_reset(&pool, &raw, "1234567").await.unwrap_err();
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
-        // The link was not spent: a valid password still works with it.
         assert!(call_redeem_reset(&pool, &raw, "12345678").await.is_ok());
     }
 
@@ -329,8 +309,6 @@ mod tests {
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
     }
 
-    /// An empty new password is a 400 and does not burn the link, so the user
-    /// can retry with a real one.
     #[gripsou_core::testkit::db_test]
     async fn redeem_reset_rejects_empty_password(pool: PgPool) {
         let user = seed_user_with_password(&pool, "t@t.local", "old-pw", Role::User).await;

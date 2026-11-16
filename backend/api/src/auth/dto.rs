@@ -1,5 +1,3 @@
-//! What the sign-in, account and second-factor endpoints send and accept.
-
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -13,8 +11,6 @@ pub struct LoginReq {
     pub remember: bool,
 }
 
-/// The authenticated user's own profile (no `isSelf`/`joinedAt` — that's the
-/// admin user-list shape). Returned by login.
 #[derive(Debug, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionUser {
@@ -44,13 +40,11 @@ impl SessionUser {
 #[ts(rename = "Session")]
 pub struct SessionDto {
     pub id: String,
-    /// Friendly device label parsed from the stored User-Agent.
     pub device: String,
     pub ip: Option<String>,
     pub created_at: i64,
     pub last_active_at: i64,
     pub remembered: bool,
-    /// True for the session making this request (UI marks it "This device").
     pub current: bool,
 }
 
@@ -79,8 +73,6 @@ pub struct LoginResponse {
     pub user: SessionUser,
 }
 
-/// What `/auth/login` answers: a session, or (second factor enrolled) a
-/// short-lived challenge to turn into one at `/auth/login/verify`.
 #[derive(Debug, Serialize, TS)]
 #[serde(untagged)]
 // Built once per login and serialized at once: boxing would only add noise.
@@ -165,7 +157,7 @@ pub struct ReauthTokenReq {
     pub reauth: String,
 }
 
-/// Adding a second factor: the reauth token, left out during the welcome flow.
+/// Absent during the welcome flow.
 #[derive(Deserialize, TS)]
 pub struct FactorSetupReq {
     #[ts(optional)]
@@ -226,7 +218,6 @@ pub struct RenamePasskeyReq {
     pub name: String,
 }
 
-/// Finish a passwordless sign-in.
 #[derive(Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct PasskeySignInReq {

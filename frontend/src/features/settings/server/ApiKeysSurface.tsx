@@ -8,10 +8,7 @@ import type { ApiKeyProvider } from "../../../api/wire";
 import { KeyFieldList } from "./KeyFields";
 import { useSaveKey, type SaveKey } from "./useSaveKey";
 
-/** Settings → Server: the values each provider needs (Powens, the AI, logos).
- *  Each field saves on its own: a plain one on Enter or when it loses focus,
- *  a secret only on Enter or its Save button. A saved secret never comes back
- *  from the server, so it shows as dots until it is replaced or removed. */
+/** A saved secret never comes back from the server, so it shows as dots until replaced or removed. */
 const PROVIDERS = "flex flex-col divide-y divide-surface-2";
 const PROVIDER = "flex flex-col gap-4 py-5 first:pt-0 last:pb-0";
 

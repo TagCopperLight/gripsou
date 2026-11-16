@@ -1,6 +1,5 @@
-//! The terminal output: tracing's usual line, with every UUID cut to its
-//! first 8 characters. The saved log keeps them whole; this is only for
-//! reading a sync's lines as they scroll by.
+//! The terminal output: tracing's usual line with every UUID cut to 8 characters. The saved log keeps
+//! them whole.
 
 use std::fmt::{self, Write as _};
 
@@ -9,11 +8,9 @@ use tracing_subscriber::field::MakeExt;
 use tracing_subscriber::fmt::format::{Writer, debug_fn};
 use tracing_subscriber::fmt::{FormatFields, MakeWriter};
 
-/// Length of a shortened UUID: enough to tell this instance's rows apart.
 const SHORT_ID: usize = 8;
 
-/// Tracing's default field format (`message` bare, `name=value` for the
-/// rest, strings quoted), except that a UUID value prints shortened.
+/// Tracing's default field format, except that a UUID value prints shortened.
 pub(super) fn fields() -> impl for<'w> FormatFields<'w> + Send + Sync + 'static {
     debug_fn(write_field).delimited(" ")
 }
@@ -41,8 +38,7 @@ fn short_uuid(text: &str) -> &str {
     }
 }
 
-/// The terminal layer: colour only when `out` is a terminal, so redirected
-/// output and `docker logs` carry no escape codes.
+/// Colour only when `out` is a terminal, so `docker logs` carries no escape codes.
 pub(super) fn layer<S, W>(out: W, ansi: bool) -> impl tracing_subscriber::Layer<S>
 where
     S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,

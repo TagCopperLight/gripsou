@@ -1,10 +1,6 @@
-// How long a return has been running, for the faint line under an annualised
-// figure: an annualised rate means little without the time it covers.
 
 export type Span = { years: number; months: number; days: number };
 
-/** Whole years and months from `from` to `to` (ISO dates), or days when it is
- *  under a month. */
 export function spanBetween(from: string, to: string): Span {
   const a = new Date(`${from}T00:00:00Z`);
   const b = new Date(`${to}T00:00:00Z`);

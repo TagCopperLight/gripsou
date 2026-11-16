@@ -1,6 +1,4 @@
-//! Authentication. Opaque tokens (sessions, challenges, invite and reset
-//! links) are random strings handed to the client once: only their SHA-256
-//! hash is stored.
+//! Opaque tokens (sessions, challenges, invite and reset links) are random strings given to the client once; only their SHA-256 hash is stored.
 
 pub mod account;
 pub mod challenge;
@@ -24,20 +22,16 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use sha2::{Digest, Sha256};
 
-/// 256 bits of OS randomness, base64url-encoded.
 pub fn generate_token() -> String {
     let mut bytes = [0u8; 32];
     OsRng.fill_bytes(&mut bytes);
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-/// SHA-256 of the raw token: what sessions and challenges store.
 pub fn hash_token(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
-/// Compares two secrets in a time that depends on their length only, so a
-/// guess learns nothing from how fast it is refused.
 pub(crate) fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }

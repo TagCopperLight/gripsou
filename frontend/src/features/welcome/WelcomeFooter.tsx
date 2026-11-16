@@ -3,8 +3,6 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "../../ui/Button";
 
-/** A welcome screen's buttons: Back on the left (none on the first screen),
- *  the screen's own on the right. */
 export function WelcomeFooter({ onBack, children }: { onBack?: () => void; children: ReactNode }) {
   const { t } = useTranslation();
   return (
@@ -21,7 +19,6 @@ export function WelcomeFooter({ onBack, children }: { onBack?: () => void; child
   );
 }
 
-/** Past a step without doing it. */
 export function WelcomeSkip({ onClick, disabled }: { onClick: (() => void) | undefined; disabled?: boolean }) {
   const { t } = useTranslation();
   return (

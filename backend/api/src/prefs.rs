@@ -1,6 +1,3 @@
-//! The signed-in user's preferences. A currency change needs a rate into the
-//! new currency, and switching AI categorisation on starts a run.
-
 use crate::error::Json;
 use axum::extract::State;
 use sqlx::PgPool;
@@ -11,9 +8,7 @@ use crate::auth::dto;
 use crate::error::ApiError;
 use gripsou_core::repo::{prefs, user};
 
-/// The settings one save changes, the rest untouched. `null` puts a display
-/// setting back to its default and removes the avatar; the other settings
-/// refuse it.
+/// `null` resets a display setting to its default and removes the avatar; the other settings refuse it.
 #[derive(serde::Deserialize, ts_rs::TS)]
 #[serde(transparent)]
 pub struct UpdatePrefsReq(
@@ -21,13 +16,9 @@ pub struct UpdatePrefsReq(
     pub  serde_json::Map<String, serde_json::Value>,
 );
 
-/// Saves only the settings in the body (see `prefs::patch_prefs`), so two
-/// settings changed at once never overwrite each other.
-///
-/// A new currency is only saved once a rate into it is stored: figures are
-/// converted at read time, and without one they are left out. The rate is
-/// fetched now rather than at the next sync, and when it can't be had the
-/// change is refused and nothing in the body is saved.
+/// Saves only the settings in the body, so concurrent changes don't overwrite each other.
+/// A new currency is saved only once a rate into it is stored, as figures are converted at read time and left out without one:
+/// the rate is fetched now, and when it can't be had the whole change is refused.
 pub async fn update_prefs(
     State(pool): State<PgPool>,
     State(jobs): State<std::sync::Arc<gripsou_jobs::Deps>>,
@@ -68,12 +59,9 @@ pub async fn update_prefs(
     Ok(Json(dto::SessionUser::from_profile(&profile)))
 }
 
-/// How long a currency change waits for its rate before giving up.
 const RATE_FETCH_LIMIT: std::time::Duration = std::time::Duration::from_secs(10);
 
-/// Fetches the rate into `currency` (see `update_prefs`). A provider failure
-/// or a fetch past `RATE_FETCH_LIMIT` stores nothing; `patch_prefs` then
-/// decides on the rates already stored.
+/// A provider failure or a fetch past `RATE_FETCH_LIMIT` stores nothing; `patch_prefs` then decides on the stored rates.
 async fn fetch_reporting_rate(
     pool: &PgPool,
     jobs: &gripsou_jobs::Deps,

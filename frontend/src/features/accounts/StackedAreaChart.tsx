@@ -8,12 +8,10 @@ import { FG_FAINT } from "../../lib/theme";
 import { AXIS_GRID, CHART_BASE, chartTooltip, timeAxis, tooltipCard, tooltipRow, valueAxis } from "../../lib/chartTheme";
 
 export type StackedSeries = {
-  /** What `highlight` names; defaults to the name. */
   key?: string;
   name: string;
   color: string;
-  /** [epoch-ms, value] points; all series share the same timestamps. A
-   *  `null` value (no rate that day) is a gap. */
+  /** [epoch-ms, value] points; all series share the same timestamps. `null` (no rate that day) is a gap. */
   data: [number, number | null][];
 };
 
@@ -21,13 +19,11 @@ type TooltipParam = { axisValue: number; seriesName: string; value: [number, num
 
 type StackedAreaChartProps = {
   series: StackedSeries[];
-  /** A series to bring forward: the others fade. */
   highlight?: string | null;
   height?: number;
   className?: string;
 };
 
-/** One band per account, anchored at zero: a composition. */
 export function StackedAreaChart({ series, highlight = null, height = 320, className = "" }: StackedAreaChartProps) {
   const { t } = useTranslation();
   const colorByName = new Map(series.map((s) => [s.name, s.color]));

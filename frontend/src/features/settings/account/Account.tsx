@@ -43,7 +43,6 @@ export function SettingsAccount() {
     setPasskeysOpen(false);
     setAddingPasskey(true);
   };
-  // The password window closes on success; the row says it worked.
   const [passwordChanged, setPasswordChanged] = useState(false);
 
   const sessionsQuery = useSessions();
@@ -64,7 +63,6 @@ export function SettingsAccount() {
           <Settings className="size-4.5" strokeWidth={2} />
         </button>
       )}
-      {/* As wide as the two-factor switch above, so the gears line up. */}
       <button
         type="button"
         onClick={addPasskey}
@@ -149,8 +147,6 @@ export function SettingsAccount() {
           />
           <PasskeyRow
             action={passkeyAction}
-            // Adding a passkey needs no status: the button stands, off with the
-            // rest of the card, and the gear joins it once there are passkeys.
             pending={passkeyAction}
           />
         </LoadingFrame>
@@ -170,13 +166,11 @@ export function SettingsAccount() {
           </Button>
         )}
       >
-        {/* Not an empty list while it loads or when it can't: there is always
-            at least this session. */}
+        {/* There is always at least this session. */}
         {sessionsQuery.isPending && <SessionsSkeleton />}
         {sessionsQuery.isError && (
           <CardError onRetry={() => sessionsQuery.refetch()} className="h-32" />
         )}
-        {/* Phone: one fixed-height summary row per session, details on tap. */}
         <div className="flex flex-col gap-3 md:hidden">
           {sessions.map((s) => (
             <button
@@ -204,9 +198,6 @@ export function SettingsAccount() {
           ))}
         </div>
 
-        {/* Computer: one card, a line between sessions, this device first then
-            the most recently active, "Log out" on hover — as in the passkeys
-            window. */}
         {sessionsQuery.data && (
           <div className="hidden overflow-hidden rounded-2xl bg-surface-2 md:block">
             {[...sessions].sort((a, b) => Number(b.current) - Number(a.current) || b.lastActiveAt - a.lastActiveAt).map((s) => (
@@ -313,8 +304,6 @@ export function SettingsAccount() {
 const ICON_BUTTON =
   "cursor-pointer rounded-lg p-1.5 text-fg-dim transition-colors duration-140 enabled:hover:bg-surface-3 enabled:hover:text-fg";
 
-/** The sessions while they load: two rows (this device and one more), in
- *  each layout's shape. */
 function SessionsSkeleton() {
   const rows = boneWidths(2);
   return (
@@ -344,7 +333,6 @@ function SessionsSkeleton() {
   );
 }
 
-/** A phone or tablet, from the device name the server writes ("Safari on iPhone"). */
 function isPhone(device: string): boolean {
   return /iPhone|iPad|Android|Mobile/i.test(device);
 }

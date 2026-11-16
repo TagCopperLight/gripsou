@@ -1,5 +1,4 @@
-/** Split the query string a provider redirects back with: `state` is the
- *  connection id we sent, everything else is for `/connections/complete`. */
+/** `state` is the connection id we sent; the rest is for `/connections/complete`. */
 export function parseCallbackParams(search: string): {
   connectionId: string | null;
   rest: Record<string, string>;

@@ -11,22 +11,18 @@ async fn begin_sync_claims_once(pool: PgPool) -> anyhow::Result<()> {
     let conn = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn).await;
 
-    // First claim succeeds and flips to 'syncing'.
     match begin_sync(&pool, user_id, conn).await? {
         BeginSync::Started(s) => assert_eq!(s.status, ConnectionStatus::Syncing),
         _ => panic!("expected Started"),
     }
-    // Second claim while syncing → AlreadySyncing.
     assert!(matches!(
         begin_sync(&pool, user_id, conn).await?,
         BeginSync::AlreadySyncing
     ));
-    // Unknown id → NotFound.
     assert!(matches!(
         begin_sync(&pool, user_id, uuid::Uuid::new_v4()).await?,
         BeginSync::NotFound
     ));
-    // Connection exists but is owned by a different user → NotFound (not AlreadySyncing).
     assert!(matches!(
         begin_sync(&pool, uuid::Uuid::new_v4(), conn).await?,
         BeginSync::NotFound
@@ -106,7 +102,6 @@ async fn finish_connect_updates_credentials_and_status(pool: PgPool) -> anyhow::
     assert_eq!(status, "ok");
     assert_eq!(stored_creds, creds);
 
-    // finish_connect with wrong user_id returns false
     let not_updated = gripsou_core::repo::connection::finish_connect(
         &pool,
         id,
@@ -193,13 +188,11 @@ async fn delete_connection_cascades(pool: PgPool) -> anyhow::Result<()> {
     let conn = testkit::seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn).await;
 
-    // Wrong user — returns false, row still exists
     let not_deleted =
         gripsou_core::repo::connection::delete_connection(&pool, uuid::Uuid::new_v4(), conn)
             .await?;
     assert!(!not_deleted);
 
-    // Correct user — returns true and row is gone
     let deleted = gripsou_core::repo::connection::delete_connection(&pool, user_id, conn).await?;
     assert!(deleted);
 
@@ -270,7 +263,6 @@ async fn delete_stale_pending_only_removes_old_pending(pool: PgPool) {
     let stale = insert_pending(&pool, user_id, "powens", "stale")
         .await
         .unwrap();
-    // An old non-pending row must be left alone.
     let ok = insert_pending(&pool, user_id, "powens", "ok")
         .await
         .unwrap();
@@ -303,8 +295,6 @@ async fn delete_stale_pending_only_removes_old_pending(pool: PgPool) {
     assert!(remaining.contains(&fresh) && remaining.contains(&ok) && !remaining.contains(&stale));
 }
 
-/// The boot sweep: every claim predates the process, so all are released, and
-/// they land in 'error' so the user sees the sync did not finish.
 #[gripsou_core::testkit::db_test]
 async fn clear_syncing_releases_every_claim(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -334,9 +324,6 @@ async fn status(pool: &PgPool, conn: uuid::Uuid) -> String {
         .unwrap()
 }
 
-/// A connection still on the provider's page has no credentials: no sync or
-/// refresh may claim it, and "Sync all" leaves it out, so its callback can
-/// still finish it.
 #[gripsou_core::testkit::db_test]
 async fn a_pending_connection_is_never_claimed(pool: PgPool) -> anyhow::Result<()> {
     let user_id = testkit::seed_user(&pool).await;
@@ -356,20 +343,15 @@ async fn a_pending_connection_is_never_claimed(pool: PgPool) -> anyhow::Result<(
     Ok(())
 }
 
-/// Finishing writes release only the lock they were given: a late answer
-/// from a sync or refresh that no longer holds it leaves the connection's
-/// current state alone.
 #[gripsou_core::testkit::db_test]
 async fn finishing_writes_need_the_lock_they_release(pool: PgPool) -> anyhow::Result<()> {
     let conn = seed_connection(&pool).await;
     let user_id = testkit::owner(&pool, conn).await;
 
-    // Not syncing: a stray sync outcome changes nothing.
     mark_synced_error(&pool, conn, "late").await?;
     assert_eq!(status(&pool, conn).await, "ok");
 
-    // A refresh request that fails after the awaiting-timeout fallback
-    // claimed the sync must not release that sync's lock.
+    // A refresh failing after the awaiting-timeout fallback claimed the sync must not release its lock.
     begin_await(&pool, user_id, conn).await?;
     begin_sync(&pool, user_id, conn).await?;
     mark_refresh_failed(&pool, conn, "refresh failed").await?;
@@ -377,7 +359,6 @@ async fn finishing_writes_need_the_lock_they_release(pool: PgPool) -> anyhow::Re
     mark_synced_ok(&pool, conn).await?;
     assert_eq!(status(&pool, conn).await, "ok");
 
-    // Still awaiting: the failure is recorded and the claim released.
     begin_await(&pool, user_id, conn).await?;
     mark_refresh_failed(&pool, conn, "refresh failed").await?;
     assert_eq!(status(&pool, conn).await, "error");

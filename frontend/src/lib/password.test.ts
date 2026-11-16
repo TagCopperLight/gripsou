@@ -9,7 +9,6 @@ describe("passwordLengthOk", () => {
     expect(passwordLengthOk("a".repeat(129))).toBe(false);
   });
   it("counts characters like the server, not UTF-16 units", () => {
-    // 4 emoji are 8 UTF-16 units but 4 characters.
     expect(passwordLengthOk("😀😀😀😀")).toBe(false);
     expect(passwordLengthOk("éééééééé")).toBe(true);
   });

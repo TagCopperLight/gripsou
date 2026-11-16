@@ -9,7 +9,6 @@ import { useTransactions } from "./transactions";
 import { keys } from "./keys";
 import { appWrapper, jsonResponse, stubFetch } from "../test/kit";
 
-// The page size the list asks the server for.
 const TRANSACTIONS_PAGE_SIZE = 200;
 
 it("refreshes the connection picker after a provider is disabled", async () => {
@@ -30,7 +29,6 @@ it("refreshes the connection picker after a provider is disabled", async () => {
   } finally { unmount(); client.clear(); }
 });
 
-/** Caches an entry under each key, so a test can read which ones a write left stale. */
 function seeded(...cached: (readonly unknown[])[]) {
   const { client, wrapper } = appWrapper();
   for (const key of cached) client.setQueryData(key, []);
@@ -41,8 +39,6 @@ function seeded(...cached: (readonly unknown[])[]) {
 describe("useUpdateAccount", () => {
   it("also refreshes the holdings and transactions tables, which render the account name", async () => {
     stubFetch(async () => jsonResponse({ id: "a1" }));
-    // The two tables print accountName/accountColor from their own payload, so
-    // a rename would leave them showing the old value.
     const refreshed = [
       keys.accounts(), keys.connections(), keys.accountSeries(), keys.holdings(),
       keys.investmentReturns(), keys.transactions(), keys.transactionCounts(),
@@ -81,7 +77,6 @@ describe("useSaveLots", () => {
     stubFetch(async () => new Response(null, { status: 204 }));
     const refreshed = [
       keys.holdings(), keys.investmentReturns(), keys.transactions(), keys.transactionCounts(),
-      // A saved lot can be the newest row, which is where the Overview opens.
       keys.budgetLatestMonth(),
       keys.netWorth(), keys.accountSeries(), keys.holdingLots("h1"), keys.holdingPrices("h1"),
     ];

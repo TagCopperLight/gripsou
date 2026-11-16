@@ -1,7 +1,5 @@
-// Currency codes ↔ display symbols. The backend stores and converts by ISO
-// code (users.prefs.currency, instrument.currency); the symbol is purely
-// presentational and lives here so the settings picker and the formatters
-// agree. An unlisted code renders as itself, which is a correct if plain label.
+// Symbols are display only: the backend stores and converts by ISO code.
+// An unlisted code renders as itself.
 
 export const CURRENCIES: { code: string; label: string }[] = [
   { code: "EUR", label: "EUR (€)" },

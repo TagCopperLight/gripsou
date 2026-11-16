@@ -4,46 +4,40 @@ import type { Store } from "../store.ts";
 
 const TOKEN = "mock";
 
-/** The server's merge: a setting sent as null goes back to its default, and
- *  the avatar, which has none, is removed. */
+/** Null resets a setting to its default; the avatar has none, so null removes it. */
 function patchPrefs(prefs: UserPrefs, patch: UpdatePrefsReq): UserPrefs {
   const sent = Object.entries(patch).map(([key, value]) => [key, value ?? DEFAULT_PREFS[key as keyof UserPrefs]]);
   const { avatar, ...rest }: UserPrefs = { ...prefs, ...Object.fromEntries(sent) };
   return avatar === undefined ? rest : { ...rest, avatar };
 }
 
-/** Made-up codes, the server's shape (xxxx-xxxx). */
 const RECOVERY_CODES = ["k7qm-2xd9", "p4wn-8rtc", "h3vb-6yle", "z9fa-1mks", "c2tj-7gqp", "n8re-4wvd", "u5xh-3bnz", "f6ly-9cpa", "m1gs-5kte", "w4dq-2jhr"];
 
-/** A placeholder in place of the QR code: no authenticator should scan it. */
+/** Placeholder: no authenticator should scan it. */
 const QR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/><path d="M0 0h7v7H0zM14 0h7v7h-7zM0 14h7v7H0z" fill="#000"/><path d="M1 1h5v5H1zM15 1h5v5h-5zM1 15h5v5H1z" fill="#fff"/><path d="M2 2h3v3H2zM16 2h3v3h-3zM2 16h3v3H2zM9 2h2v2H9zM8 8h5v1H8zM10 10h3v3h-3zM15 9h2v4h-2zM9 15h4v2H9zM15 15h4v4h-4z" fill="#000"/></svg>`;
 
-/** The review's way to type a refused password or backup code. */
 const WRONG = "wrong";
 
-/** Browser options for a passkey ceremony on whatever host serves the review;
- *  the mock never checks what the browser signs. */
+/** The mock never checks what the browser signs. */
 const CHALLENGE = "bW9jay1jaGFsbGVuZ2U";
 
 export function authRoutes(r: Router<Store>): void {
   r.route("GET /auth/me", ({ store }) => store.user);
   r.route("GET /auth/sessions", ({ store }) => store.sessions);
   r.route("GET /auth/mfa/status", ({ store }) => store.mfa);
-  // A link token: "expired" is refused; one starting with "reset" resets the
-  // store user's password; any other is an invite.
+  // "expired" is refused, "reset…" resets the password, any other is an invite.
   r.route("GET /auth/token/:token", ({ store, params }) =>
     params.token === "expired" ? fail(404, "not found")
     : params.token.startsWith("reset") ? { type: "reset", email: store.user.email }
     : { type: "invite", email: null },
   );
-  // A new account starts at the welcome screen; "@taken.example" is in use.
+  // "@taken.example" is in use.
   r.route("POST /auth/invite/:token/redeem", ({ store, body: { name, email } }) => {
     if (email.endsWith("@taken.example")) return fail(409, "email in use");
     store.user = { ...store.user, name, email, welcomeDone: false };
     return { token: TOKEN, user: store.user };
   });
-  // The first account, an admin at the welcome screen; the code "wrong" is
-  // refused, as the server refuses one that isn't the printed code.
+  // The code "wrong" is refused.
   r.route("GET /setup", ({ store }) => ({ needed: store.setupNeeded }));
   r.route("POST /setup", ({ store, body: { code, name, email } }) => {
     if (!store.setupNeeded) return fail(404, "setup is closed");
@@ -67,8 +61,7 @@ export function authRoutes(r: Router<Store>): void {
     return store.user;
   });
 
-  // Any credentials sign in as the store's user, except the password "wrong",
-  // which shows the form's error. Same for every password check below.
+  // Any credentials sign in, except the password "wrong".
   r.route("POST /auth/login", ({ store, body }) =>
     body.password === WRONG ? fail(401, "invalid email or password")
     : store.loginMfa ? { mfaRequired: true, challenge: "mock-challenge" }
@@ -88,7 +81,6 @@ export function authRoutes(r: Router<Store>): void {
   r.route("DELETE /auth/account", ({ body }) =>
     body.password === WRONG ? fail(400, "wrong password") : reply(204),
   );
-  // An email ending in "@taken.example" belongs to another account.
   r.route("PATCH /auth/me", ({ store, body: { name, email } }) => {
     if (email.endsWith("@taken.example")) return fail(409, "email in use");
     store.user = { ...store.user, name, email };
@@ -105,10 +97,8 @@ export function authRoutes(r: Router<Store>): void {
     return reply(204);
   });
 
-  // Adding a second factor asks for no password during the welcome flow.
   const factorRefused = (welcomeDone: boolean, reauth: string | undefined) =>
     welcomeDone && reauth === undefined && fail(403, "reauthentication required");
-  // Two-factor: any 6 digits confirm the app, except "000000".
   r.route("POST /auth/mfa/totp/setup", ({ store, body }) =>
     factorRefused(store.user.welcomeDone, body.reauth) || { secret: "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP", qrSvg: QR_SVG },
   );
@@ -125,7 +115,6 @@ export function authRoutes(r: Router<Store>): void {
     store.mfa = { ...store.mfa, recoveryRemaining: 10 };
     return { recoveryCodes: RECOVERY_CODES };
   });
-  // A real passkey for the review's host, which any later passkey sign-in accepts.
   r.route("POST /auth/mfa/passkeys/register/options", ({ store, body }) => factorRefused(store.user.welcomeDone, body.reauth) || ({
     challenge: CHALLENGE,
     options: {

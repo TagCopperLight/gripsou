@@ -30,13 +30,11 @@ async fn upsert_preserves_user_renamed_name(pool: PgPool) -> anyhow::Result<()> 
     let mut conn = pool.acquire().await?;
     let id = upsert_account(&mut conn, conn_id, &acct).await?;
 
-    // Simulate a user rename.
     sqlx::query("update account set name = 'My nickname' where id = $1")
         .bind(id)
         .execute(&pool)
         .await?;
 
-    // Re-sync with the provider's original name.
     upsert_account(&mut conn, conn_id, &acct).await?;
 
     let name: String = sqlx::query_scalar("select name from account where id = $1")
@@ -58,7 +56,6 @@ async fn upsert_updates_provider_fields_on_conflict(pool: PgPool) -> anyhow::Res
     let mut conn = pool.acquire().await?;
     let id = upsert_account(&mut conn, conn_id, &acct).await?;
 
-    // Provider reports an updated currency on the next sync.
     acct.currency = "USD".to_string();
     upsert_account(&mut conn, conn_id, &acct).await?;
 
@@ -81,13 +78,11 @@ async fn upsert_preserves_user_chosen_type_key(pool: PgPool) -> anyhow::Result<(
     let mut conn = pool.acquire().await?;
     let id = upsert_account(&mut conn, conn_id, &acct).await?;
 
-    // Simulate the user retyping the account via EditAccountModal.
     sqlx::query("update account set type_key = 'life_insurance' where id = $1")
         .bind(id)
         .execute(&pool)
         .await?;
 
-    // Re-sync with the provider reporting a different type for the same account.
     acct.type_key = "savings".to_string();
     upsert_account(&mut conn, conn_id, &acct).await?;
 

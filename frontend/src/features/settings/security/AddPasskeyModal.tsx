@@ -10,8 +10,6 @@ import { usePasskeyCreation } from "./usePasskeyCreation";
 
 type Step = "password" | "waiting" | "done" | "failed";
 
-/** Adding a passkey: the password, the browser's own window, then the
- *  result. Try again reuses the password check while it lasts (5 minutes). */
 export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const [step, setStep] = useState<Step>("password");
@@ -39,7 +37,6 @@ export function AddPasskeyModal({ onClose }: { onClose: () => void }) {
         setStep("done");
         return;
       case "expired":
-        // The password check expired or was refused: ask for it again.
         token.current = null;
         setPassword("");
         setError(t("passkeys.expired"));

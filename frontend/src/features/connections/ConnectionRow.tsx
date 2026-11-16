@@ -23,9 +23,6 @@ import { Bone, Skeleton, TextBone } from "../../ui/Skeleton";
 import { IconButton } from "../../ui/IconButton";
 import type { SyncConnection } from "../../api/wire";
 
-// Shared collapsible connection row used by the settings page and the sync
-// modal. `onDelete` is optional — the delete icon renders only when provided
-// (the sync modal omits it).
 export function ConnectionRow({
   conn,
   onDelete,
@@ -51,7 +48,7 @@ export function ConnectionRow({
   }, []);
   const openManage = async () => {
     setManageError(null);
-    // Open synchronously during the click so browsers do not block the tab.
+    // Opened synchronously during the click so browsers don't block the tab.
     const tab = window.open("about:blank", "_blank");
     if (!tab) { setManageError(t("powens.manageBlocked")); return; }
     tab.opener = null;
@@ -77,9 +74,7 @@ export function ConnectionRow({
   const problems = connectionProblems(conn, issues, t);
 
   const isAwaiting = conn.status === "awaiting";
-  // Nothing to show once open (still connecting, or no account and no
-  // problem): the row doesn't open on a computer. A phone still opens it, as
-  // its open panel holds the actions the header has no room for.
+  // A phone still opens the row: its panel holds the actions the header has no room for.
   const expandable = conn.status !== "pending" && (conn.accounts.length > 0 || problems.length > 0);
   const toggle = () => {
     if (!expandable && window.matchMedia?.("(min-width: 48rem)").matches) return;
@@ -172,10 +167,6 @@ export function ConnectionRow({
         <div className="px-4 pb-3">
           {conn.accounts.length > 0 && (
           <div className="border-l border-surface-3 pl-4 ml-2.25">
-            {/* A table without a header: the account on the left; the bank
-                date and the amount packed together on the right. The amount
-                column has a minimum width, so the dates line up from one bank
-                to the next. */}
             <ul className="grid grid-cols-[minmax(0,1fr)_auto_minmax(6.5rem,auto)] divide-y divide-surface-3">
               {conn.accounts.map((a) => (
                 <li
@@ -205,29 +196,24 @@ export function ConnectionRow({
           </div>
           )}
 
-          {/* What is wrong, in words: a line per problem under the accounts,
-              the account it concerns named first, details in faint text. */}
           {problems.length > 0 && (
             <div className={`flex flex-col gap-2.5 ${conn.accounts.length > 0 ? "mt-3" : ""}`}>
               {problems.map((p, index) => (
                 <div key={index} className="flex items-center gap-3 text-[13px] leading-relaxed text-fg-dim">
-                  {/* The app's usual icon size (16px), smaller than the banners' 20px. */}
                   {p.severity === "error"
                     ? <CircleAlert className="size-4 shrink-0 text-red" aria-hidden />
                     : <TriangleAlert className="size-4 shrink-0 text-amber" aria-hidden />}
                   <div className="min-w-0 flex-1">
-                    {/* Always one line: a long account name is cut, never the message. */}
                     <p className="flex min-w-0 whitespace-nowrap">
                       {p.accounts.length > 0 && (
                         <>
                           <span className="min-w-0 truncate font-medium text-fg">{p.accounts.join(", ")}</span>
-                          {/* Outside the cut name, so it survives the cut: ": " in English, " : " in French. */}
+                          {/* Outside the cut name so it survives the cut. */}
                           <span className="shrink-0 whitespace-pre font-medium text-fg">{t("settings.connections.problemSeparator")}</span>
                         </>
                       )}
                       <span className="shrink-0">{p.text}</span>
                     </p>
-                    {/* A technical error (in English, often long) stays on one line, whole on hover. */}
                     {p.detail && (
                       <p className={`text-fg-faint ${p.technical ? "truncate font-mono text-[11px]" : "text-xs"}`} title={p.technical ? p.detail : undefined}>
                         {p.detail}
@@ -239,8 +225,6 @@ export function ConnectionRow({
             </div>
           )}
 
-          {/* Phone: the header has no room for icon buttons, so the actions
-              live here instead. */}
           <div className="mt-2 flex flex-wrap items-center gap-4 border-t border-surface-3 pt-2.5 md:hidden">
             {conn.canManage && (
               <button type="button" onClick={stop(() => { void openManage(); })} disabled={manage.isPending || syncing || isPending}
@@ -273,8 +257,6 @@ export function ConnectionRow({
     </div>
   );
 
-  // One line under the name: the state in words, in colour when something is
-  // wrong (the dot on the logo says so too); the sync time when all is well.
   function Summary() {
     const line = "mt-0.5 text-xs truncate";
     if (isError) {
@@ -306,8 +288,6 @@ export function ConnectionRow({
   }
 }
 
-/** The connection rows still loading: a few, each as tall as a row, with as
- *  many icon buttons as the rows will have (`deletable`: a trash icon too). */
 export function ConnectionRowsSkeleton({ deletable }: { deletable: boolean }) {
   return (
     <Skeleton className="flex flex-col gap-2.5">

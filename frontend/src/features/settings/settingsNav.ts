@@ -28,8 +28,7 @@ const settingsNavItems: SettingsNavItem[] = [
   { to: "/settings/server",      labelKey: "settings.server.title",      icon: Server },
 ];
 
-/** The settings pages the signed-in user may open. Which ones are admin-only
- *  is the route's own `adminOnly`, the flag the router guards them with. */
+/** Which pages are admin-only is the route's `adminOnly`, the flag the router guards them with. */
 export function useSettingsNav(): (SettingsNavItem & { adminOnly: boolean })[] {
   const { routesByPath } = useRouter();
   const isAdmin = useAuth().user?.role === "admin";

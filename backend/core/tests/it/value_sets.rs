@@ -1,5 +1,4 @@
-//! Each closed value set's variants against the database's own list, so a
-//! migration that adds a value, or a variant added without one, fails here.
+//! Each value set's variants must match the database's list.
 
 use std::collections::BTreeSet;
 
@@ -11,8 +10,7 @@ use gripsou_core::repo::lot::{LotSide, LotSource};
 use gripsou_core::repo::user::Role;
 use sqlx::PgPool;
 
-/// The values `table.column`'s check constraint allows. Postgres prints an
-/// `in (...)` check as `(column = ANY (ARRAY['a'::text, 'b'::text]))`.
+/// Postgres prints an `in (...)` check as `(column = ANY (ARRAY['a'::text, ...]))`.
 async fn allowed(pool: &PgPool, table: &str, column: &str) -> BTreeSet<String> {
     let defs: Vec<String> = sqlx::query_scalar(
         "select pg_get_constraintdef(oid) from pg_constraint \
@@ -104,8 +102,7 @@ async fn lot_source(pool: PgPool) {
     );
 }
 
-/// Seed and system keys have no check: the seed function is their list, so
-/// every key the code names must be on a new user's categories.
+/// The seed function is the list for seed and system keys.
 #[gripsou_core::testkit::db_test]
 async fn seed_and_system_keys(pool: PgPool) {
     let user = gripsou_core::testkit::seed_user(&pool).await;
@@ -125,8 +122,6 @@ async fn seed_and_system_keys(pool: PgPool) {
     assert_eq!(spelled(SystemKey::ALL), systems);
 }
 
-/// `UserPrefs::default()` is what the frontend shows before sign-in; a new
-/// user's row must read back the same.
 #[gripsou_core::testkit::db_test]
 async fn new_user_prefs_are_the_defaults(pool: PgPool) {
     let user = gripsou_core::testkit::seed_user(&pool).await;

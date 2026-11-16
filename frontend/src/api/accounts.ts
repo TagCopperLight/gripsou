@@ -4,8 +4,7 @@ import type { Range, UpdateAccountReq } from "./wire";
 import { keys } from "./keys";
 import { afterAccountEdit } from "./invalidate";
 
-// Reuse portfolio reads during quick navigation. Syncs, edits and reporting
-// preference changes invalidate these queries before the window expires.
+// Reused during quick navigation; syncs, edits and preference changes invalidate these before it expires.
 export const PORTFOLIO_STALE_MS = 30_000;
 
 export function useNetWorth(range: Range) {

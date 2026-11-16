@@ -104,8 +104,6 @@ describe("CategoryChooser", () => {
     const { onPick, onClose } = renderChooser({ mode: "pick" });
     await screen.findByText("Groceries");
     const list = screen.getByRole("listbox");
-    // The "no category" line sits first in the navigable sequence, so Enter
-    // with no arrow presses at all should already reach it.
     fireEvent.keyDown(list, { key: "Enter" });
     expect(onPick).toHaveBeenCalledWith(null);
     expect(onClose).toHaveBeenCalled();
@@ -151,8 +149,6 @@ describe("CategoryChooser", () => {
       const { onPick } = renderChooser({ mode: "pick", allowNone: false });
       await screen.findByText("Groceries");
       expect(screen.queryByTestId("chooser-option-none")).toBeNull();
-      // Without the none-line, a bare Enter (no arrow presses) lands on the
-      // first real item.
       const list = screen.getByRole("listbox");
       fireEvent.keyDown(list, { key: "Enter" });
       expect(onPick).toHaveBeenCalledWith("gro");
@@ -162,10 +158,7 @@ describe("CategoryChooser", () => {
   it("keeps focus in the search field across keyboard toggles, even as the parent re-renders", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    // A parent like the filter panel: every toggle updates its state, and its
-    // close handler reads that state, so each render hands the chooser a new
-    // one (the React Compiler can only reuse closures whose inputs are
-    // unchanged).
+    // Every toggle hands the chooser a new close handler, as the filter panel does (the React Compiler only reuses closures with unchanged inputs).
     function Harness() {
       const [picked, setPicked] = useState<string[]>([]);
       const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -196,8 +189,7 @@ describe("CategoryChooser", () => {
     expect(screen.getByTestId("picked").textContent).toBe("gro");
     expect(search).toHaveFocus();
 
-    // Still in the field, so a second Enter toggles the line off again rather
-    // than pressing the trigger behind the chooser.
+    // Still in the field, so a second Enter toggles the line off rather than pressing the trigger behind.
     await user.keyboard("{Enter}");
     expect(screen.getByTestId("picked").textContent).toBe("");
     expect(search).toHaveFocus();

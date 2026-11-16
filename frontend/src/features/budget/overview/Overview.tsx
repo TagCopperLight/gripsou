@@ -25,22 +25,17 @@ export function BudgetOverview() {
   const { period: picked } = useBudget();
   const latest = useLatestDataMonth();
 
-  // Until the reader picks a period, the page opens on the latest month that
-  // has transactions — not the current month, which stays empty for the first
-  // days of every month until the bank's feed catches up.
+  // Defaults to the latest month with transactions.
   const lastMonth: string | null = latest.isSuccess ? latest.data : currentMonth();
   const period: Period | undefined =
     picked ?? (latest.isPending ? undefined : { mode: "month", month: lastMonth ?? currentMonth() });
 
-  // One page through every step of the load (the month, then its summary):
-  // a page swapped for another would draw its skeleton anew, which flickers.
+  // One page through every step of the load: swapping pages would redraw the skeleton and flicker.
   const summary = useBudgetSummary(period);
   return <OverviewPage period={period} lastMonth={lastMonth} summary={summary} />;
 }
 
-/** The whole page, drawn before its period is known (`period` undefined, while
- *  the latest month with data loads) and before its summary is: the frame
- *  renders, bones stand in for the figures and charts. */
+/** Drawn before the period and summary are known: the frame renders, bones stand in. */
 function OverviewPage({ period, lastMonth, summary }: {
   period: Period | undefined;
   lastMonth: string | null;
@@ -48,7 +43,6 @@ function OverviewPage({ period, lastMonth, summary }: {
 }) {
   const navigate = useNavigate();
   const { setPeriod, patchFilters } = useBudget();
-  // One eye, in the period line, for every amount of the page.
   const privacy = usePrivacy();
 
   const data = summary.data;
@@ -56,8 +50,6 @@ function OverviewPage({ period, lastMonth, summary }: {
   const empty = data !== undefined && data.txnCount === 0;
 
   const month = period?.mode === "month" ? period.month : null;
-  // Back is always open: a month before the first transaction is an empty
-  // month like any other (user's call).
   const canStepBack = month !== null;
   const canStepForward = month !== null && lastMonth !== null && month < lastMonth;
   const step = (delta: number) => {
@@ -68,16 +60,10 @@ function OverviewPage({ period, lastMonth, summary }: {
     [setPeriod],
   );
 
-  /** Every deep link shows exactly the rows behind the figure clicked, so it
-   *  resets whatever a previous visit left that would narrow or widen the
-   *  list: the slice and time fields, "needs review", and "internal
-   *  transfers" (the summary leaves paired transfers out, as the list does
-   *  by default). `patchFilters` merges, so without this an earlier
-   *  Uncategorised click and a later category click would AND together and
-   *  the list would come back always-empty. Search, account and tag filters
-   *  are the reader's own narrowing and stay. */
+  /** Deep links show exactly the rows behind the clicked figure, so this resets the slice, time, needs-review and
+   *  internal-transfer fields: `patchFilters` merges, so an earlier Uncategorised click and a category click would AND
+   *  into an empty list. Search, account and tag filters stay. */
   const openTransactions = (slice?: Slice) => {
-    // Only a loaded summary links here, and a summary has a period.
     if (period === undefined) return;
     const { from, to } = periodBounds(period);
     const base = {
@@ -86,8 +72,7 @@ function OverviewPage({ period, lastMonth, summary }: {
       bucket: "all" as const,
       needsReview: false,
       transfers: false,
-      // `custom`: the time-frame select shows what really applies — these
-      // dates — rather than "All time".
+      // `custom`: the select shows the real dates, not "All time".
       timeFrame: "custom" as const,
       from,
       to,
@@ -96,9 +81,7 @@ function OverviewPage({ period, lastMonth, summary }: {
     if (slice?.kind === "category") {
       patchFilters({ ...base, categoryIds: [slice.category.id] });
     } else if (slice?.kind === "uncategorised") {
-      // No id to filter on. `bucket: "out"` is required as well as the flag:
-      // the breakdown counts only the outflow half, while the flag alone would
-      // also match uncategorised income.
+      // `bucket: "out"` is needed too: the flag alone would also match uncategorised income.
       patchFilters({ ...base, uncategorized: true, bucket: "out" });
     } else {
       patchFilters(base);
@@ -123,8 +106,7 @@ function OverviewPage({ period, lastMonth, summary }: {
         <CardError onRetry={() => void summary.refetch()} className="h-40" />
       ) : (
         <>
-          {/* A step to another month keeps this month's data, dimmed, until
-              the new one lands. The trend dims on its own query. */}
+          {/* Dimmed while stepping to another month; the trend dims on its own query. */}
           <div className="flex flex-col gap-5">
             <FiguresSurface summary={data} masked={privacy.masked} stale={stale} />
             {data === undefined ? (
@@ -162,13 +144,10 @@ function OverviewPage({ period, lastMonth, summary }: {
   );
 }
 
-/** Its own query, asked for with the summary rather than after it, so a
- *  failing trend degrades one surface rather than the page. An empty period
- *  has no trend: the request it made while the summary loaded goes unused. */
+/** Its own query so a failing trend degrades one surface, not the page. An empty period has no trend, so its request goes unused. */
 function TrendSection({
   anchor, onSelectMonth, masked,
 }: {
-  /** Undefined while the period is unknown. */
   anchor: string | undefined;
   onSelectMonth: (month: string) => void;
   masked: boolean;

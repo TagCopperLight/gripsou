@@ -32,7 +32,6 @@ const navLinkClassName =
 const profileClassName =
   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-fg-dim transition-colors hover:bg-hover md:mt-auto";
 
-/** Draws one place the sidebar leads to, with its classes and content. */
 type DrawLink = (to: string, className: string, children: ReactNode) => ReactNode;
 
 export function Sidebar() {
@@ -62,9 +61,6 @@ export function Sidebar() {
   );
 }
 
-/** The sidebar while the app waits for the session, outside the router:
- *  the places are drawn but don't lead anywhere yet, and whose session it is
- *  is a bone. */
 export function SidebarSkeleton() {
   return (
     <SidebarFrame
@@ -110,7 +106,6 @@ function SidebarFrame({ link, profile }: { link: DrawLink; profile: ReactNode })
 
       {link("/settings", profileClassName, profile)}
 
-      {/* Desktop only: the mobile sidebar is a bottom bar with no room for it. */}
       {health.isPending ? (
         <Skeleton className="hidden px-3 md:-mt-4 md:block">
           <TextBone text="text-[11px]" className="w-10" />

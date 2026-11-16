@@ -89,6 +89,6 @@ async fn wrong_stored_id_and_provider_failures_do_not_issue_a_manage_link() {
         p.manage(&json!({"auth_token":"t"}), &json!({}))
             .await
             .is_err()
-    ); // no code endpoint
+    );
     assert!(p.manage(&json!({}), &json!({})).await.is_err());
 }

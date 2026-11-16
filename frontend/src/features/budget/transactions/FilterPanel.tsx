@@ -16,15 +16,12 @@ import { HEAD_TEXT } from "../../../ui/gridTable";
 function Column({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      {/* The same head treatment as the transactions table: 11px mono, faint,
-       *  wide-tracked — a column heading reads as a heading in both places. */}
       <p className={HEAD_TEXT}>{title}</p>
       {children}
     </div>
   );
 }
 
-/** Part 2 of the search surface: four columns, no separators. */
 export function FilterPanel() {
   const { t } = useTranslation();
   const { filters, patchFilters } = useBudget();
@@ -35,8 +32,7 @@ export function FilterPanel() {
   const toggleIn = (list: string[], id: string) =>
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
-  // Updater form: two toggles batched into one tick must each derive from the
-  // other's write, not from the same pre-batch `filters` snapshot.
+  // Updater form: two batched toggles must each derive from the other's write.
   const toggleCategory = (id: string) =>
     patchFilters((prev) => ({ categoryIds: toggleIn(prev.categoryIds, id) }));
   const toggleTag = (id: string) =>
@@ -46,11 +42,6 @@ export function FilterPanel() {
     <div data-testid="filter-panel" className="grid grid-cols-2 gap-6 py-3 md:grid-cols-4">
       <div data-testid="column-type">
         <Column title={t("budget.transactions.columns.type").toUpperCase()}>
-          {/* Two columns rather than one stack: the four options are not a
-           *  flat list of peers. `all` and `lots` choose *what kind of row* you
-           *  are looking at, `in` and `out` split cash by direction — so the
-           *  grid puts a scope choice beside its cash counterpart instead of
-           *  burying the distinction in a column of four. */}
           <div className="grid grid-cols-2 gap-x-2 gap-y-1">
             {TYPE_BUCKETS.map(({ key, icon: Icon, tint }) => (
               <button
@@ -75,9 +66,6 @@ export function FilterPanel() {
 
       <div data-testid="column-categories">
         <Column title={t("budget.transactions.columns.category").toUpperCase()}>
-          {/* The "+" leads, the chips follow: it then keeps its place as the
-           *  selection grows, so the chooser hanging under it does not walk
-           *  across the column with every pick. */}
           <div className="flex flex-wrap items-center gap-1.5">
             <button
               type="button"
@@ -144,12 +132,6 @@ export function FilterPanel() {
 
       <div data-testid="column-others">
         <Column title={t("budget.transactions.columns.others").toUpperCase()}>
-          {/* The same two-column grid as TYPE, and the same press treatment —
-           *  these read as flags on the same surface, so they should not look
-           *  like a different kind of control. Unlike TYPE they are
-           *  independent and each is free to be off; they carry no icon,
-           *  having no colour or shape of their own to stand for. A third
-           *  flag lands on the second line without any change here. */}
           <div className="grid grid-cols-2 gap-x-2 gap-y-1">
             {OTHER_FLAGS.map(({ key, labelKey, icon: Icon, tint, strokeWidth }) => {
               const on = filters[key];

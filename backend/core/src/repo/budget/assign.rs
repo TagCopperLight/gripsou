@@ -1,29 +1,12 @@
 //! What a user does to one transaction, or to many at once.
 //!
-//! Every write here is `category_source = 'user'`: it outranks every
-//! pipeline stage, survives a re-run, and joins the AI's example pool. Clearing
-//! a category nulls the source too, handing the row back to the pipeline.
+//! Every write here is `category_source = 'user'`: it outranks every pipeline stage and joins the AI's example
+//! pool. Clearing a category nulls the source too. A category write that makes a row count unlinks both
+//! halves of every pair it touches, unless the new category is neutral (CLAUDE.md, Budget).
 //!
-//! **A user category write that makes a row count dissolves any
-//! internal-transfer pair it touches.** The user may overrule pairing — it is
-//! a timid heuristic, but it can still false-match two unrelated movements of
-//! the same amount. What must not survive the correction is the link: a row
-//! still pointing at a counterpart that is no longer a transfer is a
-//! half-transfer that nets against nothing. So a category write unlinks both
-//! halves of every pair it touches — unless the new category is neutral:
-//! Savings or Investments instead of Internal transfer is a finer label for
-//! the same movement, which still counts toward nothing either way. The
-//! untouched half keeps its category and its `category_source = 'pair'`,
-//! which surfaces it to the reader as an orphaned transfer, counts as
-//! uncategorised in the Overview, and leaves it eligible for the next pairing
-//! pass.
-//!
-//! What the API calls ([`patch_transaction`], [`bulk_apply`],
-//! [`apply_to_description`]) each run as one database transaction under the
-//! user's write lock, through the same steps: lock the rows they target
-//! ([`lock_owned`]), check the category and tags named ([`gate`]), ask for
-//! confirmation before dissolving a pair, and only then write. A refused
-//! request writes nothing.
+//! [`patch_transaction`], [`bulk_apply`] and [`apply_to_description`] each run as one database transaction
+//! under the user's write lock: lock the target rows ([`lock_owned`]), check the category and tags ([`gate`]),
+//! ask for confirmation before dissolving a pair, then write. A refused request writes nothing.
 
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -32,31 +15,23 @@ use crate::budget::vocab::{CategoryKind, CategorySource};
 use crate::db::UserWriteTx;
 use crate::error::CoreError;
 
-/// What a write did, or what it is waiting for.
 #[derive(Debug, PartialEq, Eq)]
 pub enum WriteOutcome<T> {
     Done(T),
-    /// Nothing was written: this many of the rows the write targets are half
-    /// of an internal-transfer pair the write would unlink, and the caller has
-    /// not confirmed.
+    /// Nothing was written: this many target rows are half of a pair the write would unlink, and the caller
+    /// has not confirmed.
     PendingPairBreaks(i64),
     Refused(Refusal),
 }
 
-/// Why a write was refused. Nothing was written.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// The transaction is not this user's.
     NotFound,
-    /// The category is not this user's, or no longer exists.
     UnknownCategory,
-    /// At least one tag is not this user's, or no longer exists.
     UnknownTag,
 }
 
-/// Rows of the user's, locked for the rest of the database transaction, with
-/// whether each is half of a pair. Only [`lock_owned`] makes one, so every
-/// writer below writes rows whose ownership was checked once, here.
+/// Only [`lock_owned`] makes one, so every writer writes rows whose ownership was checked once.
 struct Locked {
     rows: Vec<(Uuid, bool)>,
 }
@@ -71,9 +46,7 @@ impl Locked {
     }
 }
 
-/// Locks the rows of `ids` this user owns. A sync that pairs one of them has
-/// to wait until the write commits, so the pair check made on this answer
-/// still holds when the write happens.
+/// A sync that pairs one of them waits until the write commits, so the pair check still holds.
 async fn lock_owned(tx: &mut UserWriteTx<'_>, ids: &[Uuid]) -> Result<Locked, CoreError> {
     let rows = sqlx::query!(
         r#"
@@ -94,12 +67,10 @@ async fn lock_owned(tx: &mut UserWriteTx<'_>, ids: &[Uuid]) -> Result<Locked, Co
     })
 }
 
-/// A category write whose category was checked: the user's, or a clear.
 struct CategoryWrite {
     category_id: Option<Uuid>,
-    /// A neutral category counts toward nothing, as a pair does, so filing
-    /// one half under it changes no total and the pair stands. Clearing does
-    /// not keep pairs: an uncategorised half is not a transfer.
+    /// A neutral category counts toward nothing, as a pair does, so filing one half under it changes no total and
+    /// the pair stands. Clearing does not keep pairs.
     keeps_pairs: bool,
 }
 
@@ -111,8 +82,7 @@ impl CategoryWrite {
         }
     }
 
-    /// `None` when the category is not the user's. Locks the category row,
-    /// so a concurrent delete cannot slip in before the write.
+    /// Locks the category row so a concurrent delete cannot slip in before the write.
     async fn check(
         tx: &mut UserWriteTx<'_>,
         category_id: Option<Uuid>,
@@ -138,8 +108,7 @@ impl CategoryWrite {
         }))
     }
 
-    /// Writes the category to `rows` and unlinks every pair they take part
-    /// in, both halves, unless the category keeps pairs. Returns the ids
+    /// Unlinks every pair they take part in, both halves, unless the category keeps pairs. Returns the ids
     /// written.
     async fn write(&self, tx: &mut UserWriteTx<'_>, rows: &Locked) -> Result<Vec<Uuid>, CoreError> {
         let ids = rows.ids();
@@ -180,7 +149,6 @@ impl CategoryWrite {
     }
 }
 
-/// Whether every one of `tag_ids` is the user's. Locks them, as above.
 async fn tags_are_mine(tx: &mut UserWriteTx<'_>, tag_ids: &[Uuid]) -> Result<bool, CoreError> {
     let mut wanted = tag_ids.to_vec();
     wanted.sort();
@@ -198,17 +166,12 @@ async fn tags_are_mine(tx: &mut UserWriteTx<'_>, tag_ids: &[Uuid]) -> Result<boo
     Ok(found.len() == wanted.len())
 }
 
-/// What the gates let through.
 enum Gate<T> {
-    /// Go ahead; the category write, when the call carries one.
     Go(Option<CategoryWrite>),
     Stop(WriteOutcome<T>),
 }
 
-/// The checks every write makes on its locked rows, in this order: the
-/// category, the tags, then the confirmation a pair-breaking category write
-/// waits for. Tags and ✓ break no pairs, so a call with no category is never
-/// held for confirmation.
+/// Tags and ✓ break no pairs, so a call with no category is never held for confirmation.
 async fn gate<T>(
     tx: &mut UserWriteTx<'_>,
     rows: &Locked,
@@ -249,9 +212,8 @@ impl<T> WriteOutcome<T> {
     }
 }
 
-/// Clears the category of every row filed under `category_id`, as the user
-/// clearing each one would: the rows go back to the AI, review and pairing,
-/// and their pairs are unlinked. Run before the category is deleted.
+/// As if the user cleared each row: they go back to the AI, review and pairing, and their pairs are
+/// unlinked. Run before the category is deleted.
 pub(crate) async fn clear_category(
     tx: &mut UserWriteTx<'_>,
     category_id: Uuid,
@@ -272,7 +234,6 @@ pub(crate) async fn clear_category(
     Ok(())
 }
 
-/// Replaces one row's tag set with `tag_ids`, already checked.
 async fn replace_tags(
     tx: &mut UserWriteTx<'_>,
     txn_id: Uuid,
@@ -298,7 +259,6 @@ async fn replace_tags(
     Ok(())
 }
 
-/// Adds `tag_ids`, already checked, to `rows`, keeping what is there.
 async fn add_tags(
     tx: &mut UserWriteTx<'_>,
     rows: &Locked,
@@ -337,8 +297,7 @@ async fn write_checked(
     Ok(())
 }
 
-/// What a single-row save changes. `None` leaves a field alone;
-/// `category_id: Some(None)` clears the category.
+/// `None` leaves a field alone; `category_id: Some(None)` clears it.
 #[derive(Default)]
 pub struct TransactionPatch<'a> {
     pub category_id: Option<Option<Uuid>>,
@@ -346,7 +305,7 @@ pub struct TransactionPatch<'a> {
     pub checked: Option<bool>,
 }
 
-/// Saves one row: category, tags and ✓ together or not at all.
+/// Category, tags and ✓ together or not at all.
 pub async fn patch_transaction(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -384,15 +343,11 @@ pub async fn patch_transaction(
     Ok(WriteOutcome::Done(()))
 }
 
-/// Which of the rows sharing a description an "apply to the same
-/// description" reaches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SameDescription {
-    /// Every one of them, whatever their category or who set it.
     All,
-    /// Only the rows still in the review queue at this threshold (the
-    /// queue's own `needs_review`), never the anchor: from the queue, a
-    /// correction must not overwrite what the user has already settled.
+    /// Only rows still in the review queue at this threshold, never the anchor: from the queue, a correction
+    /// must not overwrite what the user already settled.
     NeedsReview(Decimal),
 }
 
@@ -405,8 +360,6 @@ impl SameDescription {
     }
 }
 
-/// How many *other* transactions of this user share the row's normalised
-/// description, within `scope` — the number the "apply to all?" prompt shows.
 pub async fn count_same_description(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -417,15 +370,9 @@ pub async fn count_same_description(
     Ok(ids.iter().filter(|&&id| id != txn_id).count() as i64)
 }
 
-/// The anchor row (outside the review scope) and every transaction of this
-/// user sharing its normalised description.
-///
-/// Guards on the *normalised* value, not the raw one: `description_norm`
-/// (`budget_norm_description`) collapses any run of 2+ digits, so a raw
-/// description like `"12345"` is non-blank yet normalises to `''`, same as
-/// NULL or empty. A row whose normalised description is `''` carries no
-/// merchant identity, so it never clusters with anything: the inner subquery
-/// then yields `NULL`, and nothing matches.
+/// Guards on the normalised value, not the raw one: `description_norm` collapses runs of 2+ digits, so a raw
+/// `"12345"` normalises to `''`. Such a row has no merchant identity and never clusters: the inner subquery
+/// yields NULL and nothing matches.
 async fn same_description_ids<'e>(
     executor: impl sqlx::PgExecutor<'e>,
     user_id: Uuid,
@@ -456,9 +403,8 @@ async fn same_description_ids<'e>(
     Ok(ids)
 }
 
-/// "Apply to the same description", as one database transaction. Returns the
-/// ids written (the row itself included under [`SameDescription::All`]) —
-/// the review queue needs to know *which* of its lines this resolved.
+/// Returns the ids written (the row itself included under [`SameDescription::All`]); the review queue needs
+/// to know which of its lines this resolved.
 pub async fn apply_to_description(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -482,10 +428,7 @@ pub async fn apply_to_description(
     Ok(WriteOutcome::Done(written))
 }
 
-/// What a bulk write changes. Every field is optional: a call may set a
-/// category, add tags, flip the checked flag, or any combination. `category_id`
-/// is doubly-optional — `None` means "leave the category alone", `Some(None)`
-/// means "clear it".
+/// `category_id: None` leaves the category alone, `Some(None)` clears it.
 #[derive(Default)]
 pub struct BulkChanges<'a> {
     pub category_id: Option<Option<Uuid>>,
@@ -493,12 +436,8 @@ pub struct BulkChanges<'a> {
     pub checked: Option<bool>,
 }
 
-/// Applies one bulk write as one database transaction. Returns how many of
-/// the user's rows it covered.
-///
-/// "Select all shown" resolves server-side and can hold rows the client has
-/// never loaded, so the client cannot count the pairs a category write would
-/// break itself — this does, on the locked rows.
+/// Returns how many of the user's rows it covered. "Select all shown" resolves server-side and can hold rows
+/// the client never loaded, so the pairs a category write breaks are counted here, on the locked rows.
 pub async fn bulk_apply(
     pool: &sqlx::PgPool,
     user_id: Uuid,
@@ -531,8 +470,7 @@ pub async fn bulk_apply(
         write_checked(&mut tx, &rows, checked).await?;
     }
     tx.commit().await?;
-    // Every arm covers the same locked rows, so that is the count — not a sum
-    // of arms, which would report a multiple of the selection.
+    // Every arm covers the same locked rows, so that is the count, not a sum of arms.
     let wrote_anything = category.is_some() || add_tag_ids.is_some() || changes.checked.is_some();
     Ok(WriteOutcome::Done(if wrote_anything {
         rows.rows.len() as u64

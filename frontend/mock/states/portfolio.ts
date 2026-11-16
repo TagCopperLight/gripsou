@@ -6,12 +6,9 @@ import { lotsOf } from "../views/portfolio.ts";
 import { addAccount, addRow, emptyHousehold, lotShares, nothingConnected, security } from "./helpers.ts";
 import type { MockState } from "./pieces.ts";
 
-/** DCAM.PA in the PEA, as production stores it; returns its id. */
 function addDcam(store: Store): string {
-  // Public market data as production stores it: the Yahoo ticker, the
-  // provider's name, a price near 6,30 €, prices only from the fund's
-  // launch (4 March 2025), and Boursorama's composition as of October
-  // 2026. Quantities and dates of the purchases are made up.
+  // Public market data as production stores it (Yahoo ticker, prices from the fund's launch on
+  // 4 March 2025, Boursorama composition of October 2026). Purchases are made up.
   const sec = store.ids.next("security");
   const launch = dayIndex(Date.UTC(2025, 2, 4));
   const c = closes(60, 6.301, 0.0005, 0.011);
@@ -35,7 +32,6 @@ function addDcam(store: Store): string {
       ].map(([name, weight]) => ({ name: name as string, weight: weight as number })),
     },
   });
-  // A buy every two months from a month after launch.
   store.manualLots[sec] = [];
   for (let i = launch + 30; i < HISTORY_DAYS; i += 61) {
     store.manualLots[sec].push({
@@ -45,8 +41,6 @@ function addDcam(store: Store): string {
   return sec;
 }
 
-/** Every purchase older than `days` forgotten, as if the investing started
- *  then; what is held follows the lots left. */
 function investedSince(store: Store, days: number) {
   const from = daysAgo(days);
   for (const s of store.securities) {
@@ -164,7 +158,6 @@ export const recordPurchases: MockState[] = [
         ...(store.manualLots[CW8] ?? []),
         { id: store.ids.next("lot"), t: daysAgo(25), side: "sell", qty: "2", price: c[HISTORY_DAYS - 26].toFixed(2), fee: "1.99", manual: true },
       ];
-      // The provider's quantity follows the sale.
       security(store, CW8).reportedQty = lotShares(store, CW8);
     },
   },
@@ -245,7 +238,6 @@ export const dashboard: MockState[] = [
     group: "Data",
     option: "Loss",
     apply(store) {
-      // The last 180 days slide down to 45% below where they started.
       for (const s of store.securities) {
         const start = HISTORY_DAYS - 180;
         s.closes = s.closes.map((p, i) => (i < start ? p : Math.round(p * (1 - 0.45 * ((i - start) / 179)) * 100) / 100));

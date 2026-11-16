@@ -42,7 +42,6 @@ fn income_and_expenses_split_by_kind() {
 
 #[test]
 fn uncategorised_money_counts_by_sign() {
-    // The sign stands in for the kind there is no category to read.
     let rows = vec![
         row(day(2026, 3, 1), None, None, eur(200)),
         row(day(2026, 3, 5), None, None, eur(-50)),
@@ -55,10 +54,8 @@ fn uncategorised_money_counts_by_sign() {
 
 #[test]
 fn uncategorised_money_counts_by_sign_on_the_same_day() {
-    // The same rule as `uncategorised_money_counts_by_sign`, but both rows
-    // fall on one day — the payday shape: the SQL layer must
-    // hand `figures()` two same-day rows, one per sign, rather than one
-    // already-netted row, or this test would see near-zero everything.
+    // Same as `uncategorised_money_counts_by_sign`, but both rows fall on one day (payday): SQL
+    // must hand `figures()` two same-day rows, one per sign, not one netted row.
     let rows = vec![
         row(day(2026, 3, 1), None, None, eur(200)),
         row(day(2026, 3, 1), None, None, eur(-50)),
@@ -154,8 +151,6 @@ fn uncategorised_appears_on_the_side_its_sign_puts_it() {
 
 #[test]
 fn small_slices_roll_into_other() {
-    // A side keeps slices at >= 2% of the period's expenses, capped
-    // at 8; the remainder becomes Other.
     let big = Uuid::new_v4();
     let mut rows = vec![row(day(2026, 3, 1), Some(big), Some("expense"), eur(-1000))];
     for _ in 0..5 {
@@ -191,9 +186,7 @@ fn a_side_never_exceeds_eight_slices_plus_other() {
 
 #[test]
 fn deficit_does_not_duplicate_the_other_key() {
-    // 9 income categories of 100 each (one gets rolled into Other
-    // by the 8-slice cap) against an expense of 2000. The deficit must not
-    // push a second `Slice::Other` onto `sources`.
+    // The deficit must not push a second `Slice::Other` onto `sources`.
     let mut rows = vec![];
     for _ in 0..9 {
         rows.push(row(
@@ -234,10 +227,6 @@ fn deficit_does_not_duplicate_the_other_key() {
 
 #[test]
 fn category_net_reversal_keeps_the_diagram_balanced() {
-    // Category B's refunds (+200) exceed its spending, so its
-    // period net is inward. figures() and side() must agree that only
-    // category A (net -500) is an expense; category B contributes to
-    // neither income nor expenses.
     let salary = Uuid::new_v4();
     let category_a = Uuid::new_v4();
     let category_b = Uuid::new_v4();
@@ -326,8 +315,6 @@ fn stepping_back_crosses_the_year_boundary() {
 
 #[test]
 fn the_breakdown_is_expense_side_only() {
-    // SHARE is share of the period's expenses, which is meaningless
-    // for an income row.
     let salary = Uuid::new_v4();
     let rent = Uuid::new_v4();
     let rows = vec![
@@ -366,7 +353,6 @@ fn the_breakdown_keeps_seven_then_rolls_up() {
     let b = breakdown(&rows);
     assert_eq!(b.len(), 8, "7 plus Other");
     assert_eq!(b[7].slice, Slice::Other);
-    // The three smallest: 10 + 20 + 30.
     assert_eq!(b[7].amount, eur(60));
     assert_eq!(b[7].avg12, None, "Other carries no comparison");
     assert_eq!(b[0].amount, eur(100), "largest first");
@@ -391,16 +377,13 @@ fn breakdown_rows_carry_their_transaction_count() {
 
 #[test]
 fn the_baseline_excludes_the_selected_month() {
-    // Excluding it so a spike cannot inflate the average it is being
-    // judged against.
+    // A spike must not inflate the average it is judged against.
     let rent = Uuid::new_v4();
     let mut rows = vec![];
-    // Twelve months at 100 each: 2025-09 through 2026-08.
     for m in 9..=20u32 {
         let (y, mm) = if m <= 12 { (2025, m) } else { (2026, m - 12) };
         rows.push(row(day(y, mm, 5), Some(rent), Some("expense"), eur(-100)));
     }
-    // ...and a 1000 spike in the selected month.
     rows.push(row(
         day(2026, 9, 5),
         Some(rent),
@@ -431,7 +414,6 @@ fn the_baseline_needs_three_months_of_history() {
 
 #[test]
 fn a_short_baseline_averages_over_what_exists() {
-    // Five months at 100: the mean is 100, not 500/12.
     let rent = Uuid::new_v4();
     let mut rows = vec![];
     for m in 4..=8u32 {
@@ -442,8 +424,7 @@ fn a_short_baseline_averages_over_what_exists() {
 
 #[test]
 fn a_month_with_no_rows_still_counts_as_a_month() {
-    // Four months of history, one of them empty: the mean is over four, not
-    // three, or a quiet month would silently raise the average.
+    // The mean is over four, not three, or a quiet month would raise the average.
     let rent = Uuid::new_v4();
     let mut rows = vec![];
     for m in [5u32, 6, 8] {
@@ -472,8 +453,6 @@ fn breakdown_rows_carry_their_category_baseline() {
 
 #[test]
 fn the_trend_ends_at_the_anchor_month() {
-    // 12 bars ending at the selected month unlike the
-    // baseline, which excludes it.
     let Trend { months, .. } = trend(&[], Month::parse("2026-09").unwrap(), 12, None);
     assert_eq!(months.len(), 12);
     assert_eq!(months[11].label(), "2026-09");
@@ -497,8 +476,6 @@ fn every_trend_series_has_one_value_per_month() {
 
 #[test]
 fn the_trend_keeps_the_top_eight_across_the_whole_window() {
-    // Chosen once for the window, never per month: a stack whose composition
-    // changed bar to bar would make the legend a lie.
     let mut rows = vec![];
     for i in 1..=11i64 {
         rows.push(row(
@@ -511,14 +488,11 @@ fn the_trend_keeps_the_top_eight_across_the_whole_window() {
     let Trend { series, .. } = trend(&rows, Month::parse("2026-09").unwrap(), 12, None);
     assert_eq!(series.len(), 9, "8 plus Other");
     assert_eq!(series[8].slice, Slice::Other);
-    // The three smallest: 10 + 20 + 30.
     assert_eq!(series[8].values[11], eur(60));
 }
 
 #[test]
 fn the_anchor_months_largest_are_kept_over_bigger_window_totals() {
-    // Nine categories with big spending back in March would fill every slot
-    // on window total alone, hiding what the selected month was spent on.
     let mut rows = vec![];
     let old: Vec<Uuid> = (0..9).map(|_| Uuid::new_v4()).collect();
     for id in &old {
@@ -536,7 +510,6 @@ fn the_anchor_months_largest_are_kept_over_bigger_window_totals() {
         assert!(slices.contains(&Slice::Category(*id)), "the anchor's top 3");
     }
     assert!(!slices.contains(&Slice::Category(recent[3])), "but only 3");
-    // Then filled by window total, and stacked in that order throughout.
     assert_eq!(slices[0], Slice::Category(old[0]));
     assert_eq!(
         &slices[5..8],
@@ -555,8 +528,6 @@ fn the_anchor_months_largest_are_kept_over_bigger_window_totals() {
 
 #[test]
 fn the_folded_category_always_goes_into_other() {
-    // The user's own "Other" category next to the rollup would put two
-    // slices called Other in the legend.
     let other_category = Uuid::new_v4();
     let rent = Uuid::new_v4();
     let rows = vec![
@@ -608,8 +579,6 @@ fn a_category_big_in_one_month_only_still_makes_the_top_eight() {
 
 #[test]
 fn summary_breakdown_and_trend_agree_on_a_shared_month() {
-    // /summary and /trend must never disagree about a month they
-    // both cover.
     let rent = Uuid::new_v4();
     let groceries = Uuid::new_v4();
     let month = Month::parse("2026-09").unwrap();
@@ -624,9 +593,8 @@ fn summary_breakdown_and_trend_agree_on_a_shared_month() {
         row(day(2026, 9, 20), None, None, eur(-40)),
     ];
 
-    // Few enough slices that neither breakdown's top-7 cap nor trend's
-    // top-8 cap rolls anything into `Other` — so the two slice sets are
-    // identical and every entry has a like-for-like value to compare.
+    // Few enough slices that neither top-7 nor top-8 cap rolls anything into `Other`, so both
+    // slice sets match.
     let breakdown_rows = summarise(&rows, Period::Month(month)).breakdown;
 
     let Trend { months, series } = trend(&rows, month, 1, None);
@@ -652,7 +620,6 @@ fn summary_breakdown_and_trend_agree_on_a_shared_month() {
     }
 }
 
-/// The baseline's mean month, as the summary of `month` reports it.
 fn avg12(
     rows: &[DayCategoryRow],
     month: &str,

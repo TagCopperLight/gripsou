@@ -9,8 +9,7 @@ const TAGS = [
   { id: "3", name: "Shared", color: "#d08a5a" },
 ];
 
-/** jsdom reports every box as 0×0, so the cell has to be told how wide things
- *  are before it can decide anything: a fixed width per node, a fixed line. */
+/** jsdom reports every box as 0x0, so widths are injected per node. */
 function stubLayout(itemWidth: number, lineWidth: number) {
   const offset = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(itemWidth);
   const client = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(lineWidth);
@@ -62,13 +61,12 @@ describe("TagCell", () => {
 
   it("counts the tags it had to drop, between the last chip and the add button", () => {
     // 130px of line, less the 40px button and its gap, leaves 86px: one 40px
-    // chip plus the gap and the counter (84px) — the other two become "+2".
+    // chip plus the gap and the counter (84px), so the other two become "+2".
     const restore = stubLayout(40, 130);
     render(<TagCell tags={TAGS} label="Add tags" onOpen={vi.fn()} />);
     const counter = screen.getByTestId("tx-tags-overflow");
     expect(counter).toHaveTextContent("+2");
     expect(counter).toHaveAttribute("title", "Work, Shared");
-    // Order on the visible line: chip, counter, button.
     const line = counter.parentElement!;
     const order = Array.from(line.children).slice(0, 3);
     expect(order[0]).toHaveAttribute("data-testid", "tag-chip");
