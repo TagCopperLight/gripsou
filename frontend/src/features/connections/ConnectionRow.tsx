@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { ComponentPropsWithoutRef, MouseEvent } from "react";
+import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { FieldError } from "../../ui/FieldError";
 import { showError, useErrorToast } from "../../lib/errorToasts";
@@ -20,6 +20,7 @@ import { formatDate, formatRelative } from "../../lib/date";
 import { formatMoney } from "../../lib/money";
 import { FxAsterisk, FxFootnote } from "../../ui/FxNote";
 import { Bone, Skeleton, TextBone } from "../../ui/Skeleton";
+import { IconButton } from "../../ui/IconButton";
 import type { SyncConnection } from "../../api/wire";
 
 // Shared collapsible connection row used by the settings page and the sync
@@ -330,24 +331,5 @@ export function ConnectionRowsSkeleton({ deletable }: { deletable: boolean }) {
         </div>
       ))}
     </Skeleton>
-  );
-}
-
-function IconButton({
-  danger = false,
-  className = "",
-  ...props
-}: ComponentPropsWithoutRef<"button"> & { danger?: boolean }) {
-  return (
-    <button
-      type="button"
-      // Disabled: faded like a row's caret when it can't open, and it lets the
-      // pointer through to the row, so the cursor doesn't change and a click
-      // opens or closes the row like anywhere else on it.
-      className={`size-8 rounded-lg flex items-center justify-center cursor-pointer text-fg-faint transition-colors duration-140 enabled:hover:bg-surface-2 disabled:opacity-30 disabled:pointer-events-none ${
-        danger ? "enabled:hover:text-red" : "enabled:hover:text-fg"
-      } ${className}`}
-      {...props}
-    />
   );
 }

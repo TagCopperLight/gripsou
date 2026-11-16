@@ -1,399 +1,178 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useErrorToast } from "../../../lib/errorToasts";
-import {
-  Archive, ArchiveRestore, ChevronDown, ChevronUp, Lock, Pencil, Plus, Trash2,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Lock, Plus } from "lucide-react";
 
-import { Surface } from "../../../ui/Surface";
+import { SettingsSurface } from "../../../ui/SettingsSurface";
 import { Button } from "../../../ui/Button";
 import { CardError } from "../../../ui/CardError";
-import { LoadingFrame } from "../../../ui/LoadingFrame";
-import { Bone, BoneRows, TextBone } from "../../../ui/Skeleton";
-import { useBudgetCategories, useReorderBudgetCategories, useUpdateBudgetCategory, categoryBody } from "../../../api/budget";
+import { Skeleton } from "../../../ui/Skeleton";
+import { boneWidths } from "../../../ui/boneWidths";
+import { useBudgetCategories, useReorderBudgetCategories } from "../../../api/budget";
 import type { BudgetCategory } from "../../../api/wire";
 import {
-  categoryLabel, categoryNeighbour, categoryOrderAfterMove, safeBudgetColor, sortCategories,
+  BUDGET_KINDS, categoryLabel, categoryNeighbour, categoryOrderAfterMove, safeBudgetColor, sortCategories,
 } from "../../../lib/budget";
-import { withAlpha } from "../../../lib/color";
 import { CategoryModal } from "./CategoryModal";
 import { DeleteCategoryModal } from "./DeleteCategoryModal";
 import { CategoryIcon } from "../CategoryIcon";
-import { HEAD_TEXT } from "../../../ui/gridTable";
+import { List, ListBadge, ListHeadingBone, ListRow, ListRowBone, ListTile } from "./SettingsList";
 
-const KIND_BADGE: Record<BudgetCategory["kind"], string> = {
-  expense: "text-red-light bg-red-light/14",
-  income: "text-green-light bg-green-light/14",
-  neutral: "text-fg-faint bg-surface-2",
-};
-
-/** Rows have no rules; the hover rectangle is the separator. `border-separate`
- *  on the table is what lets the first/last cell round the row's ends. */
-const CELL =
-  "py-2 bg-transparent transition-colors duration-140 group-hover:bg-surface-2";
-
-/** Breathing room on either side of the kind badge, so it reads as its own
- *  column rather than a suffix of the name. The name side is deliberately wide:
- *  the badge should land well clear of even a long category. */
-const GAP_NAME = "pr-40";
-const GAP_KIND = "pr-12";
-
-/** The SYSTEM / ARCHIVED chips that qualify a name. */
-const BADGE =
-  "rounded-md bg-surface-3 px-1.5 py-0.5 text-[10px] font-semibold text-fg-faint";
-
-/** Only on the hovered row — faded out rather than removed, so the column
- *  keeps its width and nothing shifts under the pointer. `focus-within` keeps
- *  them reachable by keyboard, where there is no hover to speak of. */
+/** Only on the hovered row, faded rather than removed so nothing shifts under
+ *  the pointer; `focus-within` keeps them reachable by keyboard. */
 const ARROWS =
-  "flex flex-col items-center -space-y-1 opacity-0 transition-opacity duration-140 group-hover:opacity-100 focus-within:opacity-100";
+  "flex gap-0.5 opacity-0 transition-opacity duration-140 group-hover:opacity-100 focus-within:opacity-100";
 
-/** Small, and dead-looking at the ends of a kind rather than hidden, so the
- *  column keeps its width and the rows stay aligned. */
+/** Dead-looking at the ends of a kind rather than hidden, so both arrows keep
+ *  their place. */
 const ARROW_BTN =
-  "p-0.5 rounded text-fg-faint hover:text-fg transition-colors duration-140 cursor-pointer disabled:opacity-25 disabled:hover:text-fg-faint";
-
-const ACTION_BTN =
-  "p-1.5 rounded-lg text-fg hover:bg-surface-3 transition-colors duration-140 cursor-pointer";
-
-const DELETE_BTN =
-  "p-1.5 rounded-lg text-red hover:bg-surface-3 transition-colors duration-140 cursor-pointer";
-
-/** Sized like `ACTION_BTN` so a locked slot keeps the column aligned. */
-function SystemLock({ testId, title }: { testId: string; title: string }) {
-  return (
-    <span
-      data-testid={testId}
-      title={title}
-      className="p-1.5 inline-flex items-center justify-center text-fg-faint"
-    >
-      <Lock className="size-4" />
-    </span>
-  );
-}
+  "flex size-7 items-center justify-center rounded-md text-fg-faint enabled:hover:bg-surface-3 enabled:hover:text-fg transition-colors duration-140 cursor-pointer disabled:opacity-25";
 
 export function CategoriesSurface() {
   const { t } = useTranslation();
   const { data, isPending, isError, refetch } = useBudgetCategories();
-  const update = useUpdateBudgetCategory();
   const reorder = useReorderBudgetCategories();
 
   const [showArchived, setShowArchived] = useState(false);
-  // Keyed by category id so archiving row A can't clear row B's busy state
-  // when A's write settles first — each row waits only on its own write.
-  const [pendingIds, setPendingIds] = useState<ReadonlySet<string>>(new Set());
-  const [actionError, setActionError] = useState(false);
-
+  const [moveError, setMoveError] = useState(false);
   const [editing, setEditing] = useState<BudgetCategory | "new" | null>(null);
   const [deleting, setDeleting] = useState<BudgetCategory | null>(null);
 
   const rows = sortCategories(data ?? []);
-  const archivedCount = rows.filter((c) => c.archived).length;
-  const visibleRows = rows.filter((c) => !c.archived || showArchived);
-
-  function toggleShowArchived() {
-    setActionError(false);
-    setShowArchived((v) => !v);
-  }
-
-  function openEditing(c: BudgetCategory | "new") {
-    setActionError(false);
-    setEditing(c);
-  }
-
-  function closeEditing() {
-    setActionError(false);
-    setEditing(null);
-  }
-
-  function openDeleting(c: BudgetCategory) {
-    setActionError(false);
-    setDeleting(c);
-  }
-
-  function closeDeleting() {
-    setActionError(false);
-    setDeleting(null);
-  }
-
-  const neighbour = (c: BudgetCategory, dir: -1 | 1) => categoryNeighbour(visibleRows, c, dir);
+  const active = rows.filter((c) => !c.archived);
+  const archived = rows.filter((c) => c.archived);
 
   function runMove(c: BudgetCategory, dir: -1 | 1) {
     if (reorder.isPending) return;
-    const order = categoryOrderAfterMove(rows, visibleRows, c, dir);
+    const order = categoryOrderAfterMove(rows, active, c, dir);
     if (!order) return;
-    setActionError(false);
-    reorder.mutate(order, { onError: () => setActionError(true) });
+    setMoveError(false);
+    reorder.mutate(order, { onError: () => setMoveError(true) });
   }
 
-  function runArchiveToggle(c: BudgetCategory) {
-    setActionError(false);
-    setPendingIds((prev) => new Set(prev).add(c.id));
-    // `mutateAsync` (not `mutate` + per-call options) because `useMutation`
-    // keeps a single shared `mutateOptions` slot: archiving row A then row B
-    // before A settles overwrites A's onSettled with B's, so A's write would
-    // clear *B*'s pending flag. The returned promise is per-call and immune
-    // to that, which is what lets each row wait only on its own write.
-    update.mutateAsync({ id: c.id, body: categoryBody(c, { archived: !c.archived }) }).then(
-      () => {},
-      () => setActionError(true),
-    ).finally(() =>
-      setPendingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(c.id);
-        return next;
-      }),
+  useErrorToast(moveError && t("settings.budget.categories.actionError"));
+
+  const row = (c: BudgetCategory) => {
+    const label = categoryLabel(t, c);
+    return (
+      <ListRow
+        key={c.id}
+        label={t("settings.budget.categories.edit", { name: label })}
+        onOpen={() => setEditing(c)}
+        dimmed={c.archived}
+        tile={
+          <ListTile color={safeBudgetColor(c.color)}>
+            <CategoryIcon icon={c.icon} className="size-4" />
+          </ListTile>
+        }
+        title={
+          <>
+            <span data-testid="category-name" className="truncate">{label}</span>
+            {c.systemKey !== null && (
+              <ListBadge testId="system-lock" icon={<Lock aria-hidden />} title={t("settings.budget.categories.systemLocked")}>
+                {t("settings.budget.categories.system")}
+              </ListBadge>
+            )}
+          </>
+        }
+        subtitle={
+          <span title={c.hint ?? undefined} className={c.hint ? "" : "opacity-60"}>
+            {c.hint ?? t("settings.budget.categories.noHint")}
+          </span>
+        }
+        extra={
+          // Archived rows have no place in the order: it only ranks the
+          // categories the pickers show.
+          c.archived ? undefined : (
+            <div className={ARROWS}>
+              {([-1, 1] as const).map((dir) => (
+                <button
+                  key={dir}
+                  type="button"
+                  disabled={!categoryNeighbour(active, c, dir) || reorder.isPending}
+                  onClick={() => runMove(c, dir)}
+                  aria-label={t(dir < 0 ? "settings.budget.categories.moveUp" : "settings.budget.categories.moveDown", { name: label })}
+                  className={ARROW_BTN}
+                >
+                  {dir < 0 ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                </button>
+              ))}
+            </div>
+          )
+        }
+      />
     );
-  }
-
-  useErrorToast(actionError && t("settings.budget.categories.actionError"));
+  };
 
   return (
     <div>
-      <Surface className="w-full">
-        <LoadingFrame loading={isPending} className="flex flex-col p-4 md:p-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-fg font-semibold text-sm">{t("settings.budget.categories.title")}</h2>
-            <Button
-              onClick={() => openEditing("new")}
-              padded={false}
-              className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto"
-            >
-              <Plus className="size-4" />
-              {t("settings.budget.categories.add")}
-            </Button>
-          </div>
+      <SettingsSurface
+        title={t("settings.budget.categories.title")}
+        action={
+          <Button
+            onClick={() => setEditing("new")}
+            disabled={isPending || isError}
+            padded={false}
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5"
+          >
+            <Plus className="size-4" />
+            {t("settings.budget.categories.add")}
+          </Button>
+        }
+      >
+        {isError ? (
+          <CardError onRetry={() => refetch()} className="h-64" />
+        ) : isPending ? (
+          <Skeleton>
+            <ListHeadingBone />
+            <List>
+              {boneWidths(5).map((w) => (
+                <ListRowBone key={w} width={w} />
+              ))}
+            </List>
+          </Skeleton>
+        ) : rows.length === 0 ? (
+          <p className="py-10 text-center text-sm text-fg-faint">{t("settings.budget.categories.empty")}</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {BUDGET_KINDS.map((kind) => {
+              const group = active.filter((c) => c.kind === kind);
+              return group.length === 0 ? null : (
+                <List key={kind} label={t(`settings.budget.categories.groups.${kind}`)}>
+                  {group.map(row)}
+                </List>
+              );
+            })}
 
-          {isError ? (
-            <CardError onRetry={() => refetch()} className="mt-4 h-64" />
-          ) : !isPending && rows.length === 0 ? (
-            <p className="text-sm text-fg-faint py-10 text-center">
-              {t("settings.budget.categories.empty")}
-            </p>
-          ) : (
-            <>
-              <div className="mt-4 overflow-x-auto" aria-busy={isPending || undefined}>
-                <table className="w-full text-sm border-separate border-spacing-y-0.5">
-                  <thead>
-                    <tr className={`text-left ${HEAD_TEXT}`}>
-                      <th className="pb-2 pl-1.5 pr-3" />
-                      <th className={`pb-2 ${GAP_NAME} whitespace-nowrap`}>
-                        {t("settings.budget.categories.colCategory")}
-                      </th>
-                      <th className={`pb-2 ${GAP_KIND} whitespace-nowrap`}>
-                        {t("settings.budget.categories.colKind")}
-                      </th>
-                      <th className="pb-2 pr-3 w-full">
-                        {t("settings.budget.categories.colHint")}
-                      </th>
-                      <th className="pb-2 pr-3 text-right whitespace-nowrap">
-                        {t("settings.budget.categories.colRows")}
-                      </th>
-                      <th className="pb-2 pr-3" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isPending && (
-                      <BoneRows rows={4}>
-                        {(w) => (
-                          <>
-                            <td className={`${CELL} pl-1.5 pr-3`}>
-                              {/* The reorder arrows, hidden until hover, set the row's height. */}
-                              <span className="block h-8 w-4.5" />
-                            </td>
-                            <td className={`${CELL} ${GAP_NAME}`}>
-                              <div className="flex items-center gap-2">
-                                <Bone className="size-7 shrink-0 rounded-lg" />
-                                <TextBone text="text-sm" style={{ width: w * 2.4 }} />
-                              </div>
-                            </td>
-                            <td className={`${CELL} ${GAP_KIND}`}>
-                              {/* The kind badge: an 11px line in py-0.5. */}
-                              <Bone className="h-5 w-14" />
-                            </td>
-                            <td className={`${CELL} pr-3 w-full max-w-0`}>
-                              <TextBone text="text-[12.5px]" style={{ width: `${w}%` }} />
-                            </td>
-                            <td className={`${CELL} pr-3`}>
-                              <TextBone text="text-sm" className="ml-auto w-5" />
-                            </td>
-                            <td className={`${CELL} pr-3`}>
-                              <div className="flex items-center justify-end gap-1">
-                                <Bone className="size-7 rounded-lg" />
-                                <Bone className="size-7 rounded-lg" />
-                                <Bone className="size-7 rounded-lg" />
-                              </div>
-                            </td>
-                          </>
-                        )}
-                      </BoneRows>
-                    )}
-                    {visibleRows.map((c) => {
-                      const isSystem = c.systemKey !== null;
-                      const label = categoryLabel(t, c);
-                      const color = safeBudgetColor(c.color);
-                      const busy = pendingIds.has(c.id);
-                      return (
-                        <tr
-                          key={c.id}
-                          className={`group ${c.archived ? "opacity-55" : ""}`}
-                        >
-                          <td className={`${CELL} rounded-l-xl pl-1.5 pr-3 align-middle`}>
-                            <div className={ARROWS}>
-                              <button
-                                type="button"
-                                disabled={!neighbour(c, -1) || reorder.isPending}
-                                onClick={() => runMove(c, -1)}
-                                aria-label={t("settings.budget.categories.moveUp", { name: label })}
-                                className={ARROW_BTN}
-                              >
-                                <ChevronUp className="size-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={!neighbour(c, 1) || reorder.isPending}
-                                onClick={() => runMove(c, 1)}
-                                aria-label={t("settings.budget.categories.moveDown", { name: label })}
-                                className={ARROW_BTN}
-                              >
-                                <ChevronDown className="size-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                          <td className={`${CELL} ${GAP_NAME} whitespace-nowrap`}>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className="flex size-7 shrink-0 items-center justify-center rounded-lg"
-                                style={{ backgroundColor: withAlpha(color, 0.22) }}
-                              >
-                                <CategoryIcon icon={c.icon} className="size-4" style={{ color }} />
-                              </span>
-                              <span data-testid="category-name" className="text-fg font-medium">
-                                {label}
-                              </span>
-                              {isSystem && (
-                                <span className={BADGE}>
-                                  {t("settings.budget.categories.system")}
-                                </span>
-                              )}
-                              {c.archived && (
-                                <span className={BADGE}>
-                                  {t("settings.budget.categories.archivedBadge")}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className={`${CELL} ${GAP_KIND}`}>
-                            <span
-                              className={`inline-block rounded-md px-1.75 py-0.5 text-[11px] font-medium ${KIND_BADGE[c.kind]}`}
-                            >
-                              {t(`budget.kinds.${c.kind}`)}
-                            </span>
-                          </td>
-                          <td className={`${CELL} pr-3 w-full max-w-0 text-fg-dim text-[12.5px]`}>
-                            {/* `max-w-0` with the column's `w-full` is what gives
-                                `truncate` a width to work against inside a table. */}
-                            <div className="truncate" title={c.hint ?? undefined}>
-                              {c.hint ?? t("settings.budget.categories.noHint")}
-                            </div>
-                          </td>
-                          <td className={`${CELL} pr-3 text-right text-fg-faint tabular-nums`}>
-                            {c.txCount}
-                          </td>
-                          <td className={`${CELL} pr-3 rounded-r-xl`}>
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => openEditing(c)}
-                                aria-label={t("settings.budget.categories.edit", { name: label })}
-                                className={ACTION_BTN}
-                              >
-                                <Pencil className="size-4" />
-                              </button>
-                              {isSystem ? (
-                                <>
-                                  {/* One lock per refused action, in the slot that
-                                      action would occupy: the system row can still
-                                      be renamed and restyled, only archived and
-                                      deleted are out. */}
-                                  <SystemLock
-                                    testId="system-lock-archive"
-                                    title={t("settings.budget.categories.archiveLocked")}
-                                  />
-                                  <SystemLock
-                                    testId="system-lock-delete"
-                                    title={t("settings.budget.categories.deleteLocked")}
-                                  />
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => runArchiveToggle(c)}
-                                    aria-label={t(
-                                      c.archived
-                                        ? "settings.budget.categories.restore"
-                                        : "settings.budget.categories.archive",
-                                      { name: label },
-                                    )}
-                                    className={ACTION_BTN}
-                                  >
-                                    {c.archived ? (
-                                      <ArchiveRestore className="size-4" />
-                                    ) : (
-                                      <Archive className="size-4" />
-                                    )}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() => openDeleting(c)}
-                                    aria-label={t("settings.budget.categories.delete", { name: label })}
-                                    className={DELETE_BTN}
-                                  >
-                                    <Trash2 className="size-4" />
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            {archived.length > 0 && (
+              <div className="flex flex-col">
+                <button
+                  type="button"
+                  aria-expanded={showArchived}
+                  onClick={() => setShowArchived((v) => !v)}
+                  className="-mx-2 flex h-8 w-fit cursor-pointer items-center gap-1 rounded-lg px-2 text-xs font-medium text-fg-dim transition-colors duration-140 hover:text-fg"
+                >
+                  {t(showArchived ? "settings.budget.categories.hideArchived" : "settings.budget.categories.showArchived", { count: archived.length })}
+                  {showArchived ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                </button>
+                {showArchived && <List>{archived.map(row)}</List>}
               </div>
-
-              {archivedCount > 0 && (
-                <div className="mt-3 flex justify-start pl-3">
-                  <button
-                    type="button"
-                    onClick={toggleShowArchived}
-                    className="text-xs font-medium text-fg-faint hover:text-fg transition-colors duration-140 cursor-pointer"
-                  >
-                    {t(
-                      showArchived
-                        ? "settings.budget.categories.hideArchived"
-                        : "settings.budget.categories.showArchived",
-                      { count: archivedCount },
-                    )}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </LoadingFrame>
-      </Surface>
+            )}
+          </div>
+        )}
+      </SettingsSurface>
 
       {editing && (
         <CategoryModal
           category={editing === "new" ? undefined : editing}
-          onClose={closeEditing}
+          onClose={() => setEditing(null)}
+          onDelete={(c) => {
+            setEditing(null);
+            setDeleting(c);
+          }}
         />
       )}
-      {deleting && <DeleteCategoryModal category={deleting} onClose={closeDeleting} />}
+      {deleting && <DeleteCategoryModal category={deleting} onClose={() => setDeleting(null)} />}
     </div>
   );
 }

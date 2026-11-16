@@ -80,7 +80,6 @@ function AiControls() {
       <div className="flex items-center justify-between gap-6">
         <div>
           <p className="text-sm font-medium text-fg">{t("settings.budget.ai.enable")}</p>
-          <p className="text-xs text-fg-faint">{t("settings.budget.ai.enableHint")}</p>
         </div>
         <Toggle
           checked={prefs.budgetAiEnabled}
