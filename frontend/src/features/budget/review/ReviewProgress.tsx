@@ -3,7 +3,7 @@ import { Trans } from "react-i18next";
 export function ReviewProgress({ resolved, total }: { resolved: number; total: number }) {
   const pct = total === 0 ? 0 : Math.round((resolved / total) * 100);
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3 max-md:justify-center">
       <span data-testid="review-progress" className="font-mono text-sm text-fg-dim">
         <Trans
           i18nKey="budget.review.progress"

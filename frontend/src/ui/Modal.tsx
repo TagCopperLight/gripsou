@@ -76,7 +76,7 @@ export function Modal({ label, onClose, busy = false, className, focusWithin = [
   }, [previouslyFocused]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center max-md:items-end">
       <div
         data-testid="dialog-backdrop"
         onClick={() => !busy && onClose()}

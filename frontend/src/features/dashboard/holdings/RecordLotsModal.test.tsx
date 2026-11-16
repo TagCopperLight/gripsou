@@ -150,10 +150,10 @@ describe("RecordLotsModal", () => {
     await renderModal(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
     await user.click(screen.getByRole("button", { name: /add entry/i }));
     const date = screen.getAllByTestId("lot-date")[1];
-    fireEvent.change(date, { target: { value: "2023-01-15" } });
-    expect(screen.getAllByTestId("lot-date").map((d) => (d as HTMLInputElement).value)).toEqual(["2024-05-02", "2023-01-15"]);
+    fireEvent.change(date, { target: { value: "15/01/2023" } });
+    expect(screen.getAllByTestId("lot-date").map((d) => (d as HTMLInputElement).value)).toEqual(["02/05/2024", "15/01/2023"]);
     fireEvent.blur(date);
-    expect(screen.getAllByTestId("lot-date").map((d) => (d as HTMLInputElement).value)).toEqual(["2023-01-15", "2024-05-02"]);
+    expect(screen.getAllByTestId("lot-date").map((d) => (d as HTMLInputElement).value)).toEqual(["15/01/2023", "02/05/2024"]);
   });
 
   it("shows no figure while nothing is recorded, not the server's zeros", async () => {
@@ -328,7 +328,7 @@ describe("RecordLotsModal", () => {
     const rows = screen.getAllByTestId("lot-row");
     const dateInput = screen.getAllByTestId("lot-date")[rows.length - 1];
     await user.clear(dateInput);
-    await user.type(dateInput, "2024-06-02");
+    await user.type(dateInput, "02/06/2024");
     await user.type(screen.getAllByTestId("lot-quantity")[rows.length - 1], "5");
     await user.type(screen.getAllByTestId("lot-unitPrice")[rows.length - 1], "18");
 
@@ -368,7 +368,7 @@ describe("RecordLotsModal", () => {
     await user.click(screen.getByRole("button", { name: /ajouter une opération/i }));
     const frDateInput = screen.getAllByTestId("lot-date")[0];
     await user.clear(frDateInput);
-    await user.type(frDateInput, "2024-06-02");
+    await user.type(frDateInput, "02/06/2024");
     await user.type(screen.getAllByTestId("lot-quantity")[0], "20");
     await user.type(screen.getAllByTestId("lot-unitPrice")[0], "15,617");
     await user.click(screen.getByRole("button", { name: /enregistrer/i }));
@@ -491,7 +491,7 @@ describe("RecordLotsModal", () => {
     await user.click(screen.getByRole("button", { name: /add entry/i }));
     const failDateInput = screen.getAllByTestId("lot-date")[0];
     await user.clear(failDateInput);
-    await user.type(failDateInput, "2024-06-02");
+    await user.type(failDateInput, "02/06/2024");
     await user.type(screen.getAllByTestId("lot-quantity")[0], "5");
     await user.type(screen.getAllByTestId("lot-unitPrice")[0], "10");
     await user.click(screen.getByRole("button", { name: /save/i }));
@@ -524,7 +524,7 @@ describe("RecordLotsModal", () => {
       await renderModal(<RecordLotsModal holding={holding} onClose={vi.fn()} />);
       await user.click(screen.getByRole("button", { name: "Add" }));
       expect(screen.queryByRole("region", { name: /found in your transactions/ })).not.toBeInTheDocument();
-      expect(screen.getAllByTestId("lot-date").map((d) => (d as HTMLInputElement).value)).toEqual(["2024-01-03", "2024-05-02"]);
+      expect(screen.getAllByTestId("lot-date").map((d) => (d as HTMLInputElement).value)).toEqual(["03/01/2024", "02/05/2024"]);
       await user.click(screen.getByRole("button", { name: "Save 1 entry" }));
       expect(saves()).toContainEqual({
         adds: [{ type: "buy", date: "2024-01-03", quantity: "23", unitPrice: "6.35521739", fee: "0" }],

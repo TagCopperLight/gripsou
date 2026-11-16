@@ -6,6 +6,11 @@ export const CHART_BASE = { backgroundColor: "transparent", animation: false } a
 
 export const AXIS_GRID = { top: 16, right: 0, bottom: 24, left: 0, containLabel: true };
 
+/** On a phone, room on the right for half a date label: ticks near the edge would otherwise be cut. */
+export function axisGrid(phone: boolean) {
+  return phone ? { ...AXIS_GRID, right: 28 } : AXIS_GRID;
+}
+
 const AXIS_LABEL = { color: FG_FAINT, fontFamily: FONT_MONO, fontSize: 11 };
 const BARE_AXIS = { axisLine: { show: false }, axisTick: { show: false } };
 

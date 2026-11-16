@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronRight, KeyRound, Monitor, Plus, Settings, Smartphone } from "lucide-react";
+import { ChevronRight, KeyRound, Monitor, Pencil, Plus, Settings, Smartphone } from "lucide-react";
 import { boneWidths } from "../../../ui/boneWidths";
 
 import { Surface } from "../../../ui/Surface";
@@ -12,6 +12,7 @@ import { Toggle } from "../../../ui/Toggle";
 import { CardError } from "../../../ui/CardError";
 import { Tag } from "../../../ui/Tag";
 import { LoadingFrame } from "../../../ui/LoadingFrame";
+import { usePhone } from "../../../ui/usePhone";
 import { Bone, Skeleton, TextBone } from "../../../ui/Skeleton";
 import { DeleteAccountModal } from "./DeleteAccountModal";
 import { SessionDetailModal } from "../security/SessionDetailModal";
@@ -50,6 +51,19 @@ export function SettingsAccount() {
   const revokeSession = useRevokeSession();
   const revokeOthers = useRevokeOtherSessions();
   const hasOthers = sessions.some((s) => !s.current);
+  // A phone has no room beside the card title: the button goes under the list.
+  const phone = usePhone();
+  const revokeOthersButton = (className: string) => (
+    <Button
+      variant="ghost"
+      onClick={() => revokeOthers.mutate()}
+      busy={revokeOthers.isPending}
+      busyLabel={t("common.busy.loggingOut")}
+      className={`text-red enabled:hover:bg-red/12 enabled:hover:text-red ${className}`}
+    >
+      {t("settings.account.logOutOtherSessions")}
+    </Button>
+  );
 
   const passkeyAction = (
     <div className="flex items-center gap-3">
@@ -85,14 +99,20 @@ export function SettingsAccount() {
 
   return (
     <div className="flex flex-col gap-4 pb-8 md:mt-13">
-      <Surface className="flex items-center gap-4 p-6">
-        <Avatar name={user?.name ?? "?"} src={prefs.avatar} className="size-14" />
+      <Surface className="flex items-center gap-4 p-6 max-md:gap-3 max-md:p-4">
+        <Avatar name={user?.name ?? "?"} src={prefs.avatar} className="size-14 max-md:size-12" />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate text-lg font-semibold text-fg">{user?.name}</span>
           <span className="truncate text-sm text-fg-faint">{user?.email}</span>
         </div>
-        <Button variant="ghostStrong" onClick={() => setEditing(true)}>
-          {t("settings.account.editProfile")}
+        <Button
+          variant="ghostStrong"
+          onClick={() => setEditing(true)}
+          aria-label={t("settings.account.editProfile")}
+          className="max-md:-mr-2 max-md:rounded-lg max-md:bg-surface-2 max-md:p-2.5"
+        >
+          <Pencil className="size-4.5 md:hidden" strokeWidth={2} />
+          <span className="max-md:hidden">{t("settings.account.editProfile")}</span>
         </Button>
       </Surface>
 
@@ -154,17 +174,7 @@ export function SettingsAccount() {
 
       <SettingsSurface
         title={t("settings.account.sessions")}
-        action={hasOthers && (
-          <Button
-            variant="ghost"
-            onClick={() => revokeOthers.mutate()}
-            busy={revokeOthers.isPending}
-            busyLabel={t("common.busy.loggingOut")}
-            className="-my-2 text-red enabled:hover:bg-red/12 enabled:hover:text-red"
-          >
-            {t("settings.account.logOutOtherSessions")}
-          </Button>
-        )}
+        action={hasOthers && !phone && revokeOthersButton("-my-2")}
       >
         {/* There is always at least this session. */}
         {sessionsQuery.isPending && <SessionsSkeleton />}
@@ -196,6 +206,7 @@ export function SettingsAccount() {
               <ChevronRight className="size-4 shrink-0 text-fg-faint" />
             </button>
           ))}
+          {hasOthers && phone && revokeOthersButton("bg-red-soft")}
         </div>
 
         {sessionsQuery.data && (

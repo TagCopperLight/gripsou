@@ -2,6 +2,13 @@ import i18n from "../i18n";
 import type { UserPrefs } from "../api/wire";
 import { getPrefs } from "./prefs";
 
+const PATTERN_TOKEN = /YYYY|YY|MM|DD/g;
+
+/** Replaces each token of a date pattern. */
+export function fillPattern(pattern: string, token: (name: string) => string): string {
+  return pattern.replace(PATTERN_TOKEN, token);
+}
+
 export type DateFormatOptions = {
   /** Tokens YYYY, YY, MM, DD. */
   pattern?: string;
@@ -22,7 +29,36 @@ export function formatDate(
   const tokens: Record<string, string> = {
     YYYY: year, YY: year.slice(-2), MM: month, DD: date,
   };
-  return pattern.replace(/YYYY|YY|MM|DD/g, (token) => tokens[token]);
+  return fillPattern(pattern, (token) => tokens[token]);
+}
+
+const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Typed text in `pattern` to an ISO day, or null when it doesn't match or isn't a real date. */
+export function parseDate(text: string, pattern: string): string | null {
+  const order: string[] = [];
+  const source = pattern
+    .split(new RegExp(`(${PATTERN_TOKEN.source})`))
+    .map((piece, i) => {
+      if (i % 2 === 0) return escapeRegex(piece);
+      order.push(piece);
+      return piece === "YYYY" ? "(\\d{4})" : "(\\d{2})";
+    })
+    .join("");
+  const match = new RegExp(`^${source}$`).exec(text.trim());
+  if (!match) return null;
+  const part = (token: string) => {
+    const at = order.indexOf(token);
+    return at < 0 ? undefined : match[at + 1];
+  };
+  const shortYear = part("YY");
+  const year = part("YYYY") ?? (shortYear === undefined ? undefined : `20${shortYear}`);
+  const month = part("MM");
+  const day = part("DD");
+  if (year === undefined || month === undefined || day === undefined) return null;
+  const iso = `${year}-${month}-${day}`;
+  const date = new Date(`${iso}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== iso ? null : iso;
 }
 
 /** null → "Never synced". Past two weeks, an absolute date. */

@@ -21,11 +21,12 @@ const OUTCOME_KEY = {
 export function ResolvedLine({ r, busy, onUndo, onApplyToOthers }: Props) {
   const { t } = useTranslation();
   return (
-    <div data-testid={`resolved-line-${r.tx.id}`} className="flex items-center gap-3 rounded-xl px-4 py-2 text-sm">
+    <div data-testid={`resolved-line-${r.tx.id}`} className="flex items-center gap-3 rounded-xl px-4 py-2 text-sm max-md:flex-wrap max-md:gap-y-0 max-md:px-3">
       <Check className="size-4 text-green" aria-hidden />
-      <span className="truncate uppercase text-fg-dim">{r.tx.description}</span>
-      <span className="text-fg-faint">{t(OUTCOME_KEY[r.outcome], { category: r.categoryName })}</span>
-      <span className="flex-1" />
+      <span className="truncate uppercase text-fg-dim max-md:min-w-0 max-md:flex-1">{r.tx.description}</span>
+      {/* On a phone the outcome takes its own line, under the description. */}
+      <span className="text-fg-faint max-md:order-last max-md:basis-full max-md:pl-7">{t(OUTCOME_KEY[r.outcome], { category: r.categoryName })}</span>
+      <span className="flex-1 max-md:hidden" />
       {r.appliedTo !== undefined ? (
         <span className="text-fg-faint">{t("budget.review.appliedToOthers", { count: r.appliedTo })}</span>
       ) : (

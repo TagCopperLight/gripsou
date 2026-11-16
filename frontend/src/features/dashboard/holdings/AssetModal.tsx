@@ -125,6 +125,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
         afterName={privacy.enabled && <PrivacyEye masked={masked} toggle={privacy.toggle} />}
       >
         <SegmentedControl
+          className="max-md:order-last max-md:col-span-2 max-md:flex max-md:[&>button]:flex-1"
           value={mode}
           onChange={(v) => setMode(v as Mode)}
           options={[

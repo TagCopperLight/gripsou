@@ -59,6 +59,7 @@ const BASE = {
       key={row.id}
       tx={row}
       showChecked={false}
+      phone={false}
       selected={false}
       anySelected={false}
       onToggleSelect={noop}

@@ -5,7 +5,8 @@ import { formatDay } from "../lib/date";
 import { lineColor, plotSeries, type ChartSeries, type ChartUnit } from "../lib/valueChart";
 import { withAlpha } from "../lib/color";
 import { SURFACE_2 } from "../lib/theme";
-import { AXIS_GRID, CHART_BASE, chartTooltip, timeAxis, tooltipCard, tooltipRow, valueAxis } from "../lib/chartTheme";
+import { usePhone } from "./usePhone";
+import { axisGrid, CHART_BASE, chartTooltip, timeAxis, tooltipCard, tooltipRow, valueAxis } from "../lib/chartTheme";
 
 export type { ChartSeries, ChartUnit };
 
@@ -39,6 +40,7 @@ export function ValueChart({
   percentLabel,
 }: ValueChartProps) {
   const percent = unit === "percent";
+  const phone = usePhone();
   const fmt = (v: number, opts?: { fractionDigits?: number; signed?: boolean }) =>
     percent ? formatPercent(v, opts) : formatMoney(v, { ...opts, currency });
 
@@ -46,7 +48,7 @@ export function ValueChart({
 
   const option: EChartsOption = {
     ...CHART_BASE,
-    grid: AXIS_GRID,
+    grid: axisGrid(phone),
     tooltip: chartTooltip("axis", (params) => {
       const items = params as unknown as TooltipParam[];
       // The series itemStyle colour is the hollow centre, i.e. the surface: use the line colour.
@@ -64,7 +66,7 @@ export function ValueChart({
       return tooltipCard(formatDay(items[0].axisValue), rows);
     }),
     xAxis: timeAxis((value) => formatDay(value)),
-    yAxis: valueAxis((v) => fmt(v, { fractionDigits: 0 }), { scale: true }),
+    yAxis: valueAxis((v) => (percent ? fmt(v, { fractionDigits: 0 }) : formatMoney(v, { currency, fractionDigits: 0, compact: phone })), { scale: true }),
     series: plotted.map((s, i) => {
       const color = lineColor(s);
       return {

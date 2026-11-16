@@ -30,7 +30,7 @@ export function SankeySurface({ sankey, onSeeTransactions, masked = false, stale
   const { t } = useTranslation();
   return (
     <Surface className="w-full">
-      <LoadingFrame loading={sankey === undefined} className="flex flex-col p-5">
+      <LoadingFrame loading={sankey === undefined} className="flex flex-col p-5 max-md:p-4">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-fg font-semibold text-sm">{t("budget.overview.sankey.title")}</h2>
           <button
@@ -43,9 +43,10 @@ export function SankeySurface({ sankey, onSeeTransactions, masked = false, stale
             <ChevronRight className="size-4" />
           </button>
         </div>
-        {/* Wide content scrolls sideways, as in holdings and transactions, never a distorted phone variant. */}
+        {/* Below 560px the chart scrolls sideways, except on a phone: there sources and destinations both label
+            inwards, so the diagram fits the screen and is read at once rather than half hidden. */}
         <div className={`mt-2 overflow-x-auto ${staleClass(stale)}`}>
-          <div className="min-w-[560px]">
+          <div className="md:min-w-[560px]">
             {sankey === undefined ? <ChartBone style={{ height: HEIGHT }} /> : <SankeyChart sankey={sankey} masked={masked} />}
           </div>
         </div>

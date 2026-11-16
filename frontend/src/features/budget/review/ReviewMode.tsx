@@ -144,7 +144,7 @@ export function ReviewMode() {
 
   if (list.isError && lines.length === 0) {
     return (
-      <Surface className="p-6">
+      <Surface className="p-6 max-md:p-4">
         <h2 className="text-lg font-semibold text-fg">{t("budget.review.title")}</h2>
         <CardError onRetry={() => void list.refetch()} className="mt-4 h-40" />
       </Surface>
@@ -176,7 +176,7 @@ export function ReviewMode() {
   return (
     <div className="flex flex-col gap-4">
       <ReviewProgress resolved={resolvedCount} total={total} />
-      <Surface className="p-6">
+      <Surface className="p-6 max-md:p-4">
         <div className="mb-4 flex items-baseline justify-between gap-3">
           <h2 className="text-lg font-semibold text-fg">{t("budget.review.title")}</h2>
           {resolvedCount > 0 && (

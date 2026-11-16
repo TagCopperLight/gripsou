@@ -25,13 +25,28 @@ export const ROW_CELLS = [
 
 export const ROW_HOVER = "hover:[&>td]:bg-hover";
 
-/** At least `min`, growing to `max` (a length, `Nfr`, `max-content`, `auto`). */
-export type Track = { min: string; max?: string };
+type Size = { min: string; max?: string };
 
-export function gridColumns(tracks: Track[]): { template: string; minWidth: string } {
+/** At least `min`, growing to `max` (a length, `Nfr`, `max-content`, `auto`). `phone` sizes it
+ *  below the `md` breakpoint instead; `null` drops it there, and its cells carry `PHONE_HIDDEN`. */
+export type Track = Size & { phone?: Size | null };
+
+/** Important: the row's `[&>td]:flex` is more specific than a cell's own class. */
+export const PHONE_HIDDEN = "max-md:hidden!";
+
+type Columns = { template: string; minWidth: string };
+
+function columns(sizes: Size[]): Columns {
   return {
-    template: tracks.map((t) => (t.max ? `minmax(${t.min}, ${t.max})` : t.min)).join(" "),
-    minWidth: `calc(${tracks.map((t) => t.min).join(" + ")})`,
+    template: sizes.map((t) => (t.max ? `minmax(${t.min}, ${t.max})` : t.min)).join(" "),
+    minWidth: `calc(${sizes.map((t) => t.min).join(" + ")})`,
+  };
+}
+
+export function gridColumns(tracks: Track[]): { desktop: Columns; phone: Columns } {
+  return {
+    desktop: columns(tracks),
+    phone: columns(tracks.flatMap((t) => (t.phone === undefined ? [t] : t.phone === null ? [] : [t.phone]))),
   };
 }
 

@@ -7,6 +7,15 @@
     "investments": "Investissements"
   },
   "common": {
+    "dateInput": {
+      "pick": "Choisir une date",
+      "tokens": {
+        "YYYY": "AAAA",
+        "YY": "AA",
+        "MM": "MM",
+        "DD": "JJ"
+      }
+    },
     "colorPicker": {
       "shade": "Saturation et luminosité",
       "hue": "Teinte",
@@ -415,14 +424,13 @@
       "title": "Général",
       "localization": "Langue et région",
       "language": "Langue",
-      "interfaceLanguage": "Langue de l'interface",
       "timeZone": "Fuseau horaire",
-      "timeZoneHint": "Sert à déterminer la date du jour, utilisée par les synchronisations, les rapports et les périodes.",
+      "timeZoneHint": "Fixe la date du jour",
       "dateFormat": "Format de date",
       "today": "Aujourd'hui : {{date}}",
       "numbersCurrency": "Nombres et devise",
       "currency": "Devise",
-      "baseReportingCurrency": "Tous les montants sont affichés dans cette devise",
+      "baseReportingCurrency": "Pour tous les montants",
       "numberFormat": "Format des nombres",
       "thousandsSeparator": "Milliers",
       "decimalSeparator": "Décimales",
@@ -432,7 +440,7 @@
       "preview": "Aperçu",
       "privacy": "Confidentialité",
       "privateMode": "Mode privé",
-      "privateModeHint": "Cache les montants sous des astérisques"
+      "privateModeHint": "Masque tous les montants"
     },
     "account": {
       "title": "Compte",
@@ -665,13 +673,13 @@
       "listPrefs": {
         "title": "Affichage de la liste",
         "showChecked": "Colonne de pointage",
-        "showCheckedHint": "Ajoute une case à cocher à chaque transaction pour vous aider à pointer vos comptes, sans modifier les catégories."
+        "showCheckedHint": "Pour pointer vos comptes"
       },
       "ai": {
         "title": "Catégorisation par IA",
         "enable": "Catégoriser automatiquement",
         "threshold": "Seuil de vérification",
-        "thresholdHint": "Les suggestions dont le niveau de confiance est inférieur à ce seuil vous sont soumises pour vérification.",
+        "thresholdHint": "Sous ce seuil de confiance, une suggestion vous est soumise.",
         "notConfigured": "Aucun fournisseur d'IA configuré",
         "setUp": "Configurer"
       }

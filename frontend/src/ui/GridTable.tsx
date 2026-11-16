@@ -1,11 +1,11 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { ChevronDown, ChevronUp } from "lucide-react";
 
 import { HEAD_ROW, gridColumns, type Track } from "./gridTable";
 import { staleRowsClass } from "./stale";
 
 type GridTableProps = {
-  /** Below the sum of their minimums the table scrolls sideways. */
+  /** Below the sum of their minimums the table scrolls sideways. On a phone, each track's `phone` size applies. */
   tracks: Track[];
   head: ReactNode;
   children: ReactNode;
@@ -16,10 +16,21 @@ type GridTableProps = {
 
 /** `display: contents` drops the groups' implicit ARIA roles, so every element here names its own. */
 export function GridTable({ tracks, head, children, busy = false, stale = false }: GridTableProps) {
-  const { template, minWidth } = gridColumns(tracks);
+  const { desktop, phone } = gridColumns(tracks);
+  const style = {
+    "--cols": desktop.template,
+    "--min": desktop.minWidth,
+    "--cols-phone": phone.template,
+    "--min-phone": phone.minWidth,
+  } as CSSProperties;
   return (
     <div className="overflow-x-auto">
-      <table role="table" aria-busy={busy || undefined} className={`grid w-full text-sm ${staleRowsClass(stale)}`} style={{ gridTemplateColumns: template, minWidth }}>
+      <table
+        role="table"
+        aria-busy={busy || undefined}
+        className={`grid w-full text-sm grid-cols-(--cols-phone) min-w-(--min-phone) md:grid-cols-(--cols) md:min-w-(--min) ${staleRowsClass(stale)}`}
+        style={style}
+      >
         <thead role="rowgroup" className="contents">
           <tr role="row" className={HEAD_ROW}>
             {head}

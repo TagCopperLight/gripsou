@@ -64,22 +64,22 @@ describe("ConnectionRow", () => {
   });
 
   it("doesn't open on a computer when there is nothing to show", () => {
-    vi.stubGlobal("matchMedia", () => ({ matches: true }));
     const { rerender } = renderWithApp(<ConnectionRow conn={{ ...conn, accounts: [] }} />);
     expand();
     expect(screen.getAllByRole("button", { name: /sync now/i })).toHaveLength(1);
     rerender(<ConnectionRow conn={{ ...conn, status: "pending" }} />);
     expand();
     expect(screen.queryByText("LIVRET A")).toBeNull();
-    vi.unstubAllGlobals();
   });
 
   it("still opens a panel for a connection with no accounts on a phone", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
     renderWithApp(<ConnectionRow conn={{ ...conn, accounts: [] }} onDelete={() => {}} />);
     expand();
     expect(
       screen.getAllByRole("button", { name: /sync now/i }).length,
     ).toBeGreaterThan(1);
+    vi.unstubAllGlobals();
   });
 });
 

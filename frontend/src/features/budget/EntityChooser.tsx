@@ -111,7 +111,7 @@ export function EntityChooser(props: EntityChooserProps) {
           setNavigated(true);
           setActive(sequenceIndex);
         }}
-        className={`flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left cursor-pointer ${
+        className={`flex w-full items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left cursor-pointer max-md:py-2 ${
           navigated && sequenceIndex === active ? "bg-hover" : ""
         }`}
       >
@@ -155,7 +155,7 @@ export function EntityChooser(props: EntityChooserProps) {
           tabIndex={-1}
           onKeyDown={onKeyDown}
           onMouseLeave={() => setNavigated(false)}
-          className="flex max-h-80 flex-col gap-0.5 overflow-y-auto p-2"
+          className="flex max-h-80 flex-col gap-0.5 overflow-y-auto p-2 max-md:max-h-[60dvh] max-md:pb-4"
         >
           {hasNone && (
             <button
@@ -170,7 +170,7 @@ export function EntityChooser(props: EntityChooserProps) {
                 setNavigated(true);
                 setActive(0);
               }}
-              className={`flex w-full items-center rounded-lg px-2 py-1.5 text-left text-sm text-fg-dim cursor-pointer ${
+              className={`flex w-full items-center rounded-lg px-2 py-1.5 text-left text-sm text-fg-dim cursor-pointer max-md:py-2 ${
                 navigated && active === 0 ? "bg-hover" : "hover:bg-hover"
               }`}
             >

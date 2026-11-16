@@ -17,7 +17,8 @@ export function HoldingModalHeader({
 }) {
   const { t } = useTranslation();
   return (
-    <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 p-4 md:p-6">
+    // On a phone the actions join a grid: the close button beside the name, a wide control on its own row (`order-last`).
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-4 p-4 md:p-6 max-md:grid max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-3">
       <div className="flex min-w-0 items-center gap-4">
         <HoldingBadge
           logo={holding.logo}
@@ -42,7 +43,7 @@ export function HoldingModalHeader({
           </div>
         </div>
       </div>
-      <div className="ml-auto flex items-center gap-3">{children}</div>
+      <div className="ml-auto flex items-center gap-3 max-md:contents">{children}</div>
     </div>
   );
 }

@@ -22,6 +22,7 @@ import {
   useApplyToDescription, useBudgetCategories, useBulkTransactions, usePatchTransaction,
 } from "../../../api/budget";
 import { useTransactionCounts, useTransactions } from "../../../api/transactions";
+import { usePhone } from "../../../ui/usePhone";
 import { useAuth } from "../../../auth/context";
 import { useDebouncedValue } from "../../../lib/useDebouncedValue";
 import { EMPTY_FILTERS, isFiltered, toQuery } from "../../../lib/budgetFilters";
@@ -34,6 +35,7 @@ export function TransactionsMode() {
   const navigate = useNavigate();
   const { prefs } = useAuth();
   const privacy = usePrivacy();
+  const phone = usePhone();
   const { filters, setFilters, selection, isSelected, toggleRow, selectAllShown, anySelected, clearSelection } =
     useBudget();
 
@@ -186,6 +188,7 @@ export function TransactionsMode() {
                 key={row.id}
                 tx={row}
                 showChecked={prefs.showChecked}
+                phone={phone}
                 masked={privacy.masked}
                 selected={row.source !== "lot" && isSelected(row.id)}
                 anySelected={anySelected}

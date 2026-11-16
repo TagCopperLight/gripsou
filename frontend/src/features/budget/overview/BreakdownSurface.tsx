@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
 
+import { usePhone } from "../../../ui/usePhone";
 import { Surface } from "../../../ui/Surface";
 import { GridTable, SortHeader } from "../../../ui/GridTable";
-import { HEAD_CELL, ROW_CELLS, ROW_HOVER, type Track } from "../../../ui/gridTable";
+import { HEAD_CELL, PHONE_HIDDEN, ROW_CELLS, ROW_HOVER, type Track } from "../../../ui/gridTable";
 import { MaskedMoney } from "../../../ui/MaskedMoney";
 import { Percent } from "../../../ui/Percent";
 import { CategoryChip } from "../CategoryChip";
@@ -33,12 +34,13 @@ type BreakdownSurfaceProps =
   | { rows?: undefined; expensesTotal?: undefined; onOpen?: undefined; masked?: undefined; stale?: undefined };
 
 // CATEGORY and SHARE grow, the figures have floors, so sorting never moves a column. SHARE and the 12-month column don't sort.
+// A phone keeps the category and its amount, with the share under the amount.
 const COLUMNS: { key: ColKey; labelKey: string; right: boolean; track: Track; pad: string; sort?: BreakdownSortKey }[] = [
-  { key: "category", labelKey: "category", right: false, track: { min: "180px", max: "2fr" }, pad: "pl-3 pr-4", sort: "category" },
-  { key: "amount", labelKey: "amount", right: true, track: { min: "7rem", max: "max-content" }, pad: "pr-4", sort: "amount" },
-  { key: "share", labelKey: "share", right: false, track: { min: "140px", max: "3fr" }, pad: "pr-4" },
-  { key: "txnCount", labelKey: "txnCount", right: true, track: { min: "4rem", max: "max-content" }, pad: "pr-10", sort: "txnCount" },
-  { key: "avg12", labelKey: "vsAvg12", right: true, track: { min: "5rem", max: "max-content" }, pad: "pr-2" },
+  { key: "category", labelKey: "category", right: false, track: { min: "180px", max: "2fr", phone: { min: "0px", max: "1fr" } }, pad: "pl-3 pr-4", sort: "category" },
+  { key: "amount", labelKey: "amount", right: true, track: { min: "7rem", max: "max-content", phone: { min: "max-content" } }, pad: "pr-4 max-md:pr-2", sort: "amount" },
+  { key: "share", labelKey: "share", right: false, track: { min: "140px", max: "3fr", phone: null }, pad: `pr-4 ${PHONE_HIDDEN}` },
+  { key: "txnCount", labelKey: "txnCount", right: true, track: { min: "4rem", max: "max-content", phone: null }, pad: `pr-10 ${PHONE_HIDDEN}`, sort: "txnCount" },
+  { key: "avg12", labelKey: "vsAvg12", right: true, track: { min: "5rem", max: "max-content", phone: null }, pad: `pr-2 ${PHONE_HIDDEN}` },
 ];
 const TRACKS = [...COLUMNS.map((c) => c.track), { min: "2.25rem" }];
 const PAD = Object.fromEntries(COLUMNS.map((c) => [c.key, c.pad])) as Record<ColKey, string>;
@@ -52,7 +54,7 @@ export function BreakdownSurface(props: BreakdownSurfaceProps) {
 
   return (
     <Surface className="w-full">
-      <LoadingFrame loading={loaded === null} className="flex flex-col p-5">
+      <LoadingFrame loading={loaded === null} className="flex flex-col p-5 max-md:p-4">
         <h2 className="text-fg font-semibold text-sm">{t("budget.overview.breakdown.title")}</h2>
         <div className="mt-3">
           <GridTable
@@ -128,6 +130,7 @@ export function BreakdownSurface(props: BreakdownSurfaceProps) {
 
 function LoadedRows({ rows, expensesTotal, onOpen, masked = false, sort }: LoadedProps & { sort: BreakdownSort }) {
   const { t } = useTranslation();
+  const phone = usePhone();
   const total = Number(expensesTotal);
   return sortBreakdown(t, rows, sort).map((row) => {
     const linkable = row.slice.kind !== "other";
@@ -148,8 +151,9 @@ function LoadedRows({ rows, expensesTotal, onOpen, masked = false, sort }: Loade
             <CategoryChip category={sliceChip(t, row.slice)} />
           </div>
         </td>
-        <td role="cell" className={`justify-end whitespace-nowrap ${PAD.amount}`}>
+        <td role="cell" className={`justify-end whitespace-nowrap max-md:flex-col max-md:items-end max-md:justify-center ${PAD.amount}`}>
           <MaskedMoney masked={masked} value={row.amount} className="text-sm text-fg" />
+          {phone && <Percent value={share} fractionDigits={1} className="text-xs text-fg-faint" />}
         </td>
         <td role="cell" className={PAD.share}>
           <span className="flex w-full items-center gap-4">

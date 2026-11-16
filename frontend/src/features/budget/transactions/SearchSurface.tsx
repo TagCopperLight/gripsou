@@ -9,7 +9,7 @@ import { Select } from "../../../ui/Select";
 import { useAccounts } from "../../../api/accounts";
 import { TIME_FRAMES, isFiltered, withTimeFrame } from "../../../lib/budgetFilters";
 import type { TransactionCounts } from "../../../api/wire";
-import { TextInput } from "../../../ui/TextInput";
+import { DateInput } from "../../../ui/DateInput";
 import { staleClass } from "../../../ui/stale";
 
 /** The Transactions search surface: three parts, each rendered only when it has something to show.
@@ -27,8 +27,9 @@ export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
 
   return (
     <div className="relative rounded-xl bg-surface-2 p-3">
+      {/* A phone puts the filters button beside the search, and the two selects on the line under them, half each. */}
       <div className="flex flex-wrap items-center gap-2">
-        <label className="relative min-w-48 flex-1">
+        <label className="relative min-w-48 flex-1 max-md:min-w-0 max-md:basis-3/5">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-fg-faint" />
           <input
             type="search"
@@ -52,10 +53,10 @@ export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
             { value: "", label: t("budget.transactions.allAccounts") },
             ...accounts.map((a) => ({ value: a.id, label: a.name })),
           ]}
-          className="w-48"
+          className="w-48 max-md:order-1 max-md:w-auto max-md:min-w-0 max-md:flex-1 max-md:basis-2/5"
         />
         {/* `Select` forwards no data-testid, so this wrapper is the test hook. */}
-        <div data-testid="time-frame" className="w-44">
+        <div data-testid="time-frame" className="w-44 max-md:order-1 max-md:w-auto max-md:min-w-0 max-md:flex-1 max-md:basis-2/5">
           <Select
             value={filters.timeFrame}
             tone="sunken"
@@ -67,7 +68,7 @@ export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
               value: f,
               label: t(`budget.transactions.timeFrames.${f}`),
             }))}
-            className="w-44"
+            className="w-44 max-md:w-full"
           />
         </div>
         <button
@@ -79,27 +80,26 @@ export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
           }`}
         >
           <Funnel className="size-4" />
-          {t("budget.transactions.filters")}
+          {/* An icon on a phone, so the search keeps the room to show its placeholder. */}
+          <span className="max-md:sr-only">{t("budget.transactions.filters")}</span>
           {panelOpen ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
         </button>
       </div>
 
       {filters.timeFrame === "custom" && (
         <div className="flex flex-wrap items-center gap-2 pt-2">
-          <TextInput
-            type="date"
+          <DateInput
             tone="sunken"
             aria-label={t("budget.transactions.from")}
             value={filters.from}
-            onChange={(e) => patchFilters({ from: e.target.value, period: undefined })}
+            onChange={(from) => patchFilters({ from, period: undefined })}
             className="max-w-40"
           />
-          <TextInput
-            type="date"
+          <DateInput
             tone="sunken"
             aria-label={t("budget.transactions.to")}
             value={filters.to}
-            onChange={(e) => patchFilters({ to: e.target.value, period: undefined })}
+            onChange={(to) => patchFilters({ to, period: undefined })}
             className="max-w-40"
           />
         </div>

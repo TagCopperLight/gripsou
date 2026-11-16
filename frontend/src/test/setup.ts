@@ -15,6 +15,10 @@ if (!Element.prototype.scrollTo) {
 }
 window.scrollTo = function scrollTo() {};
 
+// jsdom has no `matchMedia`; tests run the desktop layout.
+window.matchMedia = (query: string) =>
+  ({ matches: false, media: query, addEventListener() {}, removeEventListener() {} }) as unknown as MediaQueryList;
+
 // The toast corner is outside the failing component.
 beforeEach(() => {
   render(createElement(ErrorToasts));

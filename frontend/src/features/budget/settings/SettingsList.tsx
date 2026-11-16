@@ -35,9 +35,10 @@ export function ListRow({ label, tile, title, subtitle, dimmed = false, extra, o
       >
         <span className={`flex min-w-0 flex-1 items-center gap-3 ${dimmed ? "opacity-70 [&>:first-child]:grayscale" : ""}`}>
           {tile}
-          <span className="flex w-48 shrink-0 items-center gap-2 text-sm font-medium text-fg">{title}</span>
+          {/* A phone has no room for the subtitle beside the title: cut to a few letters it says nothing, so it goes. */}
+          <span className="flex w-48 shrink-0 items-center gap-2 text-sm font-medium text-fg max-md:w-auto max-md:min-w-0 max-md:flex-1">{title}</span>
           <span
-            className={`min-w-0 flex-1 truncate text-xs text-fg-faint ${
+            className={`min-w-0 flex-1 truncate text-xs text-fg-faint max-md:hidden ${
               extra ? "group-hover:pr-18 group-focus-within:pr-18" : ""
             }`}
           >
@@ -66,10 +67,10 @@ export function ListRowBone({ width }: { width: number }) {
   return (
     <div className="flex h-11 items-center gap-3 px-2">
       <Bone className="size-8 shrink-0 rounded-lg" />
-      <span className="w-48 shrink-0">
+      <span className="w-48 shrink-0 max-md:w-auto max-md:flex-1">
         <TextBone text="text-sm" style={{ width: width * 1.6 }} />
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 max-md:hidden">
         <TextBone text="text-xs" style={{ width: `${Math.min(80, width / 1.5)}%` }} />
       </span>
       <ChevronRight aria-hidden className="size-4 shrink-0 text-fg-faint opacity-40" />

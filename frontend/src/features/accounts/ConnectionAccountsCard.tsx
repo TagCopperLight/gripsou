@@ -64,8 +64,8 @@ export function ConnectionAccountsCard({ group, shares, tagCh, masked, onHover, 
                 onMouseLeave={() => onHover?.(null)}
                 className="grid w-full cursor-pointer grid-cols-[1fr_auto_auto] sm:grid-cols-[1fr_auto_auto_auto] items-center gap-3 rounded-lg py-2.5 pr-2 pl-5 text-left transition-colors duration-140 hover:bg-surface-2 md:grid-cols-[1fr_auto_11rem_8rem]"
               >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span className="size-2.5 shrink-0 rounded-[3px]" style={{ background: a.color }} />
+                <span className="flex min-w-0 items-baseline gap-2.5 self-baseline">
+                  <span className="size-2.5 shrink-0 self-center rounded-[3px]" style={{ background: a.color }} />
                   <span className="truncate text-fg text-[13px]">{a.name}</span>
                 </span>
                 <span className="hidden box-content pr-1 text-[11px] sm:block" style={{ width: `calc(${tagCh}ch + 1rem)` }}>
@@ -73,17 +73,18 @@ export function ConnectionAccountsCard({ group, shares, tagCh, masked, onHover, 
                     {accountTypeLabel(t, a.typeKey)}
                   </span>
                 </span>
-                <span className="flex items-center gap-3">
+                {/* Text cells share a baseline: centring texts of different fonts leaves them a pixel apart. */}
+                <span className="flex items-baseline gap-3 self-baseline">
                   {share !== null && (
                     <>
-                      <span className="hidden h-1 flex-1 overflow-hidden rounded-full bg-surface-3 md:block">
+                      <span className="hidden h-1 flex-1 self-center overflow-hidden rounded-full bg-surface-3 md:block">
                         <span className="block h-full" style={{ width: `${share * 100}%`, background: a.color }} />
                       </span>
-                      <span className="ml-auto w-12 text-right font-mono text-fg-faint text-xs">{formatShare(share, 1)}</span>
+                      <span className="ml-auto w-12 text-right font-mono text-fg-faint text-[13px]">{formatShare(share, 1)}</span>
                     </>
                   )}
                 </span>
-                <span className="relative text-right whitespace-nowrap">
+                <span className="relative self-baseline text-right whitespace-nowrap max-md:min-w-24">
                   {masked ? (
                     <MaskedMoney masked value={native ?? a.value} currency={native !== null ? a.currency : undefined} className="text-fg text-[13px] whitespace-nowrap" />
                   ) : native !== null ? (

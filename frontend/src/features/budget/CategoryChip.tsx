@@ -10,6 +10,8 @@ type CategoryChipProps = {
   needsReview?: boolean;
   /** Inside a parent that removes it on click (`group`): on hover the icon cross-fades into a cross. Stacked, so the width never changes. */
   removable?: boolean;
+  /** `text` is the label alone in its colour, for a row whose avatar already shows the icon. */
+  look?: "chip" | "text";
   className?: string;
 };
 
@@ -17,6 +19,7 @@ export function CategoryChip({
   category,
   needsReview = false,
   removable = false,
+  look = "chip",
   className = "",
 }: CategoryChipProps) {
   const { t } = useTranslation();
@@ -30,13 +33,15 @@ export function CategoryChip({
       title={label}
       style={{
         color,
-        backgroundColor: needsReview ? undefined : tint(color, 0.22),
+        backgroundColor: needsReview || look === "text" ? undefined : tint(color, 0.22),
       }}
-      className={`inline-flex max-w-full items-center gap-1.5 rounded-xl px-2.25 py-1 text-xs font-medium ${
-        needsReview ? "outline-2 outline-dashed -outline-offset-2" : ""
+      className={`inline-flex max-w-full items-center font-medium text-xs ${
+        look === "text"
+          ? needsReview ? "underline decoration-dashed underline-offset-3" : ""
+          : `gap-1.5 rounded-xl px-2.25 py-1 ${needsReview ? "outline-2 outline-dashed -outline-offset-2" : ""}`
       } ${className}`}
     >
-      {removable ? (
+      {look === "text" ? null : removable ? (
         <span className="grid size-3.5 shrink-0 place-items-center">
           <CategoryIcon
             icon={icon}

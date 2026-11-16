@@ -56,7 +56,7 @@ export function SettingsUsers() {
       <Surface className="w-full">
         <LoadingFrame loading={isPending} className="flex flex-col p-4 md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-fg font-semibold text-sm">{t("settings.users.title")}</h2>
+            <h2 className="text-fg font-semibold text-sm max-md:hidden">{t("settings.users.title")}</h2>
             <Button onClick={openInvite} padded={false} className="inline-flex w-full shrink-0 items-center justify-center gap-1.5 whitespace-nowrap text-xs px-2.75 py-1.5 md:w-auto">
               <Plus className="size-4" />
               {t("settings.users.inviteUser")}

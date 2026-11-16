@@ -8,7 +8,7 @@ export function ErrorToasts() {
   const toasts = useErrorToasts();
   if (toasts.length === 0) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-4 bottom-4 z-80 flex flex-col items-end gap-2 md:inset-x-auto md:right-6 md:bottom-6">
+    <div className="pointer-events-none fixed inset-x-4 bottom-4 z-80 flex flex-col items-end gap-2 md:inset-x-auto md:right-6 md:bottom-6 max-md:bottom-[calc(4.75rem+env(safe-area-inset-bottom))]">
       {toasts.map((toast) => (
         <div
           key={toast.id}
