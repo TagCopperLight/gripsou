@@ -82,12 +82,12 @@ function AiControls() {
           aria-label={t("settings.budget.ai.enable")}
         />
       </div>
-      <div className="mt-6 flex items-center justify-between gap-6">
+      <div className="mt-6 flex items-center justify-between gap-6 max-md:flex-col max-md:items-stretch max-md:gap-3">
         <div>
           <p className="text-sm font-medium text-fg">{t("settings.budget.ai.threshold")}</p>
           <p className="text-xs text-fg-faint">{t("settings.budget.ai.thresholdHint")}</p>
         </div>
-        <div className="flex w-64 items-center gap-3">
+        <div className="flex w-64 items-center gap-3 max-md:w-full">
           <input
             type="range"
             min={BUDGET_AI_THRESHOLD_MIN}

@@ -4,11 +4,13 @@ import { ChevronRight, CircleAlert, Sparkles } from "lucide-react";
 
 import { Surface } from "../../../ui/Surface";
 import { Button } from "../../../ui/Button";
+import { usePhone } from "../../../ui/usePhone";
 import { useAiStatus, useRequestCategorize } from "../../../api/budget";
 import { bannerVariant } from "../../../lib/aiBanner";
 
 export function AiBanner() {
   const { t } = useTranslation();
+  const phone = usePhone();
   const navigate = useNavigate();
   const status = useAiStatus().data;
   const retry = useRequestCategorize();
@@ -43,13 +45,14 @@ export function AiBanner() {
   return (
     <Surface className="flex items-center gap-3 px-5 py-4">
       <Sparkles className="size-5 shrink-0 text-amber" strokeWidth={1.5} aria-hidden />
-      <p className="flex-1 text-sm text-fg">{t("budget.ai.reviewNeeded", { count: status.reviewCount })}</p>
+      {/* On a phone the sentence and the button don't fit one line: the button carries the sentence. */}
+      <p className="flex-1 text-sm text-fg max-md:hidden">{t("budget.ai.reviewNeeded", { count: status.reviewCount })}</p>
       <Button
         variant="amber"
-        className="inline-flex items-center gap-1"
+        className="inline-flex items-center gap-1 max-md:flex-1 max-md:justify-between max-md:bg-transparent max-md:enabled:hover:bg-transparent"
         onClick={() => navigate({ to: "/budget/review" })}
       >
-        {t("budget.ai.reviewCta", { count: status.reviewCount })}
+        {t(phone ? "budget.ai.reviewNeeded" : "budget.ai.reviewCta", { count: status.reviewCount })}
         <ChevronRight className="size-4" aria-hidden />
       </Button>
     </Surface>

@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 
 import { LoadingFrame } from "./LoadingFrame";
 import { Modal } from "./Modal";
+import { PHONE_SHEET } from "./sheet";
 
 type DialogProps = {
   title: string;
@@ -34,9 +35,9 @@ export function Dialog({
       onClose={onClose}
       busy={busy}
       focusWithin={[body, actions]}
-      className={`relative ${wide ? "w-170" : large ? "w-160" : "w-120"} max-w-[90vw] max-h-[90vh] bg-surface rounded-3xl flex flex-col`}
+      className={`relative ${wide ? "w-170" : large ? "w-160" : "w-120"} max-w-[90vw] max-h-[90vh] bg-surface rounded-3xl flex flex-col ${PHONE_SHEET}`}
     >
-      <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-2">
+      <div className="flex shrink-0 items-center justify-between px-6 pt-6 pb-2 max-md:px-5 max-md:pt-5">
         <div className="flex flex-col gap-1">
           <h2 className="flex items-center gap-2.5 text-xl font-semibold text-fg">
             {icon}
@@ -57,11 +58,11 @@ export function Dialog({
           </button>
         </div>
       </div>
-      <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+      <div ref={body} className="min-h-0 flex-1 overflow-y-auto px-6 py-4 max-md:px-5">
         <LoadingFrame loading={busy}>{children}</LoadingFrame>
       </div>
       {footer && (
-        <div ref={actions} className="flex shrink-0 items-center justify-end gap-2 px-6 pb-6 pt-2">
+        <div ref={actions} className="flex shrink-0 items-center justify-end gap-2 px-6 pb-6 pt-2 max-md:px-5 max-md:pb-5">
           <LoadingFrame loading={busy}>{footer}</LoadingFrame>
         </div>
       )}

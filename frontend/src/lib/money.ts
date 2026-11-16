@@ -34,6 +34,8 @@ export type MoneyFormatOptions = SignOption &
     currencyPosition?: "before" | "after";
     /** Fixed fraction digits. Defaults to prefs.numberDecimals. */
     fractionDigits?: number;
+    /** Shortened (`24K`, `1.2M`), with at most one fraction digit: for axis labels on a narrow screen. */
+    compact?: boolean;
   };
 
 export type PercentFormatOptions = SignOption &
@@ -49,13 +51,14 @@ type RenderOptions = {
   minFrac: number;
   maxFrac: number;
   signed: boolean;
+  compact?: boolean;
 };
 
 // Intl formatters are expensive across a ledger. Only number structure is in the key: separators and currency come from prefs on every call.
 const numberFormats = new Map<string, Intl.NumberFormat>();
 
 function numberFormat(o: RenderOptions): Intl.NumberFormat {
-  const key = `${o.style}:${o.minFrac}:${o.maxFrac}:${o.signed}`;
+  const key = `${o.style}:${o.minFrac}:${o.maxFrac}:${o.signed}:${o.compact ?? false}`;
   let formatter = numberFormats.get(key);
   if (!formatter) {
     formatter = new Intl.NumberFormat("en-US", {
@@ -64,6 +67,7 @@ function numberFormat(o: RenderOptions): Intl.NumberFormat {
       minimumFractionDigits: o.minFrac,
       maximumFractionDigits: o.maxFrac,
       signDisplay: o.signed ? "exceptZero" : "auto",
+      ...(o.compact && { notation: "compact" }),
     });
     if (numberFormats.size >= 32) {
       numberFormats.delete(numberFormats.keys().next().value!);
@@ -106,13 +110,15 @@ export function formatMoney(
 ): string {
   const p = options.prefs ?? getPrefs();
   const frac = options.fractionDigits ?? p.numberDecimals;
+  const compact = options.compact ?? false;
   const { sign, body } = renderParts(value, {
     style: "decimal",
     groupSep: options.groupSep ?? p.numberGroupSep,
     decimalSep: options.decimalSep ?? p.numberDecimalSep,
-    minFrac: frac,
-    maxFrac: frac,
+    minFrac: compact ? 0 : frac,
+    maxFrac: compact ? 1 : frac,
     signed: options.signed ?? false,
+    compact,
   });
   const symbol =
     options.currencySymbol ?? currencySymbol(options.currency ?? p.currency);

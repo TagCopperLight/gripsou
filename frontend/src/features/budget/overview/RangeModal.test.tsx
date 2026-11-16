@@ -41,12 +41,16 @@ describe("RangeModal", () => {
     const apply = screen.getByRole("button", { name: "Apply" });
     expect(apply).toBeDisabled();
 
-    const [from, to] = document.querySelectorAll<HTMLInputElement>('input[type="date"]');
-    fireEvent.change(from, { target: { value: "2026-03-10" } });
-    fireEvent.change(to, { target: { value: "2026-03-01" } });
+    const [from, to] = screen.getAllByPlaceholderText("DD/MM/YYYY");
+    fireEvent.change(from, { target: { value: "10/03/2026" } });
+    fireEvent.change(to, { target: { value: "01/03/2026" } });
     expect(apply).toBeDisabled();
 
-    fireEvent.change(to, { target: { value: "2026-04-02" } });
+    fireEvent.change(to, { target: { value: "31/02/2026" } });
+    expect(apply).toBeDisabled();
+    expect(to).toHaveValue("31/02/2026");
+
+    fireEvent.change(to, { target: { value: "02/04/2026" } });
     expect(apply).toBeEnabled();
     fireEvent.click(apply);
     expect(onApply).toHaveBeenCalledWith({ from: "2026-03-10", to: "2026-04-02" });

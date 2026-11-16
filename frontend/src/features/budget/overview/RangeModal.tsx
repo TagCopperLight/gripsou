@@ -5,7 +5,7 @@ import { Calendar } from "lucide-react";
 import { Dialog } from "../../../ui/Dialog";
 import { Button } from "../../../ui/Button";
 import { presetRange, type RangePreset } from "../../../lib/period";
-import { TextInput } from "../../../ui/TextInput";
+import { DateInput } from "../../../ui/DateInput";
 
 type RangeModalProps = {
   onApply: (range: { from: string; to: string }) => void;
@@ -48,19 +48,11 @@ export function RangeModal({ onApply, onClose }: RangeModalProps) {
       <div className="grid grid-cols-2 gap-3">
         <label className="flex flex-col gap-1 text-xs text-fg-faint">
           {t("budget.overview.from")}
-          <TextInput
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-          />
+          <DateInput value={from} onChange={setFrom} />
         </label>
         <label className="flex flex-col gap-1 text-xs text-fg-faint">
           {t("budget.overview.to")}
-          <TextInput
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
+          <DateInput value={to} onChange={setTo} />
         </label>
       </div>
     </Dialog>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { FieldError } from "../../ui/FieldError";
+import { isPhone } from "../../ui/usePhone";
 import { showError, useErrorToast } from "../../lib/errorToasts";
 import { RefreshCw, Trash2, ChevronRight, ChevronDown, ExternalLink, CircleAlert, TriangleAlert } from "lucide-react";
 
@@ -77,7 +78,7 @@ export function ConnectionRow({
   // A phone still opens the row: its panel holds the actions the header has no room for.
   const expandable = conn.status !== "pending" && (conn.accounts.length > 0 || problems.length > 0);
   const toggle = () => {
-    if (!expandable && window.matchMedia?.("(min-width: 48rem)").matches) return;
+    if (!expandable && !isPhone()) return;
     setOpen((o) => !o);
   };
   const syncing = isSyncing(conn.status);
@@ -110,7 +111,6 @@ export function ConnectionRow({
           <HoldingBadge
             logo={conn.logo}
             ticker={conn.displayName}
-            color={conn.accounts[0]?.color}
             className="size-9 rounded-lg text-[13px]"
           />
           <AlertDot alert={connectionAlert(conn)} className="ring-surface-2 group-hover:ring-surface-3" />

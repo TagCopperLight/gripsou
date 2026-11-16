@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Check, Pencil } from "lucide-react";
 
 import { ColorPicker } from "./ColorPicker";
@@ -25,7 +26,11 @@ export function ColorSwatchGrid<C extends string | null>({
   const count = BUDGET_PALETTE.length + 1 + (clearLabel === undefined ? 0 : 1);
 
   return (
-    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}>
+    // One row, or two on a phone, where one row leaves each swatch too small to tap.
+    <div
+      className="grid gap-2 grid-cols-[repeat(var(--cols),minmax(0,1fr))] max-md:grid-cols-[repeat(var(--cols-phone),minmax(0,1fr))]"
+      style={{ "--cols": count, "--cols-phone": Math.ceil(count / 2) } as CSSProperties}
+    >
       {BUDGET_PALETTE.map((c) => (
         <button
           key={c}

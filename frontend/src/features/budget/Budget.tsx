@@ -46,9 +46,10 @@ export function Budget() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title={t("nav.budget")}>
-        {/* `clear-sync-button` keeps the control clear of the global SyncButton pinned top-right. */}
+        {/* `clear-sync-button` keeps the control clear of the global SyncButton pinned top-right. A phone has no
+            room beside the title: the control takes its own full-width line. */}
         <SegmentedControl<Mode>
-          className="clear-sync-button"
+          className="clear-sync-button max-md:mr-0! max-md:flex max-md:w-full max-md:[&>button]:flex-1"
           value={mode}
           onChange={(next) => navigate({ to: MODE_PATHS[next] })}
           options={options}

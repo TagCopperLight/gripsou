@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { SettingsSurface } from "../../../ui/SettingsSurface";
+import { SettingRow } from "../../../ui/SettingRow";
 import { SegmentedControl } from "../../../ui/SegmentedControl";
 import { Select } from "../../../ui/Select";
 import { Toggle } from "../../../ui/Toggle";
@@ -45,7 +46,7 @@ export function SettingsGeneral() {
     <div className="flex flex-col gap-4 pb-8">
       <SettingsSurface className="md:mt-13" title={t("settings.general.localization")}>
         <div className="flex flex-col gap-5">
-          <Setting label={t("settings.general.language")} hint={t("settings.general.interfaceLanguage")}>
+          <SettingRow label={t("settings.general.language")}>
             <SegmentedControl
               value={prefs.uiLanguage}
               onChange={(lng) => set("uiLanguage", lng as UserPrefs["uiLanguage"])}
@@ -54,22 +55,22 @@ export function SettingsGeneral() {
                 { value: "fr", label: "Français" },
               ]}
             />
-          </Setting>
+          </SettingRow>
 
           <Divider />
 
-          <Setting label={t("settings.general.timeZone")} hint={t("settings.general.timeZoneHint")}>
+          <SettingRow label={t("settings.general.timeZone")} hint={t("settings.general.timeZoneHint")}>
             <Select
               value={prefs.timeZone}
               onChange={(v) => set("timeZone", v)}
               options={timeZoneOptions(prefs.timeZone, i18n.language)}
               className="w-36 md:w-60"
             />
-          </Setting>
+          </SettingRow>
 
           <Divider />
 
-          <Setting
+          <SettingRow
             label={t("settings.general.dateFormat")}
             hint={t("settings.general.today", {
               date: formatDate(new Date(), { prefs }),
@@ -81,13 +82,13 @@ export function SettingsGeneral() {
               options={DATE_FORMATS.map((f) => ({ value: f, label: patternLabel(f, i18n.language) }))}
               className="w-36 md:w-60"
             />
-          </Setting>
+          </SettingRow>
         </div>
       </SettingsSurface>
 
       <SettingsSurface title={t("settings.general.numbersCurrency")}>
         <div className="flex flex-col gap-5">
-          <Setting
+          <SettingRow
             label={t("settings.general.currency")}
             hint={<CurrencyChangeHint pick={currency.pick} idle={t("settings.general.baseReportingCurrency")} />}
           >
@@ -97,7 +98,7 @@ export function SettingsGeneral() {
               options={CURRENCIES.map((c) => ({ value: c.code, label: c.label }))}
               className="w-36 md:w-60"
             />
-          </Setting>
+          </SettingRow>
 
           <Divider />
 
@@ -151,7 +152,7 @@ export function SettingsGeneral() {
       </SettingsSurface>
 
       <SettingsSurface title={t("settings.general.privacy")}>
-        <Setting
+        <SettingRow
           label={t("settings.general.privateMode")}
           hint={t("settings.general.privateModeHint")}
         >
@@ -160,28 +161,8 @@ export function SettingsGeneral() {
             onChange={(v) => set("privateMode", v)}
             aria-label={t("settings.general.privateMode")}
           />
-        </Setting>
+        </SettingRow>
       </SettingsSurface>
-    </div>
-  );
-}
-
-function Setting({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-6">
-      <div className="flex flex-col gap-1">
-        <span className="text-sm font-medium text-fg">{label}</span>
-        {hint && <span className="text-xs text-fg-faint">{hint}</span>}
-      </div>
-      <div className="shrink-0">{children}</div>
     </div>
   );
 }

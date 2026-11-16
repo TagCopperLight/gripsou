@@ -5,7 +5,8 @@ import { Search } from "lucide-react";
 import { Surface } from "../../../ui/Surface";
 import { Button } from "../../../ui/Button";
 import { GridTable, SortHeader, TableEmpty } from "../../../ui/GridTable";
-import { HEAD_CELL, ROW_CELLS, ROW_HOVER, type Track } from "../../../ui/gridTable";
+import { usePhone } from "../../../ui/usePhone";
+import { PHONE_HIDDEN, HEAD_CELL, ROW_CELLS, ROW_HOVER, type Track } from "../../../ui/gridTable";
 import { FxAsterisk, FxFootnote } from "../../../ui/FxNote";
 import { MaskedMoney } from "../../../ui/MaskedMoney";
 import { CardTitle } from "../../../ui/CardTitle";
@@ -37,14 +38,15 @@ type Column = {
 };
 
 // Only the asset column grows; the others have floors, so searching or filtering never moves a column. Below the sum of the floors the table scrolls sideways.
+// A phone keeps the asset and its value, with the gain under the value.
 const COLUMNS: Column[] = [
-  { labelKey: "dashboard.holdings.columns.asset", align: "left", sort: "asset", track: { min: "220px", max: "3fr" }, pad: "pl-3 pr-4" },
-  { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty", track: { min: "96px", max: "max-content" }, pad: "pr-4" },
-  { labelKey: "dashboard.holdings.columns.account", align: "left", track: { min: "110px", max: "180px" }, pad: "pr-4" },
-  { labelKey: "dashboard.holdings.columns.accountType", align: "left", track: { min: "110px", max: "150px" }, pad: "pr-4" },
-  { labelKey: "dashboard.holdings.columns.value", align: "right", sort: "value", track: { min: "7rem", max: "max-content" }, pad: "pr-4" },
-  { labelKey: "dashboard.holdings.columns.unrealizedPnl", align: "right", sort: "pnl", track: { min: "7rem", max: "max-content" }, pad: "pr-4" },
-  { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right", track: { min: "108px" }, pad: "pr-3" },
+  { labelKey: "dashboard.holdings.columns.asset", align: "left", sort: "asset", track: { min: "220px", max: "3fr", phone: { min: "0px", max: "1fr" } }, pad: "pl-3 pr-4" },
+  { labelKey: "dashboard.holdings.columns.quantity", align: "right", sort: "qty", track: { min: "96px", max: "max-content", phone: null }, pad: `pr-4 ${PHONE_HIDDEN}` },
+  { labelKey: "dashboard.holdings.columns.account", align: "left", track: { min: "110px", max: "180px", phone: null }, pad: `pr-4 ${PHONE_HIDDEN}` },
+  { labelKey: "dashboard.holdings.columns.accountType", align: "left", track: { min: "110px", max: "150px", phone: null }, pad: `pr-4 ${PHONE_HIDDEN}` },
+  { labelKey: "dashboard.holdings.columns.value", align: "right", sort: "value", track: { min: "7rem", max: "max-content", phone: { min: "max-content" } }, pad: "pr-4 max-md:pr-3" },
+  { labelKey: "dashboard.holdings.columns.unrealizedPnl", align: "right", sort: "pnl", track: { min: "7rem", max: "max-content", phone: null }, pad: `pr-4 ${PHONE_HIDDEN}` },
+  { labelKey: "dashboard.holdings.columns.thirtyDays", align: "right", track: { min: "108px", phone: null }, pad: `pr-3 ${PHONE_HIDDEN}` },
 ];
 const TRACKS = COLUMNS.map((c) => c.track);
 const PAD = COLUMNS.map((c) => c.pad);
@@ -58,6 +60,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
   const { data, isPending, refetch } = useHoldings();
   const ready = data !== undefined;
   const privacy = usePrivacy();
+  const phone = usePhone();
   const [sort, setSort] = useState<HoldingSort | null>({ key: "value", dir: "desc" });
   const [accountType, setAccountType] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -246,7 +249,7 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                         : accountTypeLabel(t, line.accountType)}
                     </span>
                   </td>
-                  <td role="cell" className={`justify-end whitespace-nowrap ${PAD[4]}`}>
+                  <td role="cell" className={`justify-end whitespace-nowrap max-md:flex-col max-md:items-end max-md:justify-center ${PAD[4]}`}>
                     {line.fxMissing ? (
                       <span className="relative">
                         {line.valueNative === null ? (
@@ -258,6 +261,14 @@ export function HoldingsCard({ className = "" }: HoldingsCardProps) {
                       </span>
                     ) : (
                       <MaskedMoney masked={privacy.masked} value={line.value} className="text-fg" />
+                    )}
+                    {phone && showPnl && (
+                      <Percent
+                        value={h.glPct}
+                        signed
+                        fractionDigits={1}
+                        className={`text-xs ${up ? "text-green" : "text-red"}`}
+                      />
                     )}
                   </td>
                   <td role="cell" className={`justify-end whitespace-nowrap ${PAD[5]}`}>

@@ -15,7 +15,8 @@ import { BudgetOverview } from "./features/budget/overview/Overview";
 import { TransactionsMode } from "./features/budget/transactions/TransactionsMode";
 import { ReviewMode } from "./features/budget/review/ReviewMode";
 import { Login } from "./features/auth/Login";
-import { SettingsLayout } from "./features/settings/SettingsLayout";
+import { SettingsHome, SettingsLayout } from "./features/settings/SettingsLayout";
+import { isPhone } from "./ui/usePhone";
 import { SettingsGeneral } from "./features/settings/general/General";
 import { SettingsAccount } from "./features/settings/account/Account";
 import { SettingsConnections } from "./features/connections/Connections";
@@ -155,8 +156,9 @@ const settingsIndexRoute = createRoute({
   getParentRoute: () => settingsRoute,
   path: "/",
   beforeLoad: () => {
-    throw redirect({ to: "/settings/general" });
+    if (!isPhone()) throw redirect({ to: "/settings/general" });
   },
+  component: SettingsHome,
 });
 
 const settingsGeneralRoute = createRoute({

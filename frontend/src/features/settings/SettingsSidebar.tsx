@@ -23,11 +23,7 @@ export function SettingsSidebar() {
           <Link to={to} className={navLinkClassName}>
             <Icon className="size-4.5" strokeWidth={2} />
             <span>{t(labelKey)}</span>
-            {adminOnly && (
-              <span className="ml-auto rounded border border-surface-3 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-fg-faint">
-                {t("settings.adminBadge")}
-              </span>
-            )}
+            {adminOnly && <AdminBadge className="ml-auto" />}
           </Link>
         </Fragment>
       ))}
@@ -35,5 +31,14 @@ export function SettingsSidebar() {
         <LogoutButton />
       </div>
     </nav>
+  );
+}
+
+export function AdminBadge({ className = "" }: { className?: string }) {
+  const { t } = useTranslation();
+  return (
+    <span className={`rounded border border-surface-3 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-fg-faint ${className}`}>
+      {t("settings.adminBadge")}
+    </span>
   );
 }

@@ -5,7 +5,8 @@ import { formatMoney } from "../../lib/money";
 import { formatDay } from "../../lib/date";
 import { withAlpha } from "../../lib/color";
 import { FG_FAINT } from "../../lib/theme";
-import { AXIS_GRID, CHART_BASE, chartTooltip, timeAxis, tooltipCard, tooltipRow, valueAxis } from "../../lib/chartTheme";
+import { usePhone } from "../../ui/usePhone";
+import { axisGrid, CHART_BASE, chartTooltip, timeAxis, tooltipCard, tooltipRow, valueAxis } from "../../lib/chartTheme";
 
 export type StackedSeries = {
   key?: string;
@@ -26,11 +27,12 @@ type StackedAreaChartProps = {
 
 export function StackedAreaChart({ series, highlight = null, height = 320, className = "" }: StackedAreaChartProps) {
   const { t } = useTranslation();
+  const phone = usePhone();
   const colorByName = new Map(series.map((s) => [s.name, s.color]));
 
   const option: EChartsOption = {
     ...CHART_BASE,
-    grid: AXIS_GRID,
+    grid: axisGrid(phone),
     tooltip: chartTooltip("axis", (params) => {
       const items = params as unknown as TooltipParam[];
       const rows = items.map((it) =>
@@ -41,7 +43,7 @@ export function StackedAreaChart({ series, highlight = null, height = 320, class
       return tooltipCard(formatDay(items[0].axisValue), rows, { label: t("common.total"), value: total });
     }),
     xAxis: timeAxis((value) => formatDay(value)),
-    yAxis: valueAxis((v) => formatMoney(v, { fractionDigits: 0 }), { min: 0 }),
+    yAxis: valueAxis((v) => formatMoney(v, { fractionDigits: 0, compact: phone }), { min: 0 }),
     series: series.map((s) => {
       const faded = highlight !== null && (s.key ?? s.name) !== highlight;
       return {

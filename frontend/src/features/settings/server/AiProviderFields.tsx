@@ -15,7 +15,7 @@ import {
 
 /** Keys are saved with the API keys; a provider without one is never offered. The model is picked from the provider's list, or typed when that list can't be had. */
 const ROW = "flex flex-wrap items-center gap-4";
-const FIELD = "flex items-center gap-3 text-sm text-fg";
+const FIELD = "flex items-center gap-3 text-sm text-fg max-md:w-full";
 
 export function AiProviderFields() {
   const { t } = useTranslation();
@@ -92,7 +92,7 @@ export function AiProviderFields() {
             {models.isError || models.data?.length === 0 ? (
               <TextInput
                 id={modelId}
-                className="max-w-72 font-mono"
+                className="max-w-72 font-mono max-md:min-w-0 max-md:flex-1"
                 value={shownModel}
                 onChange={(e) => setDraft({ base: settings.model, value: e.target.value })}
                 onBlur={commitModel}
@@ -103,7 +103,7 @@ export function AiProviderFields() {
             ) : (
               <Select
                 id={modelId}
-                className="w-72 font-mono"
+                className="w-72 font-mono max-md:w-auto max-md:min-w-0 max-md:flex-1"
                 value={shownModel}
                 disabled={!models.data}
                 onChange={(m) => {

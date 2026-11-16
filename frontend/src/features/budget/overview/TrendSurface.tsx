@@ -4,6 +4,7 @@ import type { EChartsOption, EChartsType } from "echarts";
 import { useTranslation } from "react-i18next";
 import { boneWidths } from "../../../ui/boneWidths";
 
+import { usePhone } from "../../../ui/usePhone";
 import { Surface } from "../../../ui/Surface";
 import { CategoryChip } from "../CategoryChip";
 import { desaturate } from "../../../lib/color";
@@ -67,6 +68,7 @@ function TrendChart({ trend, onSelectMonth, masked }: {
   masked: boolean;
 }) {
   const { t, i18n } = useTranslation();
+  const phone = usePhone();
   const money = (v: string, opts?: MoneyFormatOptions) => formatMaskedMoney(v, masked, opts);
 
   const language = i18n.language;
@@ -103,7 +105,7 @@ function TrendChart({ trend, onSelectMonth, masked }: {
         });
       }),
       xAxis: categoryAxis(axisLabels),
-      yAxis: valueAxis((v) => money(String(v), { fractionDigits: 0 })),
+      yAxis: valueAxis((v) => money(String(v), { fractionDigits: 0, compact: phone })),
       series: trend.series.map((_, rank) => ({
         name: `rank:${rank}`,
         type: "bar",
@@ -121,7 +123,7 @@ function TrendChart({ trend, onSelectMonth, masked }: {
       })),
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `money` follows `masked`
-  }, [trend, columns, language, t, masked]);
+  }, [trend, columns, language, t, masked, phone]);
 
   const onEvents = useMemo(() => {
     // Colours only: rebuilding the React option on every hover would reset this notMerge chart.

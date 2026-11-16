@@ -18,6 +18,8 @@ import type { Transaction } from "../../../api/wire";
 type TransactionRowProps = {
   tx: Transaction;
   showChecked: boolean;
+  /** Category and date move into the description and amount cells, their columns being dropped. */
+  phone: boolean;
   masked?: boolean;
   selected: boolean;
   anySelected: boolean;
@@ -30,7 +32,7 @@ type TransactionRowProps = {
 
 /** Memoised: a ledger mounts thousands of rows and the page re-renders on every keystroke and selection click. */
 export const TransactionRow = memo(function TransactionRow({
-  tx, showChecked, masked = false, selected, anySelected,
+  tx, showChecked, phone, masked = false, selected, anySelected,
   onToggleSelect, onOpenCategory, onOpenTags, onToggleChecked,
 }: TransactionRowProps) {
   const { t } = useTranslation();
@@ -41,6 +43,17 @@ export const TransactionRow = memo(function TransactionRow({
   /** Dims only the content: opacity on the `<tr>` or a `<td>` would also drain the row background
    *  (hover, selection). Avatar, category chip and tags stay undimmed: their colour carries meaning. */
   const dim = tx.isTransfer ? "opacity-60" : "";
+  const categoryButton = (className: string, look?: "text") => (
+    <button
+      type="button"
+      onClick={(e) => onOpenCategory(tx, e.currentTarget)}
+      className={`cursor-pointer ${className}`}
+      aria-label={named(t("budget.transactions.setCategory"))}
+      aria-haspopup="dialog"
+    >
+      <CategoryChip category={categoryOfTransaction(tx)} needsReview={tx.needsReview} look={look} />
+    </button>
+  );
 
   return (
     <tr
@@ -51,16 +64,17 @@ export const TransactionRow = memo(function TransactionRow({
       }`}
     >
       <td role="cell" className={`py-2.25 ${COL_PAD.transaction}`}>
-        <div className="flex min-w-0 flex-1 items-center gap-3">
+        {/* A phone puts the category under the description, in a second grid row. */}
+        <div className="flex min-w-0 flex-1 items-center gap-3 max-md:grid max-md:grid-cols-[auto_minmax(0,1fr)] max-md:gap-y-0">
           {/* Lots are not selectable: the server's bulk endpoints touch only `transaction`. */}
           {isLot ? (
-            <span className="inline-flex size-8 shrink-0 items-center justify-center">
+            <span className="inline-flex size-8 shrink-0 items-center justify-center max-md:row-span-2">
               <TransactionAvatar tx={tx} />
             </span>
           ) : (
             // Both layers stay in the DOM and switch with opacity, not `display`, so keyboard users can Tab to the checkbox.
             // `:focus-visible`, not focus: a click leaves the checkbox focused and would keep it showing.
-            <span className="relative inline-flex size-8 shrink-0 items-center justify-center">
+            <span className="relative inline-flex size-8 shrink-0 items-center justify-center max-md:row-span-2">
               {!anySelected && (
                 <span className="absolute inset-0 flex items-center justify-center opacity-100 transition-opacity group-hover:opacity-0 group-has-[:focus-visible]:opacity-0">
                   <TransactionAvatar tx={tx} />
@@ -109,6 +123,7 @@ export const TransactionRow = memo(function TransactionRow({
               </p>
             )}
           </div>
+          {phone && !isLot && categoryButton("col-start-2 max-w-full justify-self-start", "text")}
         </div>
       </td>
 
@@ -127,17 +142,7 @@ export const TransactionRow = memo(function TransactionRow({
       </td>
 
       <td role="cell" className={`py-2.25 ${COL_PAD.category}`}>
-        {isLot ? null : (
-          <button
-            type="button"
-            onClick={(e) => onOpenCategory(tx, e.currentTarget)}
-            className="min-w-0 cursor-pointer"
-            aria-label={named(t("budget.transactions.setCategory"))}
-            aria-haspopup="dialog"
-          >
-            <CategoryChip category={categoryOfTransaction(tx)} needsReview={tx.needsReview} />
-          </button>
-        )}
+        {isLot ? null : categoryButton("min-w-0")}
       </td>
 
       <td role="cell" data-testid="tx-tags" className={`py-2.25 ${COL_PAD.tags}`}>
@@ -165,13 +170,14 @@ export const TransactionRow = memo(function TransactionRow({
         </td>
       )}
 
-      <td role="cell" className={`justify-end whitespace-nowrap py-2.25 ${COL_PAD.amount}`}>
+      <td role="cell" className={`justify-end whitespace-nowrap py-2.25 max-md:flex-col max-md:items-end max-md:justify-center ${COL_PAD.amount}`}>
         {/* Denominated in the ACCOUNT's own currency, never the reporting one. */}
         <span data-testid="tx-amount" className={dim}>
           <MoneyHint currency={tx.currency} converted={masked ? null : tx.amountReporting} signed>
             <MaskedMoney masked={masked} value={tx.amount} currency={tx.currency} signed className="text-fg" />
           </MoneyHint>
         </span>
+        {phone && <span className={`text-xs text-fg-faint ${dim}`}>{formatDay(tx.t)}</span>}
       </td>
     </tr>
   );

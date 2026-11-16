@@ -39,7 +39,8 @@ export function SettingsConnections() {
       <Surface className="w-full">
         <LoadingFrame loading={isPending} className="flex flex-col p-4 md:p-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-fg font-semibold text-sm">{t("settings.connections.title")}</h2>
+            {/* On a phone the page heading already names it. */}
+            <h2 className="text-fg font-semibold text-sm max-md:hidden">{t("settings.connections.title")}</h2>
             <div className="flex flex-col-reverse gap-2 md:flex-row md:items-center md:gap-4">
               {(isPending || connCount > 0) && (
                 <Button variant="ghost" padded={false} className="text-xs" onClick={() => setGuideOpen(true)}>

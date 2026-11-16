@@ -7,6 +7,15 @@
     "investments": "Investments"
   },
   "common": {
+    "dateInput": {
+      "pick": "Pick a date",
+      "tokens": {
+        "YYYY": "YYYY",
+        "YY": "YY",
+        "MM": "MM",
+        "DD": "DD"
+      }
+    },
     "colorPicker": {
       "shade": "Saturation and brightness",
       "hue": "Hue",
@@ -415,14 +424,13 @@
       "title": "General",
       "localization": "Language & region",
       "language": "Language",
-      "interfaceLanguage": "Interface language",
       "timeZone": "Time zone",
-      "timeZoneHint": "Determines the current date used for syncs, reports and date ranges.",
+      "timeZoneHint": "Sets today's date",
       "dateFormat": "Date format",
       "today": "Today: {{date}}",
       "numbersCurrency": "Numbers & currency",
       "currency": "Currency",
-      "baseReportingCurrency": "Every amount is shown in this currency",
+      "baseReportingCurrency": "Used for every amount",
       "numberFormat": "Number format",
       "thousandsSeparator": "Thousands",
       "decimalSeparator": "Decimal",
@@ -432,7 +440,7 @@
       "preview": "Preview",
       "privacy": "Privacy",
       "privateMode": "Private mode",
-      "privateModeHint": "Replace amounts with asterisks"
+      "privateModeHint": "Hides every amount"
     },
     "account": {
       "title": "Account",
@@ -665,13 +673,13 @@
       "listPrefs": {
         "title": "List preferences",
         "showChecked": "Checked column",
-        "showCheckedHint": "Adds a tick box to each transaction, for your own bookkeeping. It does not change categories."
+        "showCheckedHint": "For your own bookkeeping"
       },
       "ai": {
         "title": "AI categorisation",
         "enable": "Categorise automatically",
         "threshold": "Review threshold",
-        "thresholdHint": "Suggestions with a confidence score below this threshold are sent to you for review.",
+        "thresholdHint": "Below this confidence, a suggestion goes to review.",
         "notConfigured": "No AI provider set up",
         "setUp": "Set up"
       }

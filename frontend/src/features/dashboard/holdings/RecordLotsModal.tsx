@@ -10,6 +10,7 @@ import { LoadingFrame } from "../../../ui/LoadingFrame";
 import { Bone, Skeleton, TextBone } from "../../../ui/Skeleton";
 import { staleClass } from "../../../ui/stale";
 import { HoldingModalHeader } from "./HoldingModalHeader";
+import { PHONE_SHEET } from "../../../ui/sheet";
 import { Modal } from "../../../ui/Modal";
 import { Money } from "../../../ui/Money";
 import { MoneyHint } from "../../../ui/MoneyHint";
@@ -23,6 +24,7 @@ import {
 import { lotCashAmount } from "../../../lib/lotRules";
 import type { BasisPreview, Holding } from "../../../api/wire";
 import { TextInput } from "../../../ui/TextInput";
+import { DateInput } from "../../../ui/DateInput";
 import { HEAD_TEXT } from "../../../ui/gridTable";
 
 // Amounts here are in `holding.accountCurrency`, never `holding.currency` (the instrument's quote currency).
@@ -172,7 +174,7 @@ export function RecordLotsModal({
       onClose={onClose}
       busy={saveLots.isPending}
       focusWithin={[body, actions]}
-      className="relative w-208 max-w-[90vw] max-h-[85vh] bg-surface rounded-3xl flex flex-col"
+      className={`relative w-208 max-w-[90vw] max-h-[85vh] bg-surface rounded-3xl flex flex-col ${PHONE_SHEET}`}
     >
       <HoldingModalHeader holding={holding}>
         <button
@@ -278,11 +280,10 @@ export function RecordLotsModal({
                       />
                     </td>
                     <td className="py-1.5 pr-2 border-t border-surface-2">
-                      <TextInput
-                        type="date"
+                      <DateInput
                         data-testid="lot-date"
                         value={r.date}
-                        onChange={(e) => set(i, { date: e.target.value })}
+                        onChange={(date) => set(i, { date })}
                         onBlur={sortRows}
                         invalid={r.date === ""}
                       />

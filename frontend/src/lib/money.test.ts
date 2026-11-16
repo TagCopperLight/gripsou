@@ -13,6 +13,12 @@ describe("formatMoney (prefs-driven)", () => {
     })).toBe("$9.876,2500000");
   });
 
+  it("shortens compact amounts with the user's decimal separator and keeps the symbol", () => {
+    expect(formatMoney("24000", { compact: true })).toBe("24K €");
+    expect(formatMoney("1250000", { compact: true })).toBe("1,3M €");
+    expect(formatMoney("850", { compact: true })).toBe("850 €");
+  });
+
   it("uses default prefs: space groups, comma decimal, € after", () => {
     expect(formatMoney("1234567.89")).toBe("1 234 567,89 €");
   });

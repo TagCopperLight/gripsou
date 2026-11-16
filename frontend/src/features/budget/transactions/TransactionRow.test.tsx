@@ -30,6 +30,7 @@ function renderRow(over: Partial<Transaction> = {}, props: Record<string, unknow
         <TransactionRow
           tx={tx(over)}
           showChecked={false}
+          phone={false}
           selected={false}
           anySelected={false}
           {...handlers}

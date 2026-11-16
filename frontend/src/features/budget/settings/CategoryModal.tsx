@@ -143,7 +143,8 @@ export function CategoryModal({ category, onClose, onDelete }: CategoryModalProp
               </Button>
             </span>
           )}
-          <Button variant="ghost" onClick={onClose}>
+          {/* On a phone the header's close button is the way out: four actions don't fit one line. */}
+          <Button variant="ghost" onClick={onClose} className="max-md:hidden">
             {t("common.cancel")}
           </Button>
           <Button

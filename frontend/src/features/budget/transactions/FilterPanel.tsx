@@ -39,7 +39,7 @@ export function FilterPanel() {
     patchFilters((prev) => ({ tagIds: toggleIn(prev.tagIds, id) }));
 
   return (
-    <div data-testid="filter-panel" className="grid grid-cols-2 gap-6 py-3 md:grid-cols-4">
+    <div data-testid="filter-panel" className="grid grid-cols-2 gap-6 py-3 md:grid-cols-4 max-md:grid-cols-1 max-md:gap-5">
       <div data-testid="column-type">
         <Column title={t("budget.transactions.columns.type").toUpperCase()}>
           <div className="grid grid-cols-2 gap-x-2 gap-y-1">
@@ -74,7 +74,7 @@ export function FilterPanel() {
               aria-expanded={chooser.key === "categories"}
               aria-label={t("budget.transactions.filterByCategory")}
               onClick={(e) => chooser.toggle("categories", e.currentTarget)}
-              className="cursor-pointer rounded-lg bg-surface p-1 text-fg-faint hover:text-fg"
+              className="cursor-pointer rounded-lg bg-surface p-1 text-fg-faint hover:text-fg max-md:p-2"
             >
               <Plus className="size-3.5" />
             </button>
@@ -107,7 +107,7 @@ export function FilterPanel() {
               aria-expanded={chooser.key === "tags"}
               aria-label={t("budget.transactions.filterByTag")}
               onClick={(e) => chooser.toggle("tags", e.currentTarget)}
-              className="cursor-pointer rounded-lg bg-surface p-1 text-fg-faint hover:text-fg"
+              className="cursor-pointer rounded-lg bg-surface p-1 text-fg-faint hover:text-fg max-md:p-2"
             >
               <Plus className="size-3.5" />
             </button>
