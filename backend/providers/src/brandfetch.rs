@@ -3,7 +3,7 @@
 
 use gripsou_core::provider_config::{ConfigField, ProviderConfig};
 
-use crate::registry::{About, account_kind};
+use crate::registry::{About, institution_domain};
 
 pub const ABOUT: About = About {
     key: "brandfetch",
@@ -39,17 +39,7 @@ impl Logos {
     /// An institution's logo by its provider's key for it, or `None` when the
     /// key is absent or its provider maps it to no website.
     pub fn institution(&self, provider_key: &str, institution_key: Option<&str>) -> Option<String> {
-        let key = institution_key?;
-        let Some(domain) = account_kind(provider_key).and_then(|k| (k.institution_domain)(key))
-        else {
-            tracing::debug!(
-                provider = provider_key,
-                institution_key = key,
-                "no logo domain mapped"
-            );
-            return None;
-        };
-        Some(self.url(domain))
+        institution_domain(provider_key, institution_key?).map(|d| self.url(d))
     }
 
     /// An instrument's logo: by ISIN, else ticker. `None` for cash or when

@@ -69,6 +69,12 @@ pub fn account_kind(key: &str) -> Option<&'static AccountKind> {
     ACCOUNTS.iter().copied().find(|k| k.about.key == key)
 }
 
+/// The website of an institution, for its logo: `None` when its provider maps
+/// that key to none.
+pub fn institution_domain(provider_key: &str, institution_key: &str) -> Option<&'static str> {
+    account_kind(provider_key).and_then(|k| (k.institution_domain)(institution_key))
+}
+
 pub fn categorizer_kind(key: &str) -> Option<&'static CategorizerKind> {
     CATEGORIZERS.iter().copied().find(|k| k.about.key == key)
 }

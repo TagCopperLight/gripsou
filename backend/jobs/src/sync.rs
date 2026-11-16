@@ -273,6 +273,17 @@ async fn run_sync(db: &Db, connection_id: Uuid, deps: &Deps) -> Result<IngestSum
         duration_ms = t.elapsed().as_millis() as u64,
         "provider fetch finished"
     );
+    // Bank websites are listed by hand (`powens/institutions.rs`): this is how
+    // a newly connected bank missing from the list gets noticed.
+    if gripsou_providers::registry::institution_domain(&provider_key, &result.institution.key)
+        .is_none()
+    {
+        tracing::warn!(
+            institution_key = %result.institution.key,
+            institution_name = %result.institution.name,
+            "institution has no logo"
+        );
+    }
 
     let t = std::time::Instant::now();
     let s = gripsou_core::ingest::ingest(db, connection_id, &result)
