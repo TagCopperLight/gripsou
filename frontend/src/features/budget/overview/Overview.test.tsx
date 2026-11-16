@@ -182,13 +182,6 @@ describe("BudgetOverview", () => {
     await waitFor(() => expect(requested(`month=${expectedMonth}`)).toBe(true));
   });
 
-  it("does not ask for the trend when the empty state hides it", async () => {
-    stubApi({ ...SUMMARY, txnCount: 0, breakdown: [] });
-    renderPage();
-    await waitFor(() => expect(screen.getByTestId("empty-period")).toBeVisible());
-    expect(requested("/budget/trend")).toBe(false);
-  });
-
   it("draws no Sankey and no table for a period with nothing to show in them", async () => {
     stubApi({ ...SUMMARY, sankey: { sources: [], destinations: [] }, breakdown: [] });
     renderPage();

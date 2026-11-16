@@ -32,32 +32,27 @@ export function BudgetOverview() {
   const period: Period | undefined =
     picked ?? (latest.isPending ? undefined : { mode: "month", month: lastMonth ?? currentMonth() });
 
-  return period === undefined
-    ? <OverviewPage lastMonth={lastMonth} />
-    : <OverviewOf period={period} lastMonth={lastMonth} />;
-}
-
-function OverviewOf({ period, lastMonth }: { period: Period; lastMonth: string | null }) {
+  // One page through every step of the load (the month, then its summary):
+  // a page swapped for another would draw its skeleton anew, which flickers.
   const summary = useBudgetSummary(period);
   return <OverviewPage period={period} lastMonth={lastMonth} summary={summary} />;
 }
 
 /** The whole page, drawn before its period is known (`period` undefined, while
- *  the latest month with data loads) and before its summary is (`summary`
- *  undefined or pending): the frame renders, bones stand in for the figures and
- *  charts. */
+ *  the latest month with data loads) and before its summary is: the frame
+ *  renders, bones stand in for the figures and charts. */
 function OverviewPage({ period, lastMonth, summary }: {
-  period?: Period;
+  period: Period | undefined;
   lastMonth: string | null;
-  summary?: UseQueryResult<BudgetSummary>;
+  summary: UseQueryResult<BudgetSummary>;
 }) {
   const navigate = useNavigate();
   const { setPeriod, patchFilters } = useBudget();
   // One eye, in the period line, for every amount of the page.
   const privacy = usePrivacy();
 
-  const data = summary?.data;
-  const stale = Boolean(summary?.isPlaceholderData);
+  const data = summary.data;
+  const stale = summary.isPlaceholderData;
   const empty = data !== undefined && data.txnCount === 0;
 
   const month = period?.mode === "month" ? period.month : null;
@@ -124,7 +119,7 @@ function OverviewPage({ period, lastMonth, summary }: {
 
       <AiBanner />
 
-      {summary?.isError && data === undefined ? (
+      {summary.isError && data === undefined ? (
         <CardError onRetry={() => void summary.refetch()} className="h-40" />
       ) : (
         <>
@@ -158,12 +153,8 @@ function OverviewPage({ period, lastMonth, summary }: {
               </>
             )}
           </div>
-          {data === undefined ? (
-            <TrendSurface />
-          ) : (
-            !empty && period && (
-              <TrendSection anchor={anchorMonth(period)} onSelectMonth={selectMonth} masked={privacy.masked} />
-            )
+          {!empty && (
+            <TrendSection anchor={period && anchorMonth(period)} onSelectMonth={selectMonth} masked={privacy.masked} />
           )}
         </>
       )}
@@ -171,12 +162,14 @@ function OverviewPage({ period, lastMonth, summary }: {
   );
 }
 
-/** Its own component, so the trend is only asked for when it is shown, and its
- *  own query, so a failing trend degrades one surface rather than the page. */
+/** Its own query, asked for with the summary rather than after it, so a
+ *  failing trend degrades one surface rather than the page. An empty period
+ *  has no trend: the request it made while the summary loaded goes unused. */
 function TrendSection({
   anchor, onSelectMonth, masked,
 }: {
-  anchor: string;
+  /** Undefined while the period is unknown. */
+  anchor: string | undefined;
   onSelectMonth: (month: string) => void;
   masked: boolean;
 }) {

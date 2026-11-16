@@ -23,6 +23,11 @@ const VARIANTS: Record<ButtonVariant, string> = {
 // One cell of the busy grid; `gap-[inherit]` keeps the gap the caller set
 // between an icon and its text.
 const LABEL = "[grid-area:1/1] inline-flex items-center justify-center gap-[inherit]";
+// While busy, the labels swap and the button dims only after `--loading-delay`,
+// so a fast action shows neither; it is off from the click on all the same.
+// Back to idle, both happen at once.
+const BUSY_LABEL_WAIT = "transition-[visibility] duration-0 delay-(--loading-delay)";
+const BUSY_DIM_WAIT = "aria-busy:transition-opacity aria-busy:delay-(--loading-delay)";
 
 export type BusyProps =
   | { busy?: undefined; busyLabel?: undefined }
@@ -50,7 +55,7 @@ export function Button({
       type={type}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
-      className={`${padded ? "px-3.5 py-2.25" : ""} text-sm rounded-xl cursor-pointer ${VARIANTS[variant]} ${className}`}
+      className={`${padded ? "px-3.5 py-2.25" : ""} text-sm rounded-xl cursor-pointer ${VARIANTS[variant]} ${BUSY_DIM_WAIT} ${className}`}
       {...props}
     >
       {busyLabel === undefined ? (
@@ -59,8 +64,8 @@ export function Button({
         // Both labels share one grid cell, the idle one hidden while busy, so
         // the button keeps the width of the longer and nothing beside it moves.
         <span className="inline-grid gap-[inherit]">
-          <span className={`${LABEL} ${busy ? "invisible" : ""}`}>{children}</span>
-          <span className={`${LABEL} ${busy ? "" : "invisible"}`} aria-hidden={!busy}>
+          <span className={`${LABEL} ${busy ? `invisible ${BUSY_LABEL_WAIT}` : ""}`}>{children}</span>
+          <span className={`${LABEL} ${busy ? BUSY_LABEL_WAIT : "invisible"}`} aria-hidden={!busy}>
             {busyLabel}
           </span>
         </span>

@@ -221,6 +221,17 @@ export function Panel() {
           </Section>
 
           <Section title="Queries">
+            {info && (
+              <div style={{ ...s.grid, marginBottom: 6 }}>
+                <span style={s.label}>Delay</span>
+                {/* No reload: it applies from the next request on. */}
+                <Segmented
+                  options={[["off", "None"], ["on", `${info.slow.ms} ms each`]]}
+                  value={info.slow.on ? "on" : "off"}
+                  onChange={(v) => void control("/slow", { on: v === "on" }).then(() => setInfo({ ...info, slow: { ...info.slow, on: v === "on" } }))}
+                />
+              </div>
+            )}
             {overridden.map(([p, mode]) => (
               <div key={p} style={s.row}>
                 <span style={{ flex: 1, overflowWrap: "anywhere" }}>{p}</span>

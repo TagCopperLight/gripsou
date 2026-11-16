@@ -57,6 +57,9 @@ const signedInRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "signedIn",
   beforeLoad: ({ context: { auth }, matches }) => {
+    // Only a page that needs nothing of the user is drawn while a saved
+    // session is checked (App); this guard runs again once it is.
+    if (auth.isBootstrapping) return;
     if (!auth.isAuthenticated) throw redirect({ to: "/login" });
     const entering = (route: { id: string }) => matches.some((m) => m.routeId === route.id);
 
@@ -89,18 +92,21 @@ const appRoute = createRoute({
 const indexRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/",
+  staticData: { beforeSession: true },
   component: Dashboard,
 });
 
 const accountsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/accounts",
+  staticData: { beforeSession: true },
   component: Accounts,
 });
 
 const investmentsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: "/investments",
+  staticData: { beforeSession: true },
   component: Investments,
 });
 
@@ -123,6 +129,7 @@ const budgetIndexRoute = createRoute({
 const budgetOverviewRoute = createRoute({
   getParentRoute: () => budgetRoute,
   path: "overview",
+  staticData: { beforeSession: true },
   component: BudgetOverview,
 });
 
@@ -135,6 +142,7 @@ const budgetTransactionsRoute = createRoute({
 const budgetReviewRoute = createRoute({
   getParentRoute: () => budgetRoute,
   path: "review",
+  staticData: { beforeSession: true },
   component: ReviewMode,
 });
 
@@ -285,5 +293,8 @@ declare module "@tanstack/react-router" {
   interface StaticDataRouteOption {
     /** Only admins may open the page; the settings nav hides it from others. */
     adminOnly?: boolean;
+    /** Drawn, and its data asked for, while a saved session is checked: the
+     *  page reads nothing of the user (role, welcome, prefs). */
+    beforeSession?: boolean;
   }
 }

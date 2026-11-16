@@ -16,9 +16,17 @@ function InnerApp() {
   // a now-wrong page.
   useEffect(() => {
     void router.invalidate();
-  }, [auth.isAuthenticated, auth.user?.welcomeDone]);
+  }, [auth.isBootstrapping, auth.isAuthenticated, auth.user?.welcomeDone]);
 
   return <RouterProvider router={router} context={{ auth }} />;
+}
+
+/** The page at `pathname` can be drawn, and load its data, while a saved
+ *  session is checked: it needs nothing of the user. Any other waits on the
+ *  frame, as which page shows depends on the session (a redirect, the
+ *  welcome screen, an admin's page). */
+function drawnBeforeSession(pathname: string): boolean {
+  return router.matchRoutes(pathname).some((m) => m.staticData.beforeSession);
 }
 
 export function App() {
@@ -33,7 +41,7 @@ export function App() {
     });
   }, [auth]);
 
-  if (auth.isBootstrapping) {
+  if (auth.isBootstrapping && !drawnBeforeSession(window.location.pathname)) {
     return <ShellSkeleton />;
   }
 

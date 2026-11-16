@@ -50,6 +50,13 @@
   --sync-button-inset: 1rem;
 }
 
+/* How long a load runs before it shows (bones, dimmed data, a busy label).
+   A load that ends sooner shows nothing: on a fast connection a skeleton
+   that lasts a few frames reads as a flicker, not as loading. */
+:root {
+  --loading-delay: 150ms;
+}
+
 /* For a header control that reaches the right edge: clears the sync button's
    box plus the same gap it keeps from the edge. */
 @utility clear-sync-button {
@@ -90,5 +97,14 @@ input[type="password"] {
   .bone {
     border-radius: var(--radius-md);
     background-color: var(--color-surface-3);
+    /* Invisible, still holding its place, until the load has run
+       `--loading-delay`. */
+    animation: bone-in 200ms ease-out var(--loading-delay) backwards;
+  }
+}
+
+@keyframes bone-in {
+  from {
+    opacity: 0;
   }
 }

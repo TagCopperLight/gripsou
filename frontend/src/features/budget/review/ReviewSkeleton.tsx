@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../../ui/Surface";
@@ -8,9 +9,12 @@ import { boneWidths } from "../../../ui/boneWidths";
 /** The review queue while its rows load: the progress line's count and up to
  *  four lines in `ReviewLine`'s columns as bones, under the real title and
  *  bar. `queued` is the server's queue size when already known (it drives the
- *  Review tab): an empty queue is drawn as the empty state's card instead. */
-export function ReviewSkeleton({ queued }: { queued?: number }) {
+ *  Review tab): an empty queue is drawn as the empty state's card instead.
+ *  Only its value on the first draw counts: a size arriving later would
+ *  redraw the skeleton in a second shape, which reads as a second load. */
+export function ReviewSkeleton({ queued: queuedNow }: { queued?: number }) {
   const { t } = useTranslation();
+  const [queued] = useState(queuedNow);
   // A `Button`'s height: a text-sm line in py-2.25.
   const button = "h-9.5 w-20 shrink-0 rounded-xl";
   if (queued === 0) {

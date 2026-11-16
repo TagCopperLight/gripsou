@@ -1,5 +1,5 @@
 import { calendarDay } from "../lib/date";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, keepPreviousData, skipToken } from "@tanstack/react-query";
 
 import { api } from "./client";
 import { keys } from "./keys";
@@ -14,10 +14,13 @@ function summaryParams(period: Period): SummaryParams {
   return { from, to };
 }
 
-export function useBudgetSummary(period: Period) {
+/** Waits, pending, while `period` is undefined. */
+export function useBudgetSummary(period: Period | undefined) {
   return useQuery({
     queryKey: keys.budgetSummary(period),
-    queryFn: ({ signal }) => api("GET /budget/summary", { query: summaryParams(period), signal }),
+    queryFn: period === undefined
+      ? skipToken
+      : ({ signal }) => api("GET /budget/summary", { query: summaryParams(period), signal }),
     // Stepping a month keeps the old numbers on screen until the new ones land,
     // instead of flashing every surface through its loading state.
     placeholderData: keepPreviousData,
@@ -27,11 +30,14 @@ export function useBudgetSummary(period: Period) {
 /** The "last twelve months" surface. The window ends at AND INCLUDES `anchor`,
  *  which is deliberately not the same window as a figure's `avg12` — that one
  *  is the twelve months BEFORE the selected one, excluding it. They overlap in
- *  eleven; this is not a bug to reconcile. */
-export function useBudgetTrend(anchor: string) {
+ *  eleven; this is not a bug to reconcile. Waits, pending, while `anchor` is
+ *  undefined. */
+export function useBudgetTrend(anchor: string | undefined) {
   return useQuery({
     queryKey: keys.budgetTrend(anchor),
-    queryFn: ({ signal }) => api("GET /budget/trend", { query: { anchor, months: TREND_MONTHS_DEFAULT }, signal }),
+    queryFn: anchor === undefined
+      ? skipToken
+      : ({ signal }) => api("GET /budget/trend", { query: { anchor, months: TREND_MONTHS_DEFAULT }, signal }),
     placeholderData: keepPreviousData,
   });
 }

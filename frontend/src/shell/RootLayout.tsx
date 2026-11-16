@@ -3,19 +3,23 @@ import { Outlet } from "@tanstack/react-router";
 import { Sidebar, SidebarSkeleton } from "./Sidebar";
 import { SyncButton } from "../features/connections/SyncButton";
 import { MAIN_SCROLL_ID } from "../lib/scroll";
+import { useAuth } from "../auth/context";
 
 export function RootLayout() {
+  // A page can be drawn while a saved session is checked: the sidebar, which
+  // names the user and their role, waits for it.
+  const { user } = useAuth();
   return (
-    <Shell sidebar={<Sidebar />}>
+    <Shell sidebar={user ? <Sidebar /> : <SidebarSkeleton />}>
       <Outlet />
       <SyncButton />
     </Shell>
   );
 }
 
-/** The app's frame while a stored session is checked: nearly always, the
- *  app opens next. The page is left empty, as which one it is depends on
- *  the session (the welcome screen, a redirect). */
+/** The app's frame while a stored session is checked, for a page that can't
+ *  be drawn before it (App): the page is left empty, as which one shows
+ *  depends on the session (the welcome screen, a redirect). */
 export function ShellSkeleton() {
   return <Shell sidebar={<SidebarSkeleton />} />;
 }

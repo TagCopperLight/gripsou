@@ -3,9 +3,12 @@ import { initReactI18next } from "react-i18next";
 import en from "./en.json";
 import fr from "./fr.json";
 import { browserLanguage } from "./browserLanguage";
+import { savedLanguage } from "./savedLanguage";
+import { getAuthToken } from "../api/client";
 
 // en/fr strings. Until a user is known (sign-in, invite, reset), the
-// browser's language; then the user's own, from their prefs (AuthProvider).
+// browser's language, or with a saved session, its user's last one; then the
+// user's own, from their prefs (AuthProvider).
 //
 // The init promise is exported, not discarded: i18next signals `initialized` on
 // a later tick even with the resources inlined, and every `useTranslation`
@@ -18,7 +21,7 @@ export const i18nReady = i18n.use(initReactI18next).init({
     en: { translation: en },
     fr: { translation: fr },
   },
-  lng: browserLanguage(),
+  lng: (getAuthToken() !== null ? savedLanguage() : null) ?? browserLanguage(),
   fallbackLng: "en",
   interpolation: { escapeValue: false },
 });

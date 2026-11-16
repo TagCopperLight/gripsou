@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { ApiError, getAuthToken, setAuthToken } from "../api/client";
+import { ApiError, getAuthToken, sessionCheckDone, setAuthToken } from "../api/client";
 import { authApi, type SecondFactor } from "../api/auth";
 import type { SessionUser } from "../api/wire";
 import { startAuthentication } from "@simplewebauthn/browser";
 import { AuthContext, isCurrencyRefused, type AuthValue } from "./context";
 import i18n from "../i18n";
+import { saveLanguage } from "../i18n/savedLanguage";
 import { showError } from "../lib/errorToasts";
 import { setPrefs } from "../lib/prefs";
 import { withPatch, type PrefsPatch } from "../lib/prefsPatch";
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     shown.current = u;
     setUser(u);
     setPrefs(u.prefs);
+    saveLanguage(u.prefs.uiLanguage);
     if (i18n.language !== u.prefs.uiLanguage) void i18n.changeLanguage(u.prefs.uiLanguage);
   }, []);
 
@@ -49,7 +51,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthToken(null);
         }
       } finally {
-        if (active) setIsBootstrapping(false);
+        if (active) {
+          setIsBootstrapping(false);
+          sessionCheckDone();
+        }
       }
     }
 

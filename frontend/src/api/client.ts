@@ -17,6 +17,20 @@ function loadToken(): string | null {
 let authToken: string | null = loadToken();
 let onUnauthorized: (() => void) | null = null;
 
+// A token saved by an earlier visit is checked when the app starts, while the
+// page already loads its data. Until the check is done (`sessionCheckDone`),
+// every answer but the check's own waits: no page shows data before the user's
+// prefs (currency, language) apply, or for a session the server refuses.
+let releaseAnswers = () => {};
+const sessionChecked: Promise<void> = authToken === null
+  ? Promise.resolve()
+  : new Promise((resolve) => { releaseAnswers = resolve; });
+
+/** The saved session is checked, and its user applied when it was valid. */
+export function sessionCheckDone(): void {
+  releaseAnswers();
+}
+
 export function setAuthToken(token: string | null, remember = false): void {
   authToken = token;
   try {
@@ -124,6 +138,7 @@ export async function api<K extends Key>(
     body: body === undefined ? undefined : JSON.stringify(body),
     ...(signal ? { signal } : {}),
   });
+  if (key !== "GET /auth/me") await sessionChecked;
   handle(res, path, method, requestToken);
   return bodyOf<Res<K>>(res);
 }
