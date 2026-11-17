@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 
+import { isPhone } from "./usePhone";
+
 type ModalProps = {
   label: string;
   onClose: () => void;
   busy?: boolean;
   className: string;
-  /** Focus lands on the first control of the first of these that has one, else the first control. `autoFocus` overrides. */
+  /** Focus lands on the first control of the first of these that has one, else the first control. `autoFocus` overrides. Not on a phone. */
   focusWithin?: RefObject<HTMLElement | null>[];
   children: ReactNode;
 };
@@ -33,8 +35,10 @@ export function Modal({ label, onClose, busy = false, className, focusWithin = [
 
   useEffect(() => {
     const node = ref.current;
+    // A focused field opens a phone's keyboard over the modal: there, focus stays on the modal itself.
+    if (isPhone()) node?.focus();
     // The header's close button is the last resort, unless a field already took focus.
-    if (!node?.contains(document.activeElement)) {
+    else if (!node?.contains(document.activeElement)) {
       const first =
         focusWithinRef.current.map((r) => r.current?.querySelector<HTMLElement>(FOCUSABLE)).find(Boolean) ??
         node?.querySelector<HTMLElement>(FOCUSABLE);

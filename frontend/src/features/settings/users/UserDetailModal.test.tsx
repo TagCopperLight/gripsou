@@ -19,13 +19,13 @@ describe("UserDetailModal", () => {
       <UserDetailModal
         user={{ ...user, isSelf: true }}
         role="admin"
-        onToggleRole={() => {}}
+        onSetRole={() => {}}
         roleSaving={false}
         onClose={() => {}}
       />,
     );
     expect(screen.queryByRole("button", { name: /reset password/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /delete user/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Admin" })).toBeNull();
+    expect(screen.queryByRole("radio")).toBeNull();
   });
 });

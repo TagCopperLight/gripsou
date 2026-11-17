@@ -71,7 +71,7 @@ export function SelectionBar({
         data-testid="selection-bar"
         className="pointer-events-auto flex w-fit items-center gap-0.5 rounded-xl border border-fg/8 bg-surface-2/95 p-1 shadow-lg backdrop-blur-md"
       >
-        <span className="flex items-baseline gap-2 px-2.5">
+        <span className="flex items-baseline gap-2 whitespace-nowrap px-2.5">
           <span data-testid="selection-count" className="text-sm text-fg pr-1">
             {t("budget.transactions.rowsSelected", { count })}
           </span>

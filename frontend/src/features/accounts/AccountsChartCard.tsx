@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Surface } from "../../ui/Surface";
@@ -57,10 +57,24 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
       : []),
   ];
 
+  // A phone shows the legend only when it fits on one line: the account list below names every colour.
+  const legendBox = useRef<HTMLDivElement>(null);
+  const [legendFits, setLegendFits] = useState(true);
+  const legendKey = legendItems.map((i) => i.label).join("\n");
+  useLayoutEffect(() => {
+    const node = legendBox.current;
+    if (!node) return;
+    const measure = () => setLegendFits(node.scrollWidth <= node.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [legendKey]);
+
   return (
     <Surface className={`w-full ${className}`}>
       <LoadingFrame loading={loading} className="flex flex-col p-4 md:p-5">
-        <div className="flex flex-col gap-3 md:flex-row md:justify-between md:gap-4">
+        <div className="flex flex-col md:flex-row md:justify-between md:gap-4">
           <div className="flex flex-col gap-1 md:shrink-0">
             <CardTitle privacy={ready && !empty && privacy}>
               {t("dashboard.netWorth.title")}
@@ -72,7 +86,7 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
             )}
           </div>
           {!empty && (
-            <div className="flex min-w-0 flex-col md:items-end">
+            <div className={`flex min-w-0 flex-col md:items-end ${legendFits ? "max-md:mt-3" : "invisible h-0"}`}>
               <div className="hidden md:block">
                 <RangeSelector value={range} onChange={setRange} />
               </div>
@@ -86,7 +100,9 @@ export function AccountsChartCard({ highlight = null, onHover, className = "" }:
                   ))}
                 </Skeleton>
               ) : (
-                <ChartLegend className={`-mx-1 overflow-x-auto px-1 md:mt-3 md:flex-wrap md:justify-end md:overflow-visible ${stale}`} items={legendItems} onHover={onHover} />
+                <div ref={legendBox} className="overflow-hidden md:overflow-visible">
+                  <ChartLegend className={`md:mt-3 md:flex-wrap md:justify-end ${stale}`} items={legendItems} onHover={onHover} />
+                </div>
               )}
             </div>
           )}

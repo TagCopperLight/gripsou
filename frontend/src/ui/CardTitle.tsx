@@ -15,13 +15,9 @@ export function CardTitle({
   children: ReactNode;
 }) {
   return (
-    <h2 className={`font-semibold text-fg ${size === "lg" ? "text-lg" : "text-sm"} ${className}`}>
+    <h2 className={`flex items-center gap-3 font-semibold text-fg ${size === "lg" ? "text-lg" : "text-sm"} ${className}`}>
       {children}
-      {privacy && privacy.enabled && (
-        <span className="ml-3 inline-flex align-middle">
-          <PrivacyEye masked={privacy.masked} toggle={privacy.toggle} />
-        </span>
-      )}
+      {privacy && privacy.enabled && <PrivacyEye masked={privacy.masked} toggle={privacy.toggle} />}
     </h2>
   );
 }

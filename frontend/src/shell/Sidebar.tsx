@@ -87,7 +87,7 @@ function SidebarFrame({ link, profile }: { link: DrawLink; profile: ReactNode })
   const version = health.data?.version;
 
   return (
-    <aside className="flex w-full flex-row gap-6 bg-surface px-4 py-2 md:bg-bg md:p-4 md:h-full md:w-72 md:flex-col max-md:gap-0 max-md:border-t max-md:border-surface-2 max-md:px-1 max-md:pt-1 max-md:pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+    <aside className="flex w-full flex-row gap-6 bg-surface px-4 py-2 md:bg-bg md:p-4 md:h-full md:w-72 md:flex-col max-md:gap-0 max-md:border-t max-md:border-surface-2 max-md:px-1 max-md:pt-1 max-md:pb-[max(0.25rem,calc(env(safe-area-inset-bottom)-0.75rem))]">
       <div className="hidden justify-center py-4 font-wordmark text-2xl font-semibold tracking-tight text-fg md:flex">
         gripsou
       </div>

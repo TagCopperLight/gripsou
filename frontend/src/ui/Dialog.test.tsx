@@ -31,6 +31,17 @@ describe("Dialog", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("leaves no field focused on a phone, so the keyboard stays down", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    render(
+      <Dialog title="Edit category" onClose={() => {}}>
+        <input aria-label="Name" autoFocus />
+      </Dialog>,
+    );
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+    vi.unstubAllGlobals();
+  });
+
   it("keeps Tab inside the dialog", async () => {
     const user = userEvent.setup();
     open();

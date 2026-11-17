@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 
 import { createPortal } from "react-dom";
 
@@ -42,12 +42,9 @@ export function Popover({ title, anchor = null, onClose, initialFocus, children 
   );
 }
 
-/** Takes focus before the modal looks for a control: a focused field would raise the keyboard over half the sheet. */
 function SheetBody({ title, children }: { title: string; children: ReactNode }) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => ref.current?.focus(), []);
   return (
-    <div ref={ref} data-testid="popover" tabIndex={-1} className="flex min-h-0 flex-col outline-none">
+    <div data-testid="popover" className="flex min-h-0 flex-col">
       <p className="px-4 pt-4 pb-1 text-sm font-semibold text-fg">{title}</p>
       {children}
     </div>

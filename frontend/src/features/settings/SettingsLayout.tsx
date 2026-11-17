@@ -18,15 +18,16 @@ export function SettingsLayout() {
     <div className="flex min-h-full flex-col md:flex-row">
       {/* A phone shows the section list on its own page (`SettingsHome`), and each section under a way back to it. */}
       {current && (
-        <div className="pb-3 md:hidden">
+        // The way back shares the sync button's 32px line; the title then sits as far from the first surface as on other pages.
+        <div className="pb-5 md:hidden">
           <Link
             to="/settings"
-            className="-ml-1.5 inline-flex items-center gap-0.5 py-1 pr-2 text-sm font-medium text-fg-dim"
+            className="-ml-1.5 inline-flex h-8 items-center gap-0.5 pr-2 text-sm font-medium text-fg-dim"
           >
             <ChevronLeft className="size-4.5" strokeWidth={2} />
             {t("nav.settings")}
           </Link>
-          <h1 className="text-2xl font-bold text-fg">{t(current.labelKey)}</h1>
+          <h1 className="mt-2 text-2xl font-bold text-fg">{t(current.labelKey)}</h1>
         </div>
       )}
 

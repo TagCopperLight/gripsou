@@ -36,6 +36,7 @@ import type { Range } from "../../../api/wire";
 import { legendItems, plotSeries } from "../../../lib/valueChart";
 import { FG_FAINT, GREEN } from "../../../lib/theme";
 import { ColorSquare } from "../../../ui/ColorSquare";
+import { usePhone } from "../../../ui/usePhone";
 
 // Four currency domains show here and must never be collapsed into one "native" currency:
 // - Reporting (`users.prefs.currency`): capital invested, current value, total P/L, weight of net worth.
@@ -63,6 +64,8 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
   const [unit, setUnit] = useState<ChartUnit>("value");
   const privacy = usePrivacy();
   const masked = privacy.masked;
+  const phone = usePhone();
+  const eye = privacy.enabled && <PrivacyEye masked={masked} toggle={privacy.toggle} />;
   const body = useRef<HTMLDivElement>(null);
 
   const { data: priceData, isPending: pricesLoading, isPlaceholderData: pricesStale, refetch: refetchPrices } =
@@ -122,7 +125,7 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
     >
       <HoldingModalHeader
         holding={holding}
-        afterName={privacy.enabled && <PrivacyEye masked={masked} toggle={privacy.toggle} />}
+        afterName={!phone && eye}
       >
         <SegmentedControl
           className="max-md:order-last max-md:col-span-2 max-md:flex max-md:[&>button]:flex-1"
@@ -133,14 +136,18 @@ export function AssetModal({ holding, netWorth, onClose, onRecordLots }: AssetMo
             { value: "purchases", label: t("dashboard.assetModal.purchases") },
           ]}
         />
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={t("common.close")}
-          className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
-        >
-          <X className="size-5" />
-        </button>
+        {/* A phone has no room beside the truncated name: the eye joins the close button. */}
+        <div className="flex items-center gap-3">
+          {phone && eye}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("common.close")}
+            className="p-1.5 rounded-lg text-fg-faint hover:bg-surface-2 hover:text-fg transition-colors duration-140 cursor-pointer"
+          >
+            <X className="size-5" />
+          </button>
+        </div>
       </HoldingModalHeader>
 
       <div ref={body} className="flex flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0 md:p-6 md:pt-0">

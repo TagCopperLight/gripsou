@@ -53,9 +53,10 @@ export function PeriodLine({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <LoadingFrame loading={period === undefined} className="flex flex-wrap items-center gap-3">
+      {/* A phone keeps the eye on the picker's line: the picker gives up its spare width. */}
+      <LoadingFrame loading={period === undefined} className="flex flex-wrap items-center gap-3 max-md:min-w-0 max-md:flex-1 max-md:flex-nowrap">
         {period?.mode === "range" ? (
-          <span className="flex items-center gap-2 rounded-xl bg-surface px-3 py-2">
+          <span className="flex items-center gap-2 rounded-xl bg-surface px-3 py-2 max-md:min-w-0 max-md:flex-1 max-md:justify-between">
             <span className="text-xs text-fg-faint">{t("budget.overview.customRange")}</span>
             <span data-testid="period-label" className="font-mono text-sm text-fg">
               {periodLabel(period, i18n.language)}
@@ -72,7 +73,7 @@ export function PeriodLine({
             </button>
           </span>
         ) : (
-          <span className="flex items-center gap-1 rounded-xl bg-surface px-2 py-1.5">
+          <span className="flex items-center gap-1 rounded-xl bg-surface px-2 py-1.5 max-md:min-w-0 max-md:flex-1 max-md:justify-between">
             <Caret
               dir="prev"
               label={t("budget.overview.prevMonth")}
@@ -80,11 +81,11 @@ export function PeriodLine({
               onClick={() => onStep(-1)}
             />
             {period === undefined ? (
-              <Skeleton className="flex h-5 min-w-40 items-center justify-center">
+              <Skeleton className="flex h-5 min-w-40 max-md:min-w-0 items-center justify-center">
                 <Bone className="h-3.5 w-28" />
               </Skeleton>
             ) : (
-              <span data-testid="period-label" className="min-w-40 text-center text-sm font-semibold text-fg">
+              <span data-testid="period-label" className="min-w-40 truncate text-center text-sm font-semibold text-fg max-md:min-w-0">
                 {monthLabel(period.month, i18n.language)}
               </span>
             )}
