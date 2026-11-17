@@ -14,6 +14,7 @@ import { usePopover } from "../../../ui/usePopover";
 import { SearchSurface } from "./SearchSurface";
 import { TransactionsTable } from "./TransactionsTable";
 import { TransactionRow } from "./TransactionRow";
+import { TransactionSheet } from "./TransactionSheet";
 import { SelectionBar } from "./SelectionBar";
 import { CategoryChooser } from "../CategoryChooser";
 import { TagChooser } from "../TagChooser";
@@ -60,6 +61,10 @@ export function TransactionsMode() {
   const { start: startWrite, fail: onWriteError } = writes;
 
   const rows = useMemo(() => list.data?.pages.flat() ?? [], [list.data]);
+  // An id, not a snapshot: the sheet follows the row through its edits.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detail = detailId ? (rows.find((r) => r.id === detailId) ?? null) : null;
+  const onOpenDetail = useCallback((tx: Transaction) => setDetailId(tx.id), []);
 
   // "All shown" is totalled by the server; an explicit selection is summed here.
   const selectionTotal =
@@ -196,6 +201,7 @@ export function TransactionsMode() {
                 onOpenCategory={onOpenCategory}
                 onOpenTags={onOpenTags}
                 onToggleChecked={onToggleChecked}
+                onOpenDetail={phone ? onOpenDetail : undefined}
               />
             )}
           />
@@ -213,6 +219,18 @@ export function TransactionsMode() {
         onAddTags={(addTagIds) => runBulk({ addTagIds })}
         onMarkChecked={() => runBulk({ checked: true })}
       />
+
+      {detail && (
+        <TransactionSheet
+          tx={detail}
+          showChecked={prefs.showChecked}
+          masked={privacy.masked}
+          onOpenCategory={onOpenCategory}
+          onOpenTags={onOpenTags}
+          onToggleChecked={onToggleChecked}
+          onClose={() => setDetailId(null)}
+        />
+      )}
 
       {categoryFor && (
         <CategoryChooser

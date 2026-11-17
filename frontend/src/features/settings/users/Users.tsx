@@ -38,7 +38,9 @@ export function SettingsUsers() {
   const [inviteOpen, setInviteOpen] = useState(false);
   const [resetTarget, setResetTarget] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
-  const [detail, setDetail] = useState<User | null>(null);
+  // An id, not a copy: the modal shows the user as the list refreshes, after a role change too.
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detail = users.find((u) => u.id === detailId) ?? null;
 
   const openInvite = () => {
     setInviteOpen(true);
@@ -75,7 +77,7 @@ export function SettingsUsers() {
                   <button
                     key={u.id}
                     type="button"
-                    onClick={() => setDetail(u)}
+                    onClick={() => setDetailId(u.id)}
                     className="flex cursor-pointer items-center gap-3 rounded-xl bg-surface-2 px-3 py-2.5 text-left"
                   >
                     <Avatar name={u.name} src={u.avatar} />
@@ -166,13 +168,13 @@ export function SettingsUsers() {
           user={detail}
           role={roleOf(detail)}
           roleSaving={setRole.isPending}
-          onToggleRole={() => toggleRole(detail)}
+          onSetRole={(role) => setRole.mutate({ id: detail.id, role })}
           onReset={
             detail.isSelf
               ? undefined
               : () => {
                   const u = detail;
-                  setDetail(null);
+                  setDetailId(null);
                   setResetTarget(u);
                 }
           }
@@ -181,11 +183,11 @@ export function SettingsUsers() {
               ? undefined
               : () => {
                   const u = detail;
-                  setDetail(null);
+                  setDetailId(null);
                   setDeleteTarget(u);
                 }
           }
-          onClose={() => setDetail(null)}
+          onClose={() => setDetailId(null)}
         />
       )}
       {inviteOpen && (

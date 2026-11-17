@@ -28,12 +28,14 @@ type TransactionRowProps = {
   onOpenCategory: (tx: Transaction, anchor: HTMLElement) => void;
   onOpenTags: (tx: Transaction, anchor: HTMLElement) => void;
   onToggleChecked: (tx: Transaction) => void;
+  /** A phone opens the details on a tap anywhere on the row, outside its own controls. */
+  onOpenDetail?: (tx: Transaction) => void;
 };
 
 /** Memoised: a ledger mounts thousands of rows and the page re-renders on every keystroke and selection click. */
 export const TransactionRow = memo(function TransactionRow({
   tx, showChecked, phone, masked = false, selected, anySelected,
-  onToggleSelect, onOpenCategory, onOpenTags, onToggleChecked,
+  onToggleSelect, onOpenCategory, onOpenTags, onToggleChecked, onOpenDetail,
 }: TransactionRowProps) {
   const { t } = useTranslation();
   const isLot = tx.source === "lot";
@@ -59,7 +61,10 @@ export const TransactionRow = memo(function TransactionRow({
     <tr
       data-testid="tx-row"
       role="row"
-      className={`text-sm ${ROW_CELLS} group ${
+      onClick={onOpenDetail && ((e) => {
+        if (!(e.target as Element).closest("button, input, label")) onOpenDetail(tx);
+      })}
+      className={`text-sm ${ROW_CELLS} group ${onOpenDetail ? "cursor-pointer" : ""} ${
         selected ? "[&>td]:bg-green/12 hover:[&>td]:bg-green/18" : ROW_HOVER
       }`}
     >

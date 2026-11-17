@@ -14,6 +14,7 @@ import { ApiError } from "../../api/client";
 import { throttledError } from "../../auth/throttle";
 import { TOTP_DIGITS } from "../../api/wire";
 import { useSetupStatus } from "../../api/setup";
+import { isPhone } from "../../ui/usePhone";
 
 type Step = "password" | "passwordless" | "code" | "backup";
 
@@ -189,7 +190,7 @@ export function Login() {
           <CodeInput
             ariaLabel={t("auth.mfa.codeLabel")}
             value={code}
-            autoFocus
+            autoFocus={!isPhone()}
             invalid={refused}
             onChange={(digits) => {
               setCode(digits);
@@ -233,7 +234,7 @@ export function Login() {
             <span className="text-sm text-fg-dim">{t("auth.mfa.backupLabel")}</span>
             <TextInput
               invalid={refused}
-              autoFocus
+              autoFocus={!isPhone()}
               autoComplete="off"
               spellCheck={false}
               value={backupCode}

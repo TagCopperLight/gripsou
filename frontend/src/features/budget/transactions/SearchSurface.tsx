@@ -115,12 +115,13 @@ export function SearchSurface({ counts, countsStale = false, onSubmitSearch }: {
       {isFiltered(filters) && (
         <>
           <div className="mt-3 h-px bg-surface-3" />
-          <div className="relative pt-3">
+          {/* A phone puts the count on its own line above the chips, which then get the full width. */}
+          <div className="relative pt-3 max-md:flex max-md:flex-col max-md:gap-2.5">
             <ActiveFilterChips />
             {counts && (
               <p
                 data-testid="counts-readout"
-                className={`absolute right-0 top-3 text-xs text-fg-faint ${staleClass(countsStale)}`}
+                className={`absolute right-0 top-3 text-xs text-fg-faint max-md:static max-md:order-first ${staleClass(countsStale)}`}
               >
                 {t("budget.transactions.matchingOfTotal", {
                   matching: counts.matching,

@@ -4,13 +4,15 @@ import { Key, Trash2 } from "lucide-react";
 import { Avatar } from "../../../ui/Avatar";
 import { Button } from "../../../ui/Button";
 import { Dialog } from "../../../ui/Dialog";
+import { LoadingFrame } from "../../../ui/LoadingFrame";
+import { SegmentedControl } from "../../../ui/SegmentedControl";
 import { formatDate } from "../../../lib/date";
 import type { Role, User } from "../../../api/wire";
 
 type UserDetailModalProps = {
   user: User;
   role: Role;
-  onToggleRole: () => void;
+  onSetRole: (role: Role) => void;
   roleSaving: boolean;
   onReset?: () => void;
   onDelete?: () => void;
@@ -21,7 +23,7 @@ type UserDetailModalProps = {
 export function UserDetailModal({
   user,
   role,
-  onToggleRole,
+  onSetRole,
   roleSaving,
   onReset,
   onDelete,
@@ -29,11 +31,6 @@ export function UserDetailModal({
 }: UserDetailModalProps) {
   const { t } = useTranslation();
 
-  const roleColor =
-    role === "admin" ? "bg-green-soft text-green" : "bg-surface-3 text-fg-dim";
-  const roleLabel = t(
-    role === "admin" ? "roles.admin" : "roles.member",
-  );
 
   return (
     <Dialog
@@ -69,20 +66,18 @@ export function UserDetailModal({
         <div className="flex items-center justify-between gap-4">
           <span className="text-fg-faint">{t("settings.users.columns.role")}</span>
           {user.isSelf ? (
-            <span className={`rounded-md px-2.5 py-1 text-xs font-medium ${roleColor}`}>
-              {roleLabel}
-            </span>
+            <span className="text-fg">{t(role === "admin" ? "roles.admin" : "roles.member")}</span>
           ) : (
-            <button
-              type="button"
-              onClick={onToggleRole}
-              disabled={roleSaving}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium cursor-pointer transition-colors duration-140 disabled:cursor-wait disabled:opacity-60 ${roleColor} ${
-                role === "admin" ? "enabled:hover:bg-green/25" : "enabled:hover:bg-surface-2 enabled:hover:text-fg"
-              }`}
-            >
-              {roleLabel}
-            </button>
+            <LoadingFrame loading={roleSaving}>
+              <SegmentedControl<Role>
+                value={role}
+                onChange={(next) => next !== role && onSetRole(next)}
+                options={[
+                  { value: "user", label: t("roles.member") },
+                  { value: "admin", label: t("roles.admin") },
+                ]}
+              />
+            </LoadingFrame>
           )}
         </div>
         <div className="flex items-center justify-between gap-4">

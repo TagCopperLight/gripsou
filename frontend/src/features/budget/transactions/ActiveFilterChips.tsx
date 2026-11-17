@@ -86,7 +86,7 @@ export function ActiveFilterChips() {
     `chip-clear-${a.kind}${"id" in a ? `-${a.id}` : ""}`;
 
   return (
-    <div data-testid="active-filters" className="flex flex-wrap items-center gap-2 pr-40">
+    <div data-testid="active-filters" className="flex flex-wrap items-center gap-2 pr-40 max-md:pr-0">
       {chips.map((a) => {
         const color = dot(a);
         return (
@@ -96,7 +96,7 @@ export function ActiveFilterChips() {
             data-testid={testId(a)}
             aria-label={`${t("budget.transactions.removeFilter")}: ${label(a)}`}
             onClick={() => patchFilters((prev) => clearFilter(prev, a))}
-            className="inline-flex cursor-pointer items-center gap-1.5 rounded-full bg-surface-3 px-2.5 py-1 text-xs text-fg-dim transition-colors duration-140 hover:text-fg"
+            className="inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full bg-surface-3 px-2.5 py-1 text-xs text-fg-dim transition-colors duration-140 hover:text-fg"
           >
             {BucketIcon(a)}
             {FlagIcon(a)}

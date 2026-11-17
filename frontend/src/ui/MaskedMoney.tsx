@@ -23,7 +23,7 @@ export function PrivacyEye({ masked, toggle }: Pick<Privacy, "masked" | "toggle"
       type="button"
       onClick={toggle}
       aria-label={masked ? t("common.showAmount") : t("common.hideAmount")}
-      className="-m-2 cursor-pointer p-2 text-fg-faint transition duration-140 hover:text-fg"
+      className="-m-2 inline-flex cursor-pointer p-2 text-fg-faint transition duration-140 hover:text-fg"
     >
       {masked ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
     </button>
