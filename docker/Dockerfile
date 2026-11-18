@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM oven/bun:1.4.3 AS frontend
+FROM oven/bun:1.4.4 AS frontend
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile
@@ -8,7 +8,7 @@ COPY frontend/ ./
 COPY shared/ ../shared/
 RUN bun run build
 
-FROM rust:1-bookworm AS backend
+FROM rust:1-trixie AS backend
 # The version shown in the UI. The image has no .git (a partial copy of the
 # tree would always look dirty), so the host passes it in: scripts/build-image.sh
 # sets it from `git describe`. Left empty, the version is "dev".
@@ -19,9 +19,9 @@ COPY backend/ ./
 COPY shared/ ../shared/
 RUN cargo build --release --bin gripsou
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:trixie-slim AS runtime
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates libssl3 \
+    && apt-get install -y --no-install-recommends ca-certificates libssl3t64 \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=backend /app/backend/target/release/gripsou /usr/local/bin/gripsou
